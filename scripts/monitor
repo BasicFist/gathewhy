@@ -1,0 +1,480 @@
+#!/bin/bash
+# =============================================================================
+# AI Backend Unified Infrastructure - Monitoring Manager
+# =============================================================================
+#
+# User-friendly interface for managing and testing monitoring infrastructure
+#
+# Usage: ./scripts/monitor [command]
+#
+# Commands:
+#   setup    - Complete setup wizard
+#   test     - Run dashboard tests
+#   status   - Check monitoring stack status
+#   start    - Start monitoring services
+#   stop     - Stop monitoring services
+#   restart  - Restart monitoring services
+#   logs     - View service logs
+#   open     - Open dashboards in browser
+#   help     - Show this help
+#
+# =============================================================================
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m'
+
+# Symbols
+SUCCESS="✓"
+FAILURE="✗"
+INFO="ℹ"
+WARNING="⚠"
+ARROW="→"
+
+# =============================================================================
+# UI Functions
+# =============================================================================
+
+print_banner() {
+    echo -e "${CYAN}"
+    echo "╔═══════════════════════════════════════════════════════════════════╗"
+    echo "║                                                                   ║"
+    echo "║        AI Backend Unified Infrastructure                          ║"
+    echo "║        Monitoring Manager                                         ║"
+    echo "║                                                                   ║"
+    echo "╚═══════════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+}
+
+print_header() {
+    echo -e "\n${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${WHITE}$1${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}\n"
+}
+
+print_success() {
+    echo -e "${GREEN}${SUCCESS}${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}${FAILURE}${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}${WARNING}${NC} $1"
+}
+
+print_info() {
+    echo -e "${CYAN}${INFO}${NC} $1"
+}
+
+print_step() {
+    echo -e "${MAGENTA}${ARROW}${NC} $1"
+}
+
+ask_yes_no() {
+    local question=$1
+    local default=${2:-"y"}
+
+    if [ "$default" = "y" ]; then
+        prompt="[Y/n]"
+    else
+        prompt="[y/N]"
+    fi
+
+    read -p "$(echo -e ${CYAN}${question} ${prompt}:${NC} )" response
+    response=${response:-$default}
+
+    [[ "$response" =~ ^[Yy]$ ]]
+}
+
+# =============================================================================
+# Service Check Functions
+# =============================================================================
+
+check_service() {
+    local service=$1
+    local port=$2
+    local url=$3
+
+    if curl -s "$url" > /dev/null 2>&1; then
+        print_success "$service running on port $port"
+        return 0
+    else
+        print_error "$service not running on port $port"
+        return 1
+    fi
+}
+
+check_all_services() {
+    local all_ok=true
+
+    print_header "Service Status Check"
+
+    check_service "Prometheus" "9090" "http://localhost:9090/-/healthy" || all_ok=false
+    check_service "Grafana" "3000" "http://localhost:3000/api/health" || all_ok=false
+    check_service "Loki" "3100" "http://localhost:3100/ready" || all_ok=false
+    check_service "Promtail" "9080" "http://localhost:9080/ready" || all_ok=false
+    check_service "LiteLLM" "4000" "http://localhost:4000/health" || all_ok=false
+
+    echo
+
+    if [ "$all_ok" = true ]; then
+        print_success "All services are running!"
+        return 0
+    else
+        print_warning "Some services are not running"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Setup Functions
+# =============================================================================
+
+setup_wizard() {
+    print_banner
+    print_header "Setup Wizard"
+
+    echo "This wizard will help you set up the monitoring infrastructure."
+    echo
+
+    # Step 1: Check Python dependencies
+    print_step "Step 1/5: Checking Python dependencies..."
+    if python3 -c "import pytest, playwright" 2>/dev/null; then
+        print_success "Python dependencies installed"
+    else
+        print_info "Installing Python dependencies..."
+        pip install -q -r "$PROJECT_ROOT/requirements.txt"
+        print_success "Python dependencies installed"
+    fi
+    echo
+
+    # Step 2: Install Playwright browsers
+    print_step "Step 2/5: Installing Playwright browsers..."
+    if python3 -m playwright install --dry-run chromium > /dev/null 2>&1; then
+        print_success "Playwright browsers already installed"
+    else
+        print_info "Downloading Chromium browser (~100 MB)..."
+        python3 -m playwright install chromium > /dev/null 2>&1
+        print_success "Playwright browsers installed"
+    fi
+    echo
+
+    # Step 3: Create directories
+    print_step "Step 3/5: Creating directories..."
+    mkdir -p "$PROJECT_ROOT/tests/monitoring/screenshots"
+    mkdir -p "$PROJECT_ROOT/monitoring/prometheus/data"
+    mkdir -p "$PROJECT_ROOT/monitoring/grafana/data"
+    mkdir -p "$PROJECT_ROOT/monitoring/loki/data"
+    print_success "Directories created"
+    echo
+
+    # Step 4: Check monitoring services
+    print_step "Step 4/5: Checking monitoring services..."
+    if check_all_services > /dev/null 2>&1; then
+        print_success "Monitoring services are running"
+    else
+        print_warning "Monitoring services not running"
+        if ask_yes_no "Would you like to start them now?" "y"; then
+            start_services
+        else
+            print_info "You can start them later with: ./scripts/monitor start"
+        fi
+    fi
+    echo
+
+    # Step 5: Check dashboard
+    print_step "Step 5/5: Checking Grafana dashboard..."
+    if curl -s -u admin:admin "http://localhost:3000/api/search?query=AI%20Backend" 2>/dev/null | grep -q "AI Backend"; then
+        print_success "Dashboard is imported"
+    else
+        print_warning "Dashboard not imported yet"
+        print_info "Import it manually:"
+        echo "  1. Open http://localhost:3000"
+        echo "  2. Login: admin/admin"
+        echo "  3. Dashboards → Import"
+        echo "  4. Upload: monitoring/grafana/litellm-dashboard.json"
+        echo
+        if ask_yes_no "Would you like to open Grafana now?" "y"; then
+            open_dashboards
+        fi
+    fi
+    echo
+
+    print_header "Setup Complete!"
+    print_success "Monitoring infrastructure is ready"
+    echo
+    print_info "Next steps:"
+    echo "  • Run tests: ./scripts/monitor test"
+    echo "  • View status: ./scripts/monitor status"
+    echo "  • Open dashboards: ./scripts/monitor open"
+    echo
+}
+
+# =============================================================================
+# Service Management Functions
+# =============================================================================
+
+start_services() {
+    print_header "Starting Monitoring Services"
+
+    systemctl --user start prometheus 2>/dev/null && print_success "Prometheus started" || print_error "Failed to start Prometheus"
+    systemctl --user start grafana 2>/dev/null && print_success "Grafana started" || print_error "Failed to start Grafana"
+    systemctl --user start loki 2>/dev/null && print_success "Loki started" || print_error "Failed to start Loki"
+    systemctl --user start promtail 2>/dev/null && print_success "Promtail started" || print_error "Failed to start Promtail"
+
+    echo
+    print_info "Waiting for services to start..."
+    sleep 3
+
+    check_all_services
+}
+
+stop_services() {
+    print_header "Stopping Monitoring Services"
+
+    systemctl --user stop promtail 2>/dev/null && print_success "Promtail stopped"
+    systemctl --user stop loki 2>/dev/null && print_success "Loki stopped"
+    systemctl --user stop grafana 2>/dev/null && print_success "Grafana stopped"
+    systemctl --user stop prometheus 2>/dev/null && print_success "Prometheus stopped"
+}
+
+restart_services() {
+    stop_services
+    echo
+    start_services
+}
+
+show_logs() {
+    print_header "Service Logs"
+
+    echo "1) Prometheus"
+    echo "2) Grafana"
+    echo "3) Loki"
+    echo "4) Promtail"
+    echo "5) LiteLLM"
+    echo
+    read -p "$(echo -e ${CYAN}Select service [1-5]:${NC} )" choice
+
+    case $choice in
+        1) journalctl --user -u prometheus -n 50 -f ;;
+        2) journalctl --user -u grafana -n 50 -f ;;
+        3) journalctl --user -u loki -n 50 -f ;;
+        4) journalctl --user -u promtail -n 50 -f ;;
+        5) journalctl --user -u litellm.service -n 50 -f ;;
+        *) print_error "Invalid choice" ;;
+    esac
+}
+
+# =============================================================================
+# Testing Functions
+# =============================================================================
+
+run_tests() {
+    print_banner
+    print_header "Dashboard Tests"
+
+    # Check services first
+    if ! check_all_services; then
+        echo
+        print_error "Cannot run tests - services not running"
+        if ask_yes_no "Would you like to start services now?" "y"; then
+            start_services
+            echo
+        else
+            return 1
+        fi
+    fi
+
+    echo
+    print_info "Test options:"
+    echo "  1) Quick test (headless)"
+    echo "  2) Watch browser (headed mode)"
+    echo "  3) Specific test only"
+    echo
+    read -p "$(echo -e ${CYAN}Select option [1-3]:${NC} )" choice
+
+    echo
+    cd "$PROJECT_ROOT"
+
+    case $choice in
+        1)
+            print_info "Running tests in headless mode..."
+            pytest -m monitoring -v tests/monitoring/test_grafana_dashboard.py
+            ;;
+        2)
+            print_info "Running tests with visible browser..."
+            PLAYWRIGHT_HEADED=1 pytest -m monitoring -v tests/monitoring/test_grafana_dashboard.py
+            ;;
+        3)
+            print_info "Available tests:"
+            echo "  1) Login test"
+            echo "  2) Datasources test"
+            echo "  3) Dashboard exists test"
+            echo "  4) Dashboard panels test"
+            echo "  5) Data validation test"
+            echo
+            read -p "$(echo -e ${CYAN}Select test [1-5]:${NC} )" test_choice
+
+            case $test_choice in
+                1) pytest tests/monitoring/test_grafana_dashboard.py::TestGrafanaDashboard::test_grafana_login -v ;;
+                2) pytest tests/monitoring/test_grafana_dashboard.py::TestGrafanaDashboard::test_datasources_configured -v ;;
+                3) pytest tests/monitoring/test_grafana_dashboard.py::TestGrafanaDashboard::test_dashboard_exists -v ;;
+                4) pytest tests/monitoring/test_grafana_dashboard.py::TestGrafanaDashboard::test_dashboard_panels -v ;;
+                5) pytest tests/monitoring/test_grafana_dashboard.py::TestGrafanaDashboard::test_panel_no_data_errors -v ;;
+                *) print_error "Invalid choice" ;;
+            esac
+            ;;
+        *)
+            print_error "Invalid choice"
+            return 1
+            ;;
+    esac
+
+    local exit_code=$?
+
+    echo
+    if [ $exit_code -eq 0 ]; then
+        print_success "All tests passed!"
+        echo
+        print_info "Screenshots saved to: tests/monitoring/screenshots/"
+        ls -lh "$PROJECT_ROOT/tests/monitoring/screenshots/" 2>/dev/null | tail -n +2
+    else
+        print_error "Some tests failed"
+    fi
+
+    return $exit_code
+}
+
+# =============================================================================
+# Utility Functions
+# =============================================================================
+
+open_dashboards() {
+    print_header "Opening Dashboards"
+
+    if command -v xdg-open > /dev/null 2>&1; then
+        BROWSER="xdg-open"
+    elif command -v firefox > /dev/null 2>&1; then
+        BROWSER="firefox"
+    elif command -v google-chrome > /dev/null 2>&1; then
+        BROWSER="google-chrome"
+    else
+        print_error "No browser found"
+        print_info "Manually open:"
+        echo "  • Grafana: http://localhost:3000"
+        echo "  • Prometheus: http://localhost:9090"
+        return 1
+    fi
+
+    print_info "Opening dashboards in browser..."
+    $BROWSER "http://localhost:3000" > /dev/null 2>&1 &
+    print_success "Grafana: http://localhost:3000"
+
+    if ask_yes_no "Open Prometheus too?" "n"; then
+        $BROWSER "http://localhost:9090" > /dev/null 2>&1 &
+        print_success "Prometheus: http://localhost:9090"
+    fi
+}
+
+show_status() {
+    print_banner
+    check_all_services
+
+    echo
+    print_header "Quick Stats"
+
+    # Prometheus metrics
+    if curl -s http://localhost:9090/-/healthy > /dev/null 2>&1; then
+        request_rate=$(curl -s 'http://localhost:9090/api/v1/query?query=rate(litellm_requests_total[1m])' 2>/dev/null | grep -o '"value":\[[^]]*\]' | tail -1 | grep -o '[0-9.]*' | tail -1)
+        if [ -n "$request_rate" ]; then
+            echo -e "Request Rate: ${GREEN}${request_rate} req/min${NC}"
+        fi
+    fi
+
+    echo
+    print_info "For more details:"
+    echo "  • Grafana: http://localhost:3000"
+    echo "  • Prometheus: http://localhost:9090"
+    echo
+}
+
+show_help() {
+    print_banner
+    echo "Usage: ./scripts/monitor [command]"
+    echo
+    echo "Commands:"
+    echo "  setup     - Run setup wizard (first time setup)"
+    echo "  test      - Run dashboard validation tests"
+    echo "  status    - Check monitoring stack status"
+    echo "  start     - Start all monitoring services"
+    echo "  stop      - Stop all monitoring services"
+    echo "  restart   - Restart all monitoring services"
+    echo "  logs      - View service logs"
+    echo "  open      - Open dashboards in browser"
+    echo "  help      - Show this help message"
+    echo
+    echo "Examples:"
+    echo "  ./scripts/monitor setup    # First time setup"
+    echo "  ./scripts/monitor test     # Validate dashboard"
+    echo "  ./scripts/monitor status   # Check everything"
+    echo
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+main() {
+    cd "$PROJECT_ROOT"
+
+    case "${1:-help}" in
+        setup)
+            setup_wizard
+            ;;
+        test)
+            run_tests
+            ;;
+        status)
+            show_status
+            ;;
+        start)
+            start_services
+            ;;
+        stop)
+            stop_services
+            ;;
+        restart)
+            restart_services
+            ;;
+        logs)
+            show_logs
+            ;;
+        open)
+            open_dashboards
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        *)
+            print_error "Unknown command: $1"
+            echo
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

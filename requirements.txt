@@ -18,3 +18,5 @@ pytest>=7.4.0
 pytest-cov>=4.1.0  # Coverage reporting
 pytest-xdist>=3.3.0  # Parallel test execution
 requests>=2.31.0  # HTTP requests for integration tests
+pytest-playwright>=0.4.0  # Browser automation for monitoring tests
+playwright>=1.40.0  # Playwright browser automation

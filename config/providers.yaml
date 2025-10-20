@@ -65,7 +65,7 @@ providers:
   vllm:
     type: vllm
     base_url: http://127.0.0.1:8001
-    status: pending_integration  # Will be 'active' after Phase 3
+    status: active  # Integrated and ready for use
     description: vLLM from CrushVLLM for high-throughput production inference
     features:
       - Continuous batching
@@ -138,10 +138,10 @@ providers:
 # ============================================================================
 
 metadata:
-  version: "1.0"
-  last_updated: "2025-10-19"
-  total_providers: 4  # active providers
-  total_models_available: 5
+  version: "1.1"
+  last_updated: "2025-10-21"
+  total_providers: 4  # active providers (ollama, llama_cpp_python, llama_cpp_native, vllm)
+  total_models_available: 6  # Including vLLM models
 
   provider_types:
     - ollama: Simple local server

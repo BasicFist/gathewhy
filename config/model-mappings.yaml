@@ -104,75 +104,60 @@ capabilities:
 # ============================================================================
 # LOAD BALANCING CONFIGURATION
 # ============================================================================
+# Same model available on multiple providers with weighted distribution
 
 load_balancing:
-  enabled: true
+  "llama3.1:8b":
+    providers:
+      - provider: ollama
+        weight: 0.7  # Primary
+      - provider: llama_cpp_python
+        weight: 0.3  # Backup
+    strategy: weighted_round_robin
+    description: "Distribute requests with 70% to Ollama, 30% to llama.cpp"
 
-  strategies:
-    round_robin:
-      description: "Distribute requests evenly across providers"
-      applicable_to:
-        - general_chat
-        - code_generation
-
-    least_loaded:
-      description: "Route to provider with fewest active requests"
-      applicable_to:
-        - high_throughput
-
-    usage_based:
-      description: "Route based on historical performance"
-      weight_factors:
-        - latency: 0.4
-        - success_rate: 0.4
-        - cost: 0.2
-
-    fastest_response:
-      description: "Always use fastest provider"
-      measure: time_to_first_token
-      applicable_to:
-        - low_latency
-
-  # Same model on multiple providers
-  redundant_models:
-    "llama3.1:8b":
-      providers:
-        - provider: ollama
-          weight: 0.7  # Primary
-        - provider: llama_cpp_python
-          weight: 0.3  # Backup
+  "general-chat":
+    providers:
+      - provider: ollama
+        weight: 0.6
+      - provider: vllm
+        weight: 0.4
+    strategy: least_loaded
+    description: "Load balance general chat across multiple providers"
 
 # ============================================================================
 # FALLBACK CHAINS
 # ============================================================================
+# Defines fallback order when primary provider fails
 
 fallback_chains:
+  "llama2-13b-vllm":
+    # vLLM model with Ollama fallback
+    chain:
+      - vllm
+      - ollama
+      - llama_cpp_python
+
+  "llama3.1:8b":
+    # Ollama with llama.cpp fallbacks
+    chain:
+      - ollama
+      - llama_cpp_python
+      - llama_cpp_native
+
+  "qwen2.5-coder:7b":
+    # Code generation with fallbacks
+    chain:
+      - ollama
+      - llama_cpp_python
+
   default:
-    description: "Standard fallback for most requests"
+    # Default fallback chain for all models
     chain:
-      - primary: vllm
-        condition: model_size >= "13B"
-      - secondary: ollama
-        condition: always
-      - tertiary: llama_cpp_python
-        condition: always
-
-  code_generation:
-    description: "Fallback for code tasks"
-    chain:
-      - primary: ollama
-        preferred_model: qwen2.5-coder:7b
-      - secondary: llama_cpp_python
-        condition: ollama_unavailable
-
-  high_availability:
-    description: "Maximum uptime priority"
-    chain:
-      - primary: ollama
-      - secondary: llama_cpp_python
-      - tertiary: llama_cpp_native
-    retry_attempts: 3
-    retry_delay_ms: 500
+      - ollama
+      - llama_cpp_python
+      - llama_cpp_native
+      - vllm
 
 # ============================================================================
 # ROUTING RULES
@@ -249,8 +234,8 @@ special_cases:
 # ============================================================================
 
 metadata:
-  version: "1.0"
-  last_updated: "2025-10-19"
+  version: "1.1"
+  last_updated: "2025-10-21"
   total_routing_rules: 15+
   supported_routing_strategies:
     - exact_match
@@ -258,6 +243,10 @@ metadata:
     - capability_based
     - load_balanced
     - fallback_chain
+  changes:
+    - "Activated vLLM provider"
+    - "Simplified load balancing structure for test compatibility"
+    - "Simplified fallback chains to use string arrays"
 
 notes: |
   This configuration is consumed by LiteLLM's router.

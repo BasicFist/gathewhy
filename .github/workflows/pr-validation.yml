@@ -1,0 +1,285 @@
+# Pull Request Validation Workflow
+#
+# Stricter validation for pull requests including:
+# - All standard validation checks
+# - PR title/description quality
+# - Breaking change detection
+# - Configuration diff analysis
+
+name: Pull Request Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches:
+      - main
+      - master
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ============================================================================
+  # PR Metadata Validation
+  # ============================================================================
+  pr-metadata:
+    name: PR Metadata Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR title
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+
+          # Check for conventional commit format
+          if ! echo "$PR_TITLE" | grep -qE '^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .+'; then
+            echo "❌ PR title must follow conventional commit format"
+            echo "Examples:"
+            echo "  - feat(routing): add fallback for Ollama models"
+            echo "  - fix(config): correct vLLM port mapping"
+            echo "  - docs(security): update master key setup instructions"
+            exit 1
+          fi
+
+          echo "✅ PR title follows conventional commit format"
+
+      - name: Check PR description
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+
+          if [ -z "$PR_BODY" ]; then
+            echo "⚠️  Warning: PR description is empty"
+            echo "Please add description with:"
+            echo "  - What changed"
+            echo "  - Why it changed"
+            echo "  - Testing performed"
+            exit 0  # Warning only, don't fail
+          fi
+
+          echo "✅ PR has description"
+
+  # ============================================================================
+  # Configuration Change Analysis
+  # ============================================================================
+  config-diff:
+    name: Configuration Change Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install pyyaml>=6.0
+
+      - name: Analyze configuration changes
+        run: |
+          echo "Analyzing configuration changes..."
+
+          # Get list of changed config files
+          CHANGED_CONFIGS=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | grep '^config/')
+
+          if [ -z "$CHANGED_CONFIGS" ]; then
+            echo "ℹ️  No configuration files changed"
+            exit 0
+          fi
+
+          echo "Changed configuration files:"
+          echo "$CHANGED_CONFIGS"
+          echo ""
+
+          # Analyze each changed file
+          python3 << 'EOF'
+          import yaml
+          import subprocess
+          import sys
+
+          base_branch = "${{ github.event.pull_request.base.ref }}"
+          changed_files = subprocess.check_output(
+              f"git diff --name-only origin/{base_branch}...HEAD | grep '^config/'",
+              shell=True,
+              text=True
+          ).strip().split('\n')
+
+          changes = []
+          for file in changed_files:
+              if not file or not file.startswith('config/'):
+                  continue
+
+              print(f"\n📄 Analyzing {file}...")
+
+              # Get diff stats
+              diff = subprocess.check_output(
+                  f"git diff origin/{base_branch}...HEAD -- {file}",
+                  shell=True,
+                  text=True
+              )
+
+              additions = len([l for l in diff.split('\n') if l.startswith('+')])
+              deletions = len([l for l in diff.split('\n') if l.startswith('-')])
+
+              print(f"  Lines added: {additions}")
+              print(f"  Lines deleted: {deletions}")
+
+              # Check for breaking changes
+              breaking_patterns = [
+                  'status: disabled',
+                  'base_url:',
+                  'removed:',
+                  'deprecated:'
+              ]
+
+              for pattern in breaking_patterns:
+                  if pattern in diff and '+' + pattern in diff:
+                      print(f"  ⚠️  Potential breaking change detected: {pattern}")
+                      changes.append(f"{file}: {pattern}")
+
+          if changes:
+              print("\n⚠️  BREAKING CHANGES DETECTED:")
+              for change in changes:
+                  print(f"  - {change}")
+              print("\nPlease ensure:")
+              print("  1. Dependent projects are notified")
+              print("  2. Migration guide is provided")
+              print("  3. Rollback procedure is documented")
+          else:
+              print("\n✅ No breaking changes detected")
+          EOF
+
+  # ============================================================================
+  # Security Review
+  # ============================================================================
+  security-review:
+    name: Security Impact Assessment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for security-sensitive changes
+        run: |
+          echo "Checking for security-sensitive changes..."
+
+          SECURITY_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | \
+            grep -E '(security|auth|cors|rate.*limit|master.*key|salt.*key|\.env|secret)')
+
+          if [ -n "$SECURITY_FILES" ]; then
+            echo "⚠️  Security-sensitive files modified:"
+            echo "$SECURITY_FILES"
+            echo ""
+            echo "Please ensure:"
+            echo "  - Security review completed"
+            echo "  - No hardcoded credentials"
+            echo "  - CORS settings appropriate"
+            echo "  - Rate limits reasonable"
+          else
+            echo "✅ No security-sensitive files modified"
+          fi
+
+  # ============================================================================
+  # Performance Impact Check
+  # ============================================================================
+  performance-check:
+    name: Performance Impact Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for performance-impacting changes
+        run: |
+          echo "Checking for performance-impacting changes..."
+
+          # Check for changes to routing or caching
+          PERF_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | \
+            grep -E '(routing|cache|redis|timeout|retry)')
+
+          if [ -n "$PERF_FILES" ]; then
+            echo "ℹ️  Performance-related files modified:"
+            echo "$PERF_FILES"
+            echo ""
+            echo "Consider:"
+            echo "  - Measuring latency impact"
+            echo "  - Testing with realistic load"
+            echo "  - Validating cache behavior"
+          else
+            echo "✅ No performance-related files modified"
+          fi
+
+  # ============================================================================
+  # Changelog Check
+  # ============================================================================
+  changelog-check:
+    name: Changelog Update
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'master'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if CHANGELOG updated
+        run: |
+          if git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | grep -q "CHANGELOG.md"; then
+            echo "✅ CHANGELOG.md updated"
+          else
+            echo "⚠️  CHANGELOG.md not updated"
+            echo "Consider adding entry for significant changes"
+            # Don't fail, just warn
+          fi
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  pr-validation-summary:
+    name: PR Validation Summary
+    runs-on: ubuntu-latest
+    needs: [pr-metadata, config-diff, security-review, performance-check]
+    if: always()
+
+    steps:
+      - name: Summary
+        run: |
+          echo "================================"
+          echo "Pull Request Validation Summary"
+          echo "================================"
+          echo ""
+          echo "PR: ${{ github.event.pull_request.title }}"
+          echo "Author: ${{ github.event.pull_request.user.login }}"
+          echo "Base: ${{ github.event.pull_request.base.ref }}"
+          echo ""
+          echo "Checks:"
+          echo "  - PR Metadata: ${{ needs.pr-metadata.result }}"
+          echo "  - Config Diff: ${{ needs.config-diff.result }}"
+          echo "  - Security Review: ${{ needs.security-review.result }}"
+          echo "  - Performance Check: ${{ needs.performance-check.result }}"
+          echo ""
+
+          if [ "${{ needs.pr-metadata.result }}" != "success" ]; then
+            echo "❌ PR metadata validation failed"
+            exit 1
+          fi
+
+          echo "✅ PR validation complete"
+          echo "Standard validation checks will run separately"

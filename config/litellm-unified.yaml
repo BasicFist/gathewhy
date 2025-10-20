@@ -1,0 +1,363 @@
+# LiteLLM Unified Configuration
+# Extended configuration integrating all providers: Ollama + llama.cpp + vLLM
+#
+# This file extends the existing ../openwebui/config/litellm.yaml
+# To use: Copy/merge this with openwebui/config/litellm.yaml
+
+model_list:
+  # ============================================================================
+  # OLLAMA MODELS (existing)
+  # ============================================================================
+
+  - model_name: llama3.1-ollama
+    litellm_params:
+      model: ollama/llama3.1:8b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      tags: ["general", "chat", "8b"]
+      provider: ollama
+
+  - model_name: qwen-coder
+    litellm_params:
+      model: ollama/qwen2.5-coder:7b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      tags: ["code", "specialized", "7b"]
+      provider: ollama
+
+  # Specialized models (if pulled)
+  - model_name: deepseek-coder
+    litellm_params:
+      model: ollama/deepseek-coder-v2:16b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      tags: ["code", "large", "16b"]
+      provider: ollama
+
+  - model_name: qwen-math
+    litellm_params:
+      model: ollama/qwen2-math:7b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      tags: ["math", "specialized", "7b"]
+      provider: ollama
+
+  - model_name: llava-vision
+    litellm_params:
+      model: ollama/llava:13b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      tags: ["vision", "multimodal", "13b"]
+      provider: ollama
+
+  # ============================================================================
+  # LLAMA.CPP MODELS (new)
+  # ============================================================================
+
+  - model_name: llama-cpp-python
+    litellm_params:
+      model: openai/local-model  # llama.cpp uses OpenAI-compatible API
+      api_base: http://127.0.0.1:8000
+      stream: true
+    model_info:
+      tags: ["gguf", "cuda", "high-performance"]
+      provider: llama_cpp_python
+      notes: "Python bindings, n_parallel=4, n_ctx=8192"
+
+  - model_name: llama-cpp-native
+    litellm_params:
+      model: openai/local-model
+      api_base: http://127.0.0.1:8080
+      stream: true
+    model_info:
+      tags: ["gguf", "cuda", "maximum-performance"]
+      provider: llama_cpp_native
+      notes: "Pure C++ server, no Python overhead"
+
+  # ============================================================================
+  # vLLM MODELS (NEW - integrated from CrushVLLM)
+  # ============================================================================
+
+  - model_name: llama2-13b-vllm
+    litellm_params:
+      model: vllm/meta-llama/Llama-2-13b-chat-hf
+      api_base: http://127.0.0.1:8001
+      stream: true
+    model_info:
+      tags: ["chat", "high-throughput", "13b", "vllm"]
+      provider: vllm
+      context_length: 4096
+      notes: "High-throughput inference via vLLM, continuous batching"
+
+  # Template for adding more vLLM models
+  # - model_name: mistral-7b-vllm
+  #   litellm_params:
+  #     model: vllm/mistralai/Mistral-7B-Instruct-v0.2
+  #     api_base: http://127.0.0.1:8001
+  #   model_info:
+  #     tags: ["chat", "7b", "vllm"]
+  #     provider: vllm
+
+  # ============================================================================
+  # ROUTER CONFIGURATIONS
+  # ============================================================================
+
+  # Redundant routing for high availability
+  - model_name: llama3.1:8b  # Canonical name
+    litellm_params:
+      model: ollama/llama3.1:8b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      tags: ["primary"]
+      provider: ollama
+
+  # Same model via fallback provider
+  - model_name: llama3.1-backup
+    litellm_params:
+      model: openai/llama3.1-gguf
+      api_base: http://127.0.0.1:8000
+    model_info:
+      tags: ["fallback"]
+      provider: llama_cpp_python
+
+# ============================================================================
+# LITELLM SETTINGS
+# ============================================================================
+
+litellm_settings:
+  # Request handling
+  request_timeout: 60  # Increased for vLLM larger models
+  stream_timeout: 0    # No timeout for streaming
+  num_retries: 3
+  timeout: 300
+
+  # Caching (Redis)
+  cache: true
+  cache_params:
+    type: redis
+    host: 127.0.0.1
+    port: 6379
+    ttl: 3600  # 1 hour cache
+
+  # Logging
+  set_verbose: false
+  json_logs: true
+
+  # Success/Failure tracking
+  success_callback: ["langfuse"]  # Optional: if using Langfuse
+  failure_callback: ["langfuse"]
+
+# ============================================================================
+# SECURITY SETTINGS
+# ============================================================================
+
+general_settings:
+  # Master Key Authentication
+  # SECURITY: Set via environment variable for production
+  # Format: Must start with "sk-"
+  # Setup:
+  #   1. Generate: LITELLM_MASTER_KEY="sk-$(openssl rand -hex 16)"
+  #   2. Add to systemd service:
+  #      systemctl --user edit litellm.service
+  #      [Service]
+  #      Environment="LITELLM_MASTER_KEY=sk-..."
+  #   3. Restart: systemctl --user daemon-reload && systemctl --user restart litellm.service
+  #
+  # When enabled, all requests must include header:
+  #   Authorization: Bearer sk-your-master-key
+  #
+  # Uncomment to enable:
+  # master_key: ${LITELLM_MASTER_KEY}
+
+  # Salt Key for DB encryption
+  # IMPORTANT: Do not change after adding models to DB
+  # salt_key: ${LITELLM_SALT_KEY}
+
+  # Database connection (if using DB for model management)
+  # database_url: ${DATABASE_URL}
+
+# ============================================================================
+# ROUTER SETTINGS
+# ============================================================================
+
+router_settings:
+  # Routing strategy
+  routing_strategy: usage-based-routing-v2
+  # Options: simple-shuffle, least-busy, usage-based-routing, latency-based-routing
+
+  # Model fallback
+  model_group_alias:
+    general_chat:
+      - llama3.1-ollama
+      - llama2-13b-vllm
+      - llama-cpp-python
+    code_generation:
+      - qwen-coder
+      - deepseek-coder
+    high_throughput:
+      - llama2-13b-vllm  # vLLM excels here
+
+  # Reliability
+  allowed_fails: 3
+  num_retries: 2
+  timeout: 30  # seconds
+  cooldown_time: 60  # seconds before retrying failed provider
+
+  # Load balancing
+  enable_pre_call_checks: true  # Check provider health before routing
+  redis_host: 127.0.0.1
+  redis_port: 6379
+
+  # Fallback chains
+  fallbacks:
+    - model: llama3.1:8b
+      fallback_models:
+        - llama3.1-backup
+        - llama-cpp-python
+
+    - model: llama2-13b-vllm
+      fallback_models:
+        - llama3.1-ollama  # Smaller model if vLLM fails
+
+# ============================================================================
+# SERVER SETTINGS
+# ============================================================================
+
+server_settings:
+  port: 4000
+  host: 0.0.0.0  # Listen on all interfaces
+
+  # CORS (for web access)
+  # SECURITY: Restricted to localhost for local network deployment
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:*"
+      - "http://127.0.0.1:*"
+      - "http://[::1]:*"
+    # For production with external access, add specific domains:
+    # - "https://yourdomain.com"
+
+  # Health checks
+  health_check_endpoint: /health
+
+  # Monitoring
+  prometheus:
+    enabled: true
+    port: 9090
+
+# ============================================================================
+# ADVANCED FEATURES
+# ============================================================================
+
+# Rate limiting - SECURITY: Enabled with sensible defaults
+rate_limit_settings:
+  enabled: true
+  limits:
+    # General models - moderate limits
+    llama3.1:8b:
+      rpm: 100  # requests per minute
+      tpm: 50000  # tokens per minute
+
+    qwen-coder:
+      rpm: 80
+      tpm: 40000
+
+    # High-throughput models - higher limits
+    llama2-13b-vllm:
+      rpm: 50  # Lower RPM due to higher per-request cost
+      tpm: 100000
+
+    # High-performance models - balanced limits
+    llama-cpp-python:
+      rpm: 120
+      tpm: 60000
+
+    llama-cpp-native:
+      rpm: 150  # Fastest provider
+      tpm: 75000
+
+# Budget management (optional)
+budget_settings:
+  enabled: false
+  # max_budget: 100  # dollars per month
+  # budget_duration: "1mo"
+
+# ============================================================================
+# DEBUGGING & DEVELOPMENT
+# ============================================================================
+
+# Enable debug mode for troubleshooting
+debug: false
+debug_router: false
+
+# Test mode (dry run without actual API calls)
+test_mode: false
+
+# ============================================================================
+# USAGE NOTES
+# ============================================================================
+
+# To apply this configuration:
+#
+# 1. Backup existing config:
+#    cp ../openwebui/config/litellm.yaml ../openwebui/config/litellm.yaml.backup
+#
+# 2. Merge or replace:
+#    cp config/litellm-unified.yaml ../openwebui/config/litellm.yaml
+#
+# 3. Restart LiteLLM:
+#    systemctl --user restart litellm.service
+#
+# 4. Verify:
+#    curl http://localhost:4000/v1/models | jq
+#    ./scripts/validate-unified-backend.sh
+#
+# 5. Test vLLM integration:
+#    curl -X POST http://localhost:4000/v1/chat/completions \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "model": "llama2-13b-vllm",
+#        "messages": [{"role": "user", "content": "Hello!"}]
+#      }'
+
+# ============================================================================
+# MODEL ADDITION TEMPLATE
+# ============================================================================
+
+# To add a new model:
+#
+# 1. Add entry to model_list:
+#    - model_name: your-model-name
+#      litellm_params:
+#        model: provider/model-path
+#        api_base: http://host:port
+#      model_info:
+#        tags: ["tag1", "tag2"]
+#        provider: provider_name
+#
+# 2. Add routing rules if needed in router_settings
+#
+# 3. Update config/providers.yaml and config/model-mappings.yaml
+#
+# 4. Test with validation script
+
+# ============================================================================
+# PROVIDER-SPECIFIC NOTES
+# ============================================================================
+
+# Ollama:
+#   - Use format: ollama/model:version
+#   - API base: http://127.0.0.1:11434
+#   - Pull models first: ollama pull model:version
+#
+# llama.cpp:
+#   - Use format: openai/local-model (generic)
+#   - API base: http://127.0.0.1:8000 (Python) or :8080 (native)
+#   - Load GGUF model before starting server
+#
+# vLLM:
+#   - Use format: vllm/huggingface/model-path
+#   - API base: http://127.0.0.1:8001
+#   - Requires GPU with sufficient VRAM
+#   - Best for 13B+ models with high concurrency

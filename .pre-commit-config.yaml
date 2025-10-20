@@ -1,0 +1,66 @@
+# Pre-commit hooks for AI Backend Unified Infrastructure
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # YAML syntax validation
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-yaml
+        name: Check YAML syntax
+        args: ['--unsafe']  # Allow custom tags
+        files: \.(yaml|yml)$
+
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+
+      - id: end-of-file-fixer
+        name: Fix end of files
+
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=500']
+
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        name: Detect secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            .*/\.serena/.*|
+            .*test.*|
+            .*example.*
+          )$
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        name: Lint YAML files
+        args: ['-c', '.yamllint.yaml']
+        files: \.(yaml|yml)$
+
+  # Custom validation scripts
+  - repo: local
+    hooks:
+      - id: validate-config-schema
+        name: Validate configuration schema
+        entry: python3 scripts/validate-config-schema.py
+        language: system
+        files: ^config/.*\.(yaml|yml)$
+        pass_filenames: false
+
+      - id: check-generated-configs
+        name: Check for manual edits to generated configs
+        entry: bash scripts/check-generated-configs.sh
+        language: system
+        files: ^config/litellm-unified\.yaml$
+        pass_filenames: false

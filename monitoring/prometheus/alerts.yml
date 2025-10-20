@@ -1,0 +1,303 @@
+# Prometheus Alert Rules for AI Backend Unified Infrastructure
+#
+# Alert severity levels:
+# - critical: Immediate action required (page on-call)
+# - warning: Investigate within 1 hour
+# - info: Informational, review during business hours
+
+groups:
+  # ==========================================================================
+  # LiteLLM Gateway Alerts
+  # ==========================================================================
+  - name: litellm_gateway
+    interval: 30s
+    rules:
+      - alert: LiteLLMDown
+        expr: up{job="litellm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: litellm-gateway
+        annotations:
+          summary: "LiteLLM gateway is down"
+          description: "LiteLLM gateway has been unreachable for 1 minute"
+          impact: "All AI inference requests are failing"
+          action: "Check service status: systemctl --user status litellm.service"
+
+      - alert: LiteLLMHighErrorRate
+        expr: |
+          (
+            rate(litellm_requests_total{status=~"5.."}[5m])
+            /
+            rate(litellm_requests_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: litellm-gateway
+        annotations:
+          summary: "LiteLLM error rate above 5%"
+          description: "Error rate: {{ $value | humanizePercentage }}"
+          impact: "Users experiencing failures"
+          action: "Check logs: journalctl --user -u litellm.service -n 100"
+
+      - alert: LiteLLMHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(litellm_request_duration_seconds_bucket[5m])
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: litellm-gateway
+        annotations:
+          summary: "LiteLLM P95 latency above 10 seconds"
+          description: "P95 latency: {{ $value }}s"
+          impact: "Slow response times affecting user experience"
+          action: "Check provider performance, consider routing adjustments"
+
+      - alert: LiteLLMRequestSaturation
+        expr: rate(litellm_requests_total[1m]) > 1000
+        for: 2m
+        labels:
+          severity: info
+          component: litellm-gateway
+        annotations:
+          summary: "LiteLLM request rate very high"
+          description: "Request rate: {{ $value }}/min"
+          impact: "High load, may approach rate limits"
+          action: "Monitor for capacity issues"
+
+  # ==========================================================================
+  # Provider Health Alerts
+  # ==========================================================================
+  - name: provider_health
+    interval: 30s
+    rules:
+      - alert: ProviderDown
+        expr: up{job=~"ollama|llama-cpp-python|llama-cpp-native|vllm"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: provider
+        annotations:
+          summary: "Provider {{ $labels.provider }} is down"
+          description: "Provider has been unreachable for 2 minutes"
+          impact: "Requests may fallback to other providers"
+          action: "Check provider service: systemctl --user status {{ $labels.service }}"
+
+      - alert: AllProvidersDown
+        expr: |
+          count(up{job=~"ollama|llama-cpp-python|llama-cpp-native|vllm"} == 0)
+          ==
+          count(up{job=~"ollama|llama-cpp-python|llama-cpp-native|vllm"})
+        for: 1m
+        labels:
+          severity: critical
+          component: provider
+        annotations:
+          summary: "All inference providers are down"
+          description: "Complete provider outage"
+          impact: "All AI inference requests failing"
+          action: "Immediate investigation required, check all provider services"
+
+      - alert: ProviderHighErrorRate
+        expr: |
+          (
+            rate(provider_requests_total{status=~"5.."}[5m])
+            /
+            rate(provider_requests_total[5m])
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          component: provider
+        annotations:
+          summary: "Provider {{ $labels.provider }} error rate above 10%"
+          description: "Error rate: {{ $value | humanizePercentage }}"
+          impact: "Provider experiencing failures"
+          action: "Check provider logs and health"
+
+  # ==========================================================================
+  # Cache Performance Alerts
+  # ==========================================================================
+  - name: cache_performance
+    interval: 1m
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis has been unreachable for 2 minutes"
+          impact: "No caching, increased latency and provider load"
+          action: "Check Redis service: systemctl status redis"
+
+      - alert: RedisCacheHitRateLow
+        expr: |
+          rate(redis_keyspace_hits_total[5m])
+          /
+          (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
+          < 0.5
+        for: 10m
+        labels:
+          severity: info
+          component: cache
+        annotations:
+          summary: "Redis cache hit rate below 50%"
+          description: "Cache hit rate: {{ $value | humanizePercentage }}"
+          impact: "Inefficient caching, higher provider load"
+          action: "Review cache TTL settings and query patterns"
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis memory usage above 90%"
+          description: "Memory usage: {{ $value | humanizePercentage }}"
+          impact: "May start evicting cache entries"
+          action: "Consider increasing Redis max memory or reducing TTL"
+
+  # ==========================================================================
+  # Rate Limiting Alerts
+  # ==========================================================================
+  - name: rate_limiting
+    interval: 1m
+    rules:
+      - alert: RateLimitViolationsHigh
+        expr: rate(litellm_rate_limit_exceeded_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: rate-limiting
+        annotations:
+          summary: "High rate of rate limit violations"
+          description: "Rate limit violations: {{ $value }}/min"
+          impact: "Users hitting rate limits, requests being rejected"
+          action: "Review rate limits or investigate unusual traffic patterns"
+
+      - alert: RateLimitNearThreshold
+        expr: |
+          litellm_current_requests_per_minute
+          /
+          litellm_rate_limit_rpm_threshold
+          > 0.9
+        for: 2m
+        labels:
+          severity: info
+          component: rate-limiting
+        annotations:
+          summary: "Model {{ $labels.model }} approaching rate limit"
+          description: "Usage at {{ $value | humanizePercentage }} of limit"
+          impact: "May start rate limiting soon"
+          action: "Monitor for continued growth"
+
+  # ==========================================================================
+  # System Resource Alerts
+  # ==========================================================================
+  - name: system_resources
+    interval: 1m
+    rules:
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage: {{ $value | printf \"%.1f\" }}%"
+          impact: "System may be overloaded"
+          action: "Check process usage: top, investigate high CPU processes"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage: {{ $value | printf \"%.1f\" }}%"
+          impact: "System may start swapping or OOM killing processes"
+          action: "Check memory usage: free -h, identify memory-hungry processes"
+
+      - alert: DiskSpaceLow
+        expr: |
+          (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk usage: {{ $value | printf \"%.1f\" }}%"
+          impact: "May run out of disk space"
+          action: "Clean up old logs, temporary files, or expand disk"
+
+  # ==========================================================================
+  # Fallback Chain Alerts
+  # ==========================================================================
+  - name: fallback_behavior
+    interval: 1m
+    rules:
+      - alert: FallbacksFrequent
+        expr: rate(litellm_fallback_triggered_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: routing
+        annotations:
+          summary: "Frequent fallback triggers"
+          description: "Fallback rate: {{ $value }}/min"
+          impact: "Primary providers frequently failing"
+          action: "Investigate primary provider health and logs"
+
+      - alert: FallbackChainExhausted
+        expr: litellm_fallback_chain_exhausted_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: routing
+        annotations:
+          summary: "Fallback chain exhausted for some requests"
+          description: "Requests failed after all fallbacks attempted"
+          impact: "Users experiencing complete failures"
+          action: "Immediate investigation of all providers required"
+
+  # ==========================================================================
+  # Configuration Alerts
+  # ==========================================================================
+  - name: configuration
+    interval: 5m
+    rules:
+      - alert: ConfigurationReloadFailed
+        expr: increase(litellm_config_reload_failures_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: configuration
+        annotations:
+          summary: "LiteLLM configuration reload failed"
+          description: "Failed to reload configuration"
+          impact: "Running with old configuration"
+          action: "Check configuration validity: python3 scripts/validate-config-schema.py"
+
+      - alert: InvalidModelConfiguration
+        expr: litellm_invalid_model_configs_total > 0
+        labels:
+          severity: warning
+          component: configuration
+        annotations:
+          summary: "Invalid model configurations detected"
+          description: "{{ $value }} invalid model configurations"
+          impact: "Some models may not be accessible"
+          action: "Run validation: python3 scripts/validate-config-schema.py"

@@ -1,0 +1,67 @@
+# Grafana Service for AI Backend Unified Infrastructure
+#
+# Visualization and dashboarding for:
+# - LiteLLM gateway metrics
+# - Provider performance and health
+# - System resource monitoring
+# - Cache performance
+# - Alert management
+#
+# Installation:
+#   mkdir -p ~/.config/systemd/user
+#   cp monitoring/systemd/grafana.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable grafana.service
+#   systemctl --user start grafana.service
+#
+# Access:
+#   http://localhost:3000
+#   Default credentials: admin/admin (change on first login)
+#
+# Logs:
+#   journalctl --user -u grafana.service -f
+
+[Unit]
+Description=Grafana Visualization and Dashboarding
+Documentation=https://grafana.com/docs/
+After=network.target prometheus.service loki.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/LAB/ai/backend/ai-backend-unified/monitoring/grafana
+
+# Grafana server binary (assumes installed via package manager)
+# Update path if installed elsewhere
+ExecStart=/usr/sbin/grafana-server \
+  --homepath=/usr/share/grafana \
+  --config=/etc/grafana/grafana.ini \
+  --pidfile=%h/LAB/ai/backend/ai-backend-unified/monitoring/grafana/grafana.pid \
+  cfg:default.paths.logs=%h/LAB/ai/backend/ai-backend-unified/monitoring/grafana/logs \
+  cfg:default.paths.data=%h/LAB/ai/backend/ai-backend-unified/monitoring/grafana/data \
+  cfg:default.paths.plugins=%h/LAB/ai/backend/ai-backend-unified/monitoring/grafana/plugins \
+  cfg:default.paths.provisioning=%h/LAB/ai/backend/ai-backend-unified/monitoring/grafana/provisioning \
+  cfg:default.server.http_addr=127.0.0.1 \
+  cfg:default.server.http_port=3000
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/LAB/ai/backend/ai-backend-unified/monitoring/grafana
+
+# Resource limits
+MemoryLimit=1G
+CPUQuota=100%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grafana
+
+[Install]
+WantedBy=default.target

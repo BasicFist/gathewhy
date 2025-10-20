@@ -1,0 +1,62 @@
+# Loki Service for AI Backend Unified Infrastructure
+#
+# Log aggregation and storage for:
+# - LiteLLM gateway logs
+# - Provider service logs (Ollama, llama.cpp, vLLM)
+# - System logs (filtered critical)
+# - Redis logs
+#
+# Installation:
+#   mkdir -p ~/.config/systemd/user
+#   cp monitoring/systemd/loki.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable loki.service
+#   systemctl --user start loki.service
+#
+# Logs:
+#   journalctl --user -u loki.service -f
+
+[Unit]
+Description=Loki Log Aggregation Service
+Documentation=https://grafana.com/docs/loki/
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/LAB/ai/backend/ai-backend-unified/monitoring/loki
+
+# Loki binary (assumes installed via package manager or downloaded)
+# Update path if installed elsewhere
+ExecStart=/usr/local/bin/loki \
+  -config.file=%h/LAB/ai/backend/ai-backend-unified/monitoring/loki/loki-config.yml
+
+# Create required directories on start
+ExecStartPre=/bin/mkdir -p %h/LAB/ai/backend/ai-backend-unified/monitoring/loki/data/wal
+ExecStartPre=/bin/mkdir -p %h/LAB/ai/backend/ai-backend-unified/monitoring/loki/data/boltdb-shipper-active
+ExecStartPre=/bin/mkdir -p %h/LAB/ai/backend/ai-backend-unified/monitoring/loki/data/boltdb-shipper-cache
+ExecStartPre=/bin/mkdir -p %h/LAB/ai/backend/ai-backend-unified/monitoring/loki/data/boltdb-shipper-compactor
+ExecStartPre=/bin/mkdir -p %h/LAB/ai/backend/ai-backend-unified/monitoring/loki/data/chunks
+ExecStartPre=/bin/mkdir -p %h/LAB/ai/backend/ai-backend-unified/monitoring/loki/data/rules
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/LAB/ai/backend/ai-backend-unified/monitoring/loki/data
+
+# Resource limits
+MemoryLimit=2G
+CPUQuota=150%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=loki
+
+[Install]
+WantedBy=default.target

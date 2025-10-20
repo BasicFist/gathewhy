@@ -1,0 +1,275 @@
+# Model Routing Configuration
+# Defines how LiteLLM routes model requests to providers
+
+# ============================================================================
+# EXACT MODEL NAME ROUTING
+# ============================================================================
+
+exact_matches:
+  # Ollama models (exact name)
+  "llama3.1:8b":
+    provider: ollama
+    priority: primary
+    fallback: null
+    description: "General-purpose chat model"
+
+  "qwen2.5-coder:7b":
+    provider: ollama
+    priority: primary
+    fallback: null
+    description: "Code generation specialist"
+
+  # vLLM models (when integrated)
+  "llama2-13b-vllm":
+    provider: vllm
+    priority: primary
+    fallback: ollama
+    description: "High-throughput 13B chat model via vLLM"
+    backend_model: "meta-llama/Llama-2-13b-chat-hf"
+
+  # llama.cpp models
+  "llama-cpp-default":
+    provider: llama_cpp_python
+    priority: primary
+    fallback: llama_cpp_native
+    description: "GGUF model via llama.cpp Python bindings"
+
+# ============================================================================
+# PATTERN-BASED ROUTING
+# ============================================================================
+
+patterns:
+  # HuggingFace model paths → vLLM
+  - pattern: "^meta-llama/.*"
+    provider: vllm
+    fallback: ollama
+    description: "HuggingFace Llama models prefer vLLM for performance"
+
+  - pattern: "^mistralai/.*"
+    provider: vllm
+    fallback: ollama
+    description: "Mistral models via vLLM"
+
+  # Ollama-style names → Ollama
+  - pattern: ".*:\\d+[bB]$"  # Matches "model:7b", "model:13B", etc.
+    provider: ollama
+    description: "Ollama naming convention (model:size)"
+
+  # GGUF files → llama.cpp
+  - pattern: ".*\\.gguf$"
+    provider: llama_cpp_python
+    fallback: llama_cpp_native
+    description: "GGUF quantized models"
+
+# ============================================================================
+# CAPABILITY-BASED ROUTING
+# ============================================================================
+
+capabilities:
+  code_generation:
+    description: "Models specialized for code"
+    preferred_models:
+      - qwen2.5-coder:7b
+      - deepseek-coder-v2  # If pulled
+    provider: ollama
+    routing_strategy: load_balance
+
+  high_throughput:
+    description: "When you need to handle many concurrent requests"
+    min_model_size: "13B"
+    provider: vllm
+    routing_strategy: least_loaded
+
+  low_latency:
+    description: "Single-request speed priority"
+    provider: llama_cpp_native
+    fallback: llama_cpp_python
+    routing_strategy: fastest_response
+
+  general_chat:
+    description: "General conversational AI"
+    preferred_models:
+      - llama3.1:8b
+      - llama2-13b-vllm
+    routing_strategy: usage_based
+
+  large_context:
+    description: "Models that can handle large context windows"
+    min_context: 8192
+    providers:
+      - llama_cpp_python  # Configured for 8192 context
+      - vllm  # Supports up to 4096 by default
+    routing_strategy: most_capacity
+
+# ============================================================================
+# LOAD BALANCING CONFIGURATION
+# ============================================================================
+
+load_balancing:
+  enabled: true
+
+  strategies:
+    round_robin:
+      description: "Distribute requests evenly across providers"
+      applicable_to:
+        - general_chat
+        - code_generation
+
+    least_loaded:
+      description: "Route to provider with fewest active requests"
+      applicable_to:
+        - high_throughput
+
+    usage_based:
+      description: "Route based on historical performance"
+      weight_factors:
+        - latency: 0.4
+        - success_rate: 0.4
+        - cost: 0.2
+
+    fastest_response:
+      description: "Always use fastest provider"
+      measure: time_to_first_token
+      applicable_to:
+        - low_latency
+
+  # Same model on multiple providers
+  redundant_models:
+    "llama3.1:8b":
+      providers:
+        - provider: ollama
+          weight: 0.7  # Primary
+        - provider: llama_cpp_python
+          weight: 0.3  # Backup
+
+# ============================================================================
+# FALLBACK CHAINS
+# ============================================================================
+
+fallback_chains:
+  default:
+    description: "Standard fallback for most requests"
+    chain:
+      - primary: vllm
+        condition: model_size >= "13B"
+      - secondary: ollama
+        condition: always
+      - tertiary: llama_cpp_python
+        condition: always
+
+  code_generation:
+    description: "Fallback for code tasks"
+    chain:
+      - primary: ollama
+        preferred_model: qwen2.5-coder:7b
+      - secondary: llama_cpp_python
+        condition: ollama_unavailable
+
+  high_availability:
+    description: "Maximum uptime priority"
+    chain:
+      - primary: ollama
+      - secondary: llama_cpp_python
+      - tertiary: llama_cpp_native
+    retry_attempts: 3
+    retry_delay_ms: 500
+
+# ============================================================================
+# ROUTING RULES
+# ============================================================================
+
+routing_rules:
+  # Rule precedence (highest to lowest):
+  # 1. Exact model name match
+  # 2. Capability-based routing
+  # 3. Pattern matching
+  # 4. Default provider
+
+  default_provider: ollama
+  default_fallback: llama_cpp_python
+
+  request_metadata_routing:
+    # Route based on request headers/metadata
+    high_priority_requests:
+      provider: vllm
+      condition: header.x-priority == "high"
+
+    batch_requests:
+      provider: vllm
+      condition: batch_size > 1
+
+    streaming_requests:
+      provider: ollama  # Best streaming support
+      condition: stream == true
+
+  model_size_routing:
+    # Automatic provider selection based on model size
+    - size: "< 8B"
+      provider: ollama
+      reason: "Small models work well with Ollama"
+
+    - size: "8B - 13B"
+      provider: ollama
+      fallback: llama_cpp_python
+      reason: "Medium models, Ollama preferred"
+
+    - size: "> 13B"
+      provider: vllm
+      fallback: ollama
+      reason: "Large models benefit from vLLM batching"
+
+# ============================================================================
+# SPECIAL ROUTING CASES
+# ============================================================================
+
+special_cases:
+  first_request_routing:
+    description: "Cold start optimization"
+    strategy: prefer_warm_providers
+    warm_check_timeout_ms: 100
+
+  rate_limited_fallback:
+    description: "Automatic fallback when provider hits rate limit"
+    enabled: true
+    fallback_duration_seconds: 60
+
+  error_based_routing:
+    description: "Avoid providers with recent errors"
+    enabled: true
+    error_threshold: 3
+    cooldown_seconds: 300
+
+  geographic_routing:
+    description: "Route based on provider location (future)"
+    enabled: false
+    prefer_local: true
+
+# ============================================================================
+# METADATA
+# ============================================================================
+
+metadata:
+  version: "1.0"
+  last_updated: "2025-10-19"
+  total_routing_rules: 15+
+  supported_routing_strategies:
+    - exact_match
+    - pattern_match
+    - capability_based
+    - load_balanced
+    - fallback_chain
+
+notes: |
+  This configuration is consumed by LiteLLM's router.
+
+  When adding new models:
+  1. Add exact match entry if it has a canonical name
+  2. Consider which capability category it belongs to
+  3. Define fallback chain for reliability
+  4. Test routing with validation script
+
+  When adding new providers:
+  1. Update providers.yaml first
+  2. Add routing rules here
+  3. Update litellm-unified.yaml
+  4. Test end-to-end

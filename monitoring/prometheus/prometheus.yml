@@ -1,0 +1,158 @@
+# Prometheus Configuration for AI Backend Unified Infrastructure
+#
+# Monitors:
+# - LiteLLM gateway metrics (requests, latency, errors)
+# - Provider health (Ollama, llama.cpp, vLLM)
+# - System metrics (CPU, memory, disk)
+# - Redis cache metrics
+#
+# Scrape interval: 15 seconds
+# Retention: 15 days (configurable via CLI)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ai-backend-local'
+    environment: 'development'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - 'localhost:9093'  # Uncomment when Alertmanager is set up
+
+# Load alert rules
+rule_files:
+  - 'alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # ============================================================================
+  # LiteLLM Gateway Metrics
+  # ============================================================================
+  - job_name: 'litellm'
+    static_configs:
+      - targets: ['localhost:4000']
+        labels:
+          service: 'litellm-gateway'
+          component: 'api'
+
+    metrics_path: '/metrics'
+    scrape_interval: 10s  # More frequent for API metrics
+
+    # Relabeling for better organization
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'litellm-gateway'
+
+  # ============================================================================
+  # Ollama Provider Metrics
+  # ============================================================================
+  - job_name: 'ollama'
+    static_configs:
+      - targets: ['localhost:11434']
+        labels:
+          service: 'ollama'
+          provider: 'ollama'
+          component: 'inference'
+
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+    # Health check
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'ollama.*'
+        action: keep
+
+  # ============================================================================
+  # llama.cpp Providers
+  # ============================================================================
+  - job_name: 'llama-cpp-python'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          service: 'llama-cpp'
+          provider: 'llama_cpp_python'
+          component: 'inference'
+
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'llama-cpp-native'
+    static_configs:
+      - targets: ['localhost:8080']
+        labels:
+          service: 'llama-cpp'
+          provider: 'llama_cpp_native'
+          component: 'inference'
+
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ============================================================================
+  # vLLM Provider Metrics
+  # ============================================================================
+  - job_name: 'vllm'
+    static_configs:
+      - targets: ['localhost:8001']
+        labels:
+          service: 'vllm'
+          provider: 'vllm'
+          component: 'inference'
+
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ============================================================================
+  # Redis Cache Metrics
+  # ============================================================================
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:9121']  # Redis exporter
+        labels:
+          service: 'redis'
+          component: 'cache'
+
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ============================================================================
+  # Node Exporter (System Metrics)
+  # ============================================================================
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+        labels:
+          service: 'node-exporter'
+          component: 'system'
+
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+    # Collect specific system metrics
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'node_(cpu|memory|disk|network).*'
+        action: keep
+
+  # ============================================================================
+  # Prometheus Self-Monitoring
+  # ============================================================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+# Storage configuration (via CLI flags recommended)
+# --storage.tsdb.path=/var/lib/prometheus/data
+# --storage.tsdb.retention.time=15d
+# --storage.tsdb.retention.size=10GB

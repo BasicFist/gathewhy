@@ -1,0 +1,274 @@
+{
+  "dashboard": {
+    "title": "AI Backend Unified Infrastructure",
+    "tags": ["litellm", "ai", "inference"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(litellm_requests_total[5m])",
+            "legendFormat": "{{model}} - {{status}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Response Time (P95)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} P95",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(litellm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} P50",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(litellm_requests_total{status=~\"5..\"}[5m]) / rate(litellm_requests_total[5m])",
+            "legendFormat": "{{model}} error rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Error Rate"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "name": "High Error Rate Alert",
+          "conditions": [
+            {
+              "evaluator": {"params": [0.05], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "title": "Provider Health",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "up{job=~\"ollama|llama-cpp-python|llama-cpp-native|vllm\"}",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            },
+            "mappings": [
+              {"type": "value", "value": "0", "text": "DOWN"},
+              {"type": "value", "value": "1", "text": "UP"}
+            ]
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Cache Hit Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))",
+            "legendFormat": "Cache Hit Rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Hit Rate", "min": 0, "max": 1},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Rate Limit Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "litellm_current_requests_per_minute / litellm_rate_limit_rpm_threshold",
+            "legendFormat": "{{model}} RPM usage",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Usage %", "min": 0, "max": 1},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Fallback Triggers",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "rate(litellm_fallback_triggered_total[5m])",
+            "legendFormat": "{{model}} fallback rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Fallbacks/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "System CPU Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "{{instance}} CPU",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU %", "min": 0, "max": 100},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "System Memory Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+            "legendFormat": "{{instance}} Memory",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Memory %", "min": 0, "max": 100},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Request Distribution by Model",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+        "targets": [
+          {
+            "expr": "sum by (model) (rate(litellm_requests_total[5m]))",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Active Alerts",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 40},
+        "targets": [
+          {
+            "expr": "ALERTS{alertstate=\"firing\"}",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "alertname": "Alert",
+                "severity": "Severity",
+                "summary": "Summary"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "Prometheus",
+            "value": "Prometheus"
+          }
+        },
+        {
+          "name": "model",
+          "type": "query",
+          "datasource": "$datasource",
+          "query": "label_values(litellm_requests_total, model)",
+          "refresh": 1,
+          "multi": true,
+          "includeAll": true
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "name": "Alerts",
+          "iconColor": "red"
+        }
+      ]
+    }
+  }
+}

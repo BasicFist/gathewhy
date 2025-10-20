@@ -1,0 +1,61 @@
+# Dependabot configuration for automated dependency updates
+#
+# Keeps Python dependencies and GitHub Actions up to date
+# PRs created automatically with security and version updates
+
+version: 2
+updates:
+  # Python dependencies (requirements.txt)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "miko"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    ignore:
+      # Ignore major version updates for pydantic (require manual review)
+      - dependency-name: "pydantic"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "miko"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+
+  # Pre-commit hooks
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "pre-commit"
+    commit-message:
+      prefix: "chore(hooks)"
+    # Only track pre-commit related packages
+    allow:
+      - dependency-name: "pre-commit"
+      - dependency-name: "yamllint"
+      - dependency-name: "detect-secrets"

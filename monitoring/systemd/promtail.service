@@ -1,0 +1,58 @@
+# Promtail Service for AI Backend Unified Infrastructure
+#
+# Log shipping from systemd journald to Loki:
+# - LiteLLM gateway logs (with JSON parsing)
+# - Ollama service logs
+# - llama.cpp service logs
+# - System logs (critical only)
+# - Redis logs
+#
+# Installation:
+#   mkdir -p ~/.config/systemd/user
+#   cp monitoring/systemd/promtail.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable promtail.service
+#   systemctl --user start promtail.service
+#
+# Logs:
+#   journalctl --user -u promtail.service -f
+
+[Unit]
+Description=Promtail Log Shipping Service
+Documentation=https://grafana.com/docs/loki/latest/clients/promtail/
+After=network.target loki.service
+Requires=loki.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/LAB/ai/backend/ai-backend-unified/monitoring/loki
+
+# Promtail binary (assumes installed via package manager or downloaded)
+# Update path if installed elsewhere
+ExecStart=/usr/local/bin/promtail \
+  -config.file=%h/LAB/ai/backend/ai-backend-unified/monitoring/loki/promtail-config.yml
+
+# Create positions file directory on start
+ExecStartPre=/bin/mkdir -p /tmp
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=false  # Must access /tmp for positions file
+ProtectSystem=strict
+ProtectHome=read-only
+
+# Resource limits
+MemoryLimit=512M
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=promtail
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,156 @@
+# AI Unified Backend Infrastructure - Serena Configuration
+# Coordination project for multi-provider AI inference gateway
+
+language: python
+
+encoding: "utf-8"
+
+ignore_all_files_in_gitignore: true
+
+ignored_paths:
+  - "**/__pycache__/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/cache/**"
+  - "**/logs/**"
+  - "**/.pytest_cache/**"
+
+read_only: false
+
+excluded_tools: []
+
+initial_prompt: |
+  # AI Unified Backend Infrastructure
+
+  This is a **coordination and documentation project** for LAB's unified AI inference backend.
+
+  ## Purpose
+
+  Provides single API endpoint (LiteLLM) routing to multiple LLM providers:
+  - Ollama (local models, general-purpose)
+  - llama.cpp (CUDA-optimized native performance)
+  - vLLM (high-throughput production inference)
+  - Extensible for future providers (OpenAI, Anthropic, etc.)
+
+  ## Architecture Pattern
+
+  ```
+  LAB Projects → LiteLLM :4000 → {Ollama, llama.cpp, vLLM, ...}
+                      ↑
+              Configured via this project
+  ```
+
+  ## This Project Contains
+
+  1. **Configuration Files** (`config/`)
+     - `providers.yaml`: Master provider registry
+     - `model-mappings.yaml`: Model→Provider routing rules
+     - `litellm-unified.yaml`: Extended LiteLLM configuration
+
+  2. **Documentation** (`docs/`)
+     - Architecture overview
+     - Provider addition guide
+     - API consumption guide
+     - Troubleshooting
+
+  3. **Serena Memories** (`.serena/memories/`)
+     - Architecture knowledge
+     - Provider registry documentation
+     - Routing configuration patterns
+     - Integration guides
+     - Model mapping strategies
+
+  4. **Validation Scripts** (`scripts/`)
+     - Health checks for all providers
+     - Integration testing
+     - Configuration validation
+
+  ## Related Projects
+
+  ### OpenWebUI (../openwebui/)
+  - **Role**: Primary gateway and UI
+  - **Contains**: LiteLLM server, Ollama integration, llama.cpp backends
+  - **Port**: 5000 (UI), 4000 (LiteLLM), 11434 (Ollama)
+  - **Language**: Python
+  - **Key Files**:
+    - `config/config.yml`: Central configuration
+    - `config/litellm.yaml`: Current LiteLLM routing
+    - `scripts/run_litellm.sh`: LiteLLM startup
+
+  ### CrushVLLM (../CRUSHVLLM/)
+  - **Role**: vLLM inference engine with TUI
+  - **Contains**: vLLM server, MCP integration, model management
+  - **Port**: 8001 (vLLM server), MCP tools
+  - **Language**: Go + Python (vLLM)
+  - **Key Files**:
+    - `cmd/mcp-vllm/`: MCP server
+    - `internal/vllm/`: Server management
+    - `configs/`: vLLM configuration
+
+  ## Configuration Philosophy
+
+  **Non-Invasive**: Extends existing systems without modifying working code
+  **Additive**: New providers added via configuration
+  **Reversible**: Easy rollback through version-controlled configs
+  **Documented**: Comprehensive Serena memories for knowledge preservation
+
+  ## Provider Integration Pattern
+
+  To add a new provider:
+  1. Add entry to `config/providers.yaml`
+  2. Define routing rules in `config/model-mappings.yaml`
+  3. Extend `config/litellm-unified.yaml`
+  4. Update Serena memory: `memories/02-provider-registry.md`
+  5. Test with `scripts/validate-unified-backend.sh`
+
+  ## Model Routing Logic
+
+  LiteLLM routes requests based on:
+  - **Exact model name match**: "llama3.1:8b" → Ollama
+  - **Pattern matching**: "meta-llama/*" → vLLM
+  - **Capability routing**: code_generation → qwen2.5-coder
+  - **Load balancing**: Multiple providers for same model
+  - **Fallback chains**: Primary → Secondary → Tertiary
+
+  ## Development Workflow
+
+  When working on this project:
+  1. Reference OpenWebUI for LiteLLM implementation details
+  2. Reference CrushVLLM for vLLM integration patterns
+  3. Use Serena memories for architectural context
+  4. Test changes with validation script before committing
+  5. Update memories when patterns change
+
+  ## Memory Strategy
+
+  Serena memories track:
+  - Complete architecture of unified backend
+  - All registered providers and their configurations
+  - LiteLLM routing rules and strategies
+  - Model→Provider mappings
+  - Integration patterns for LAB projects
+  - Common troubleshooting scenarios
+  - Provider addition procedures
+
+  ## Key Ports Reference
+
+  | Service | Port | Purpose |
+  |---------|------|---------|
+  | OpenWebUI | 5000 | Web interface |
+  | LiteLLM | 4000 | **Unified gateway** |
+  | Ollama | 11434 | Local model server |
+  | llama.cpp (Python) | 8000 | Python bindings server |
+  | llama.cpp (Native) | 8080 | C++ native server |
+  | vLLM | 8001 | High-performance inference |
+  | Tool Server | 8600 | FastAPI tools |
+  | Pipelines | 9099 | Pipeline API |
+
+  ## Coding Standards
+
+  - **Configuration**: YAML with comments explaining purpose
+  - **Documentation**: Markdown with clear examples
+  - **Scripts**: Bash with error handling and logging
+  - **Validation**: Test all changes before committing
+  - **Memories**: Keep updated with architecture changes
+
+project_name: "ai-backend-unified"

@@ -1,0 +1,183 @@
+# AI Backend Provider Registry
+# Master catalog of all LLM inference providers in LAB ecosystem
+
+providers:
+  # ============================================================================
+  # ACTIVE PROVIDERS
+  # ============================================================================
+
+  ollama:
+    type: ollama
+    base_url: http://127.0.0.1:11434
+    status: active
+    description: Local Ollama server for general-purpose models
+    features:
+      - Easy model management (ollama pull/list)
+      - CPU and GPU support
+      - QuantizedGGUF format
+      - Fast model switching
+    models:
+      - name: llama3.1:8b
+        size: "8B"
+        quantization: Q4_K_M
+        pulled_at: "2025-10-19"
+      - name: qwen2.5-coder:7b
+        size: "7.6B"
+        quantization: Q4_K_M
+        pulled_at: "2025-10-19"
+        specialty: code_generation
+    health_endpoint: /api/tags
+    docs: https://ollama.ai/docs
+    location: ../openwebui (integrated)
+
+  llama_cpp_python:
+    type: llama_cpp
+    base_url: http://127.0.0.1:8000
+    status: active
+    description: llama.cpp Python bindings server with CUDA support
+    features:
+      - GPU offloading (full or partial)
+      - Context window up to 8192 tokens
+      - Parallel requests (4 concurrent)
+      - OpenAI-compatible API
+    configuration:
+      n_gpu_layers: -1  # Full GPU offload
+      n_ctx: 8192
+      n_parallel: 4
+      threads: 6
+    health_endpoint: /v1/models
+    service_file: ~/.config/systemd/user/llamacpp-python.service
+    location: ../openwebui/backends/llama.cpp
+
+  llama_cpp_native:
+    type: llama_cpp
+    base_url: http://127.0.0.1:8080
+    status: active
+    description: llama.cpp native C++ server (maximum performance)
+    features:
+      - Pure C/C++ implementation
+      - No Python overhead
+      - Maximum throughput
+      - CUDA-optimized
+    health_endpoint: /v1/models
+    location: ../openwebui/backends/llama.cpp
+
+  vllm:
+    type: vllm
+    base_url: http://127.0.0.1:8001
+    status: pending_integration  # Will be 'active' after Phase 3
+    description: vLLM from CrushVLLM for high-throughput production inference
+    features:
+      - Continuous batching
+      - PagedAttention for KV cache
+      - Optimized for throughput
+      - Support for 13B-70B models
+    models:
+      - name: meta-llama/Llama-2-13b-chat-hf
+        size: "13B"
+        context_length: 4096
+        specialty: chat
+    health_endpoint: /v1/models
+    api_format: openai_compatible
+    gpu_memory_utilization: 0.9
+    location: ../CRUSHVLLM
+    mcp_integration: true
+    mcp_tools:
+      - generate_text
+      - chat_completion
+      - stream_completion
+      - server_status
+      - server_metrics
+
+  # ============================================================================
+  # TEMPLATE PROVIDERS (Disabled, for reference)
+  # ============================================================================
+
+  openai:
+    type: openai
+    base_url: https://api.openai.com/v1
+    status: disabled
+    description: OpenAI cloud API (requires API key)
+    requires_api_key: true
+    env_var: OPENAI_API_KEY
+    models:
+      - gpt-4
+      - gpt-3.5-turbo
+    rate_limits:
+      requests_per_minute: 3500
+      tokens_per_minute: 90000
+    cost_per_1k_tokens:
+      gpt-4: 0.03
+      gpt-3.5-turbo: 0.0015
+
+  anthropic:
+    type: anthropic
+    base_url: https://api.anthropic.com/v1
+    status: disabled
+    description: Anthropic Claude API (requires API key)
+    requires_api_key: true
+    env_var: ANTHROPIC_API_KEY
+    models:
+      - claude-3-opus-20240229
+      - claude-3-sonnet-20240229
+
+  custom_openai_compatible:
+    type: openai_compatible
+    base_url: http://localhost:CUSTOM_PORT
+    status: template
+    description: Template for any OpenAI-compatible API server
+    notes: |
+      Use this template to add:
+      - LocalAI servers
+      - Text Generation WebUI
+      - FastChat servers
+      - Any server implementing OpenAI API spec
+
+# ============================================================================
+# PROVIDER METADATA
+# ============================================================================
+
+metadata:
+  version: "1.0"
+  last_updated: "2025-10-19"
+  total_providers: 4  # active providers
+  total_models_available: 5
+
+  provider_types:
+    - ollama: Simple local server
+    - llama_cpp: High-performance C++ inference
+    - vllm: Production-grade batched inference
+    - openai: Cloud API providers
+    - openai_compatible: Generic OpenAI-compatible servers
+
+  selection_criteria:
+    ollama:
+      best_for: Quick prototyping, easy model management
+      performance: Medium
+      resource_usage: Low to Medium
+
+    llama_cpp:
+      best_for: Maximum single-request performance
+      performance: High
+      resource_usage: Medium
+
+    vllm:
+      best_for: High concurrency, production workloads
+      performance: Very High (batched)
+      resource_usage: High (requires GPU)
+
+# ============================================================================
+# HEALTH CHECK CONFIGURATION
+# ============================================================================
+
+health_checks:
+  enabled: true
+  interval_seconds: 60
+  timeout_seconds: 5
+  retry_attempts: 3
+
+  endpoints:
+    ollama: http://127.0.0.1:11434/api/tags
+    llama_cpp_python: http://127.0.0.1:8000/v1/models
+    llama_cpp_native: http://127.0.0.1:8080/v1/models
+    vllm: http://127.0.0.1:8001/v1/models

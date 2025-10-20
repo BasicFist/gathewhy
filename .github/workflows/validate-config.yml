@@ -1,0 +1,310 @@
+# AI Backend Unified Infrastructure - Configuration Validation Pipeline
+#
+# This workflow validates all configuration files and documentation
+# Runs on: push to main, pull requests, manual dispatch
+#
+# Validation stages:
+# 1. YAML Syntax - yamllint with custom rules
+# 2. Schema Validation - Pydantic models for semantic correctness
+# 3. Secret Scanning - detect-secrets for credential leaks
+# 4. Documentation Sync - ensure docs match current config
+# 5. Generated Config Check - verify AUTO-GENERATED markers
+# 6. Integration Tests (optional) - provider health checks
+
+name: Configuration Validation
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'config/**'
+      - 'scripts/**'
+      - 'docs/**'
+      - '.github/workflows/**'
+
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'config/**'
+      - 'scripts/**'
+      - 'docs/**'
+
+  workflow_dispatch:
+    inputs:
+      run_integration_tests:
+        description: 'Run integration tests (requires active providers)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.11'
+  CONFIG_DIR: 'config'
+  SCRIPTS_DIR: 'scripts'
+
+jobs:
+  # ============================================================================
+  # Stage 1: YAML Syntax Validation
+  # ============================================================================
+  yaml-validation:
+    name: YAML Syntax Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install yamllint
+        run: pip install yamllint>=1.33.0
+
+      - name: Validate YAML syntax
+        run: yamllint -c .yamllint.yaml config/
+
+      - name: Check for YAML parsing errors
+        run: |
+          echo "Validating YAML can be parsed..."
+          for file in config/*.yaml; do
+            echo "Checking $file..."
+            python3 -c "import yaml; yaml.safe_load(open('$file'))" || exit 1
+          done
+          echo "✅ All YAML files are valid"
+
+  # ============================================================================
+  # Stage 2: Schema Validation (Pydantic)
+  # ============================================================================
+  schema-validation:
+    name: Pydantic Schema Validation
+    runs-on: ubuntu-latest
+    needs: yaml-validation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Pydantic validation
+        run: python3 scripts/validate-config-schema.py
+
+      - name: Validate cross-configuration consistency
+        run: |
+          echo "Running comprehensive validation..."
+          python3 scripts/validate-config-schema.py --strict || exit 1
+          echo "✅ All configurations are semantically valid"
+
+  # ============================================================================
+  # Stage 3: Secret Scanning
+  # ============================================================================
+  secret-scanning:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    needs: yaml-validation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install detect-secrets
+        run: pip install detect-secrets>=1.4.0
+
+      - name: Run secret scan
+        run: |
+          detect-secrets scan --baseline .secrets.baseline
+
+      - name: Verify no new secrets
+        run: |
+          detect-secrets scan config/ scripts/ docs/ > /tmp/new_scan.json
+          detect-secrets audit --diff .secrets.baseline /tmp/new_scan.json || {
+            echo "❌ New secrets detected! Please review and update .secrets.baseline if intentional."
+            exit 1
+          }
+          echo "✅ No new secrets detected"
+
+  # ============================================================================
+  # Stage 4: Documentation Sync Check
+  # ============================================================================
+  documentation-sync:
+    name: Documentation Consistency
+    runs-on: ubuntu-latest
+    needs: schema-validation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install pyyaml>=6.0
+
+      - name: Check provider documentation sync
+        run: |
+          echo "Validating providers.yaml matches documentation..."
+          python3 << 'EOF'
+          import yaml
+          import sys
+
+          # Load provider config
+          with open('config/providers.yaml') as f:
+              providers = yaml.safe_load(f)['providers']
+
+          # Read architecture docs
+          with open('docs/architecture.md') as f:
+              arch_content = f.read()
+
+          # Check each active provider is documented
+          errors = []
+          for name, config in providers.items():
+              if config.get('status') == 'active':
+                  if name not in arch_content:
+                      errors.append(f"Active provider '{name}' not documented in architecture.md")
+
+          if errors:
+              print("❌ Documentation sync errors:")
+              for err in errors:
+                  print(f"  - {err}")
+              sys.exit(1)
+
+          print("✅ Documentation is synchronized with configuration")
+          EOF
+
+      - name: Check Serena memory completeness
+        run: |
+          echo "Validating Serena memories are complete..."
+          required_memories=(
+            "01-architecture.md"
+            "02-provider-registry.md"
+            "03-routing-config.md"
+            "04-model-mappings.md"
+            "05-integration-guide.md"
+            "06-troubleshooting-patterns.md"
+            "07-operational-runbooks.md"
+            "08-testing-patterns.md"
+          )
+
+          missing=()
+          for mem in "${required_memories[@]}"; do
+            if [ ! -f ".serena/memories/$mem" ]; then
+              missing+=("$mem")
+            fi
+          done
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "❌ Missing required Serena memories:"
+            printf '  - %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+          echo "✅ All required Serena memories present (${#required_memories[@]}/8)"
+
+  # ============================================================================
+  # Stage 5: Generated Config Verification
+  # ============================================================================
+  generated-config-check:
+    name: Generated Config Markers
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check AUTO-GENERATED markers
+        run: |
+          bash scripts/check-generated-configs.sh || {
+            echo "❌ Generated config verification failed"
+            exit 1
+          }
+          echo "✅ Generated configs properly marked"
+
+  # ============================================================================
+  # Stage 6: Integration Tests (Optional)
+  # ============================================================================
+  integration-tests:
+    name: Provider Health Checks
+    runs-on: ubuntu-latest
+    needs: [schema-validation, secret-scanning]
+    if: github.event.inputs.run_integration_tests == 'true' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run health checks (dry-run)
+        run: |
+          echo "Running dry-run provider health checks..."
+          echo "Note: Full integration tests require active provider services"
+
+          # Validate that health check script exists and is executable
+          if [ ! -x "scripts/validate-unified-backend.sh" ]; then
+            echo "❌ Validation script not found or not executable"
+            exit 1
+          fi
+
+          echo "✅ Validation script is ready"
+          echo "To run full integration tests:"
+          echo "  1. Ensure providers are running (Ollama, llama.cpp, vLLM)"
+          echo "  2. Run: bash scripts/validate-unified-backend.sh"
+
+  # ============================================================================
+  # Summary Job
+  # ============================================================================
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [yaml-validation, schema-validation, secret-scanning, documentation-sync, generated-config-check]
+    if: always()
+
+    steps:
+      - name: Check validation results
+        run: |
+          echo "================================"
+          echo "Configuration Validation Summary"
+          echo "================================"
+          echo ""
+          echo "Results:"
+          echo "  - YAML Syntax: ${{ needs.yaml-validation.result }}"
+          echo "  - Schema Validation: ${{ needs.schema-validation.result }}"
+          echo "  - Secret Scanning: ${{ needs.secret-scanning.result }}"
+          echo "  - Documentation Sync: ${{ needs.documentation-sync.result }}"
+          echo "  - Generated Config Check: ${{ needs.generated-config-check.result }}"
+          echo ""
+
+          if [ "${{ needs.yaml-validation.result }}" != "success" ] || \
+             [ "${{ needs.schema-validation.result }}" != "success" ] || \
+             [ "${{ needs.secret-scanning.result }}" != "success" ] || \
+             [ "${{ needs.documentation-sync.result }}" != "success" ] || \
+             [ "${{ needs.generated-config-check.result }}" != "success" ]; then
+            echo "❌ Validation FAILED - please review errors above"
+            exit 1
+          fi
+
+          echo "✅ All validation checks PASSED"
+          echo ""
+          echo "Configuration is ready for deployment"

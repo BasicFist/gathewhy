@@ -5,11 +5,13 @@
 #
 # Validation stages:
 # 1. YAML Syntax - yamllint with custom rules
-# 2. Schema Validation - Pydantic models for semantic correctness
-# 3. Secret Scanning - detect-secrets for credential leaks
-# 4. Documentation Sync - ensure docs match current config
-# 5. Generated Config Check - verify AUTO-GENERATED markers
-# 6. Integration Tests (optional) - provider health checks
+# 2. Code Quality - ruff linting and formatting (warnings only)
+# 3. Schema Validation - Pydantic models for semantic correctness
+# 4. Secret Scanning - detect-secrets for credential leaks
+# 5. Documentation Sync - ensure docs match current config
+# 6. Generated Config Check - verify AUTO-GENERATED markers
+# 7. Integration Tests (optional) - provider health checks
+# 8. Comprehensive Validation - full system check with JSON output
 
 name: Configuration Validation
 
@@ -80,7 +82,48 @@ jobs:
           echo "✅ All YAML files are valid"
 
   # ============================================================================
-  # Stage 2: Schema Validation (Pydantic)
+  # Stage 2: Code Quality (Ruff)
+  # ============================================================================
+  code-quality:
+    name: Python Code Quality
+    runs-on: ubuntu-latest
+    needs: yaml-validation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install ruff
+        run: pip install ruff>=0.1.0
+
+      - name: Run ruff linting
+        run: |
+          echo "Running ruff linting..."
+          ruff check scripts/ --output-format=github || {
+            echo "⚠️  Ruff found issues (acceptable for solo work)"
+            echo "Run 'ruff check scripts/ --fix' to auto-fix issues"
+            exit 0  # Don't fail, just warn
+          }
+          echo "✅ Ruff linting passed"
+
+      - name: Run ruff formatting check
+        run: |
+          echo "Checking code formatting..."
+          ruff format --check scripts/ || {
+            echo "⚠️  Code formatting issues found"
+            echo "Run 'ruff format scripts/' to auto-format"
+            exit 0  # Don't fail, just warn
+          }
+          echo "✅ Code formatting is consistent"
+
+  # ============================================================================
+  # Stage 3: Schema Validation (Pydantic)
   # ============================================================================
   schema-validation:
     name: Pydantic Schema Validation
@@ -110,7 +153,7 @@ jobs:
           echo "✅ All configurations are semantically valid"
 
   # ============================================================================
-  # Stage 3: Secret Scanning
+  # Stage 4: Secret Scanning
   # ============================================================================
   secret-scanning:
     name: Secret Detection
@@ -144,7 +187,7 @@ jobs:
           echo "✅ No new secrets detected"
 
   # ============================================================================
-  # Stage 4: Documentation Sync Check
+  # Stage 5: Documentation Sync Check
   # ============================================================================
   documentation-sync:
     name: Documentation Consistency
@@ -225,7 +268,7 @@ jobs:
           echo "✅ All required Serena memories present (${#required_memories[@]}/8)"
 
   # ============================================================================
-  # Stage 5: Generated Config Verification
+  # Stage 6: Generated Config Verification
   # ============================================================================
   generated-config-check:
     name: Generated Config Markers
@@ -244,7 +287,7 @@ jobs:
           echo "✅ Generated configs properly marked"
 
   # ============================================================================
-  # Stage 6: Integration Tests (Optional)
+  # Stage 7: Integration Tests (Optional)
   # ============================================================================
   integration-tests:
     name: Provider Health Checks
@@ -273,7 +316,7 @@ jobs:
           echo "  2. Run: bash scripts/validate-unified-backend.sh"
 
   # ============================================================================
-  # Stage 7: Comprehensive System Validation
+  # Stage 8: Comprehensive System Validation
   # ============================================================================
   comprehensive-validation:
     name: Comprehensive System Check
@@ -359,7 +402,7 @@ jobs:
   validation-summary:
     name: Validation Summary
     runs-on: ubuntu-latest
-    needs: [yaml-validation, schema-validation, secret-scanning, documentation-sync, generated-config-check, comprehensive-validation]
+    needs: [yaml-validation, code-quality, schema-validation, secret-scanning, documentation-sync, generated-config-check, comprehensive-validation]
     if: always()
 
     steps:
@@ -371,6 +414,7 @@ jobs:
           echo ""
           echo "Results:"
           echo "  - YAML Syntax: ${{ needs.yaml-validation.result }}"
+          echo "  - Code Quality: ${{ needs.code-quality.result }}"
           echo "  - Schema Validation: ${{ needs.schema-validation.result }}"
           echo "  - Secret Scanning: ${{ needs.secret-scanning.result }}"
           echo "  - Documentation Sync: ${{ needs.documentation-sync.result }}"
@@ -379,6 +423,7 @@ jobs:
           echo ""
 
           if [ "${{ needs.yaml-validation.result }}" != "success" ] || \
+             [ "${{ needs.code-quality.result }}" != "success" ] || \
              [ "${{ needs.schema-validation.result }}" != "success" ] || \
              [ "${{ needs.secret-scanning.result }}" != "success" ] || \
              [ "${{ needs.documentation-sync.result }}" != "success" ] || \

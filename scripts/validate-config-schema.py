@@ -4,218 +4,266 @@ Pydantic-based configuration schema validation for AI Backend Unified Infrastruc
 Provides strong typing and semantic validation beyond YAML syntax checking
 """
 
-from typing import List, Optional, Dict, Any, Literal
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
-import yaml
 import sys
 from pathlib import Path
+from typing import Any, Literal
+
+import yaml
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ============================================================================
 # PROVIDER CONFIGURATION MODELS
 # ============================================================================
 
+
 class ProviderModel(BaseModel):
     """Model definition within a provider"""
+
     name: str
-    size: Optional[str] = None
-    quantization: Optional[str] = None
-    specialty: Optional[str] = None
-    context_length: Optional[int] = None
-    pulled_at: Optional[str] = None
+    size: str | None = None
+    quantization: str | None = None
+    specialty: str | None = None
+    context_length: int | None = None
+    pulled_at: str | None = None
+
 
 class ProviderConfig(BaseModel):
     """Individual provider configuration"""
-    type: Literal["ollama", "llama_cpp", "vllm", "openai", "anthropic", "openai_compatible", "tool_server", "web_ui"]
+
+    type: Literal[
+        "ollama",
+        "llama_cpp",
+        "vllm",
+        "openai",
+        "anthropic",
+        "openai_compatible",
+        "tool_server",
+        "web_ui",
+    ]
     base_url: str
     status: Literal["active", "disabled", "pending_integration", "template"]
     description: str
-    models: Optional[List[ProviderModel | str]] = []  # Allow both ProviderModel objects and simple strings
-    health_endpoint: Optional[str] = None
-    features: Optional[List[str]] = []
-    configuration: Optional[Dict[str, Any]] = {}
+    models: list[
+        ProviderModel | str
+    ] | None = []  # Allow both ProviderModel objects and simple strings
+    health_endpoint: str | None = None
+    features: list[str] | None = []
+    configuration: dict[str, Any] | None = {}
 
-    @field_validator('base_url')
+    @field_validator("base_url")
     @classmethod
     def validate_url_format(cls, v):
         """Validate URL format without requiring https"""
-        if not v.startswith(('http://', 'https://')):
-            raise ValueError(f'URL must start with http:// or https://, got: {v}')
+        if not v.startswith(("http://", "https://")):
+            raise ValueError(f"URL must start with http:// or https://, got: {v}")
         # Basic validation of format (allow placeholders for templates)
         import re
-        if not re.match(r'^https?://[a-zA-Z0-9._-]+(:[A-Z0-9_]+|:[0-9]+)?(/.*)?$', v):
-            raise ValueError(f'Invalid URL format: {v}')
+
+        if not re.match(r"^https?://[a-zA-Z0-9._-]+(:[A-Z0-9_]+|:[0-9]+)?(/.*)?$", v):
+            raise ValueError(f"Invalid URL format: {v}")
         return v
+
 
 class ProvidersYAML(BaseModel):
     """Complete providers.yaml structure"""
-    providers: Dict[str, ProviderConfig]
-    metadata: Optional[Dict[str, Any]] = {}
-    health_checks: Optional[Dict[str, Any]] = {}
 
-    @model_validator(mode='after')
+    providers: dict[str, ProviderConfig]
+    metadata: dict[str, Any] | None = {}
+    health_checks: dict[str, Any] | None = {}
+
+    @model_validator(mode="after")
     def validate_active_providers(self):
         """Ensure at least one provider is active"""
         providers = self.providers
-        active = [p for p in providers.values() if p.status == 'active']
+        active = [p for p in providers.values() if p.status == "active"]
         if len(active) == 0:
             raise ValueError('At least one provider must have status="active"')
         return self
+
 
 # ============================================================================
 # MODEL MAPPINGS CONFIGURATION MODELS
 # ============================================================================
 
+
 class ExactMatch(BaseModel):
     """Exact model name routing"""
+
     provider: str
     priority: Literal["primary", "secondary", "tertiary"]
-    fallback: Optional[str] = None
+    fallback: str | None = None
     description: str
-    backend_model: Optional[str] = None
+    backend_model: str | None = None
+
 
 class PatternRouting(BaseModel):
     """Pattern-based routing rule"""
+
     pattern: str
     provider: str
-    fallback: Optional[str] = None
+    fallback: str | None = None
     description: str
 
-    @field_validator('pattern')
+    @field_validator("pattern")
     @classmethod
     def validate_regex(cls, v):
         """Validate that pattern is valid regex"""
         import re
+
         try:
             re.compile(v)
         except re.error as e:
-            raise ValueError(f'Invalid regex pattern: {v} - {e}')
+            raise ValueError(f"Invalid regex pattern: {v} - {e}")
         return v
+
 
 class CapabilityRouting(BaseModel):
     """Capability-based routing configuration"""
+
     description: str
-    provider: Optional[str] = None
-    providers: Optional[List[str]] = None
-    preferred_models: Optional[List[str]] = []
-    routing_strategy: Optional[str] = None
-    min_model_size: Optional[str] = None
-    min_context: Optional[int] = None
+    provider: str | None = None
+    providers: list[str] | None = None
+    preferred_models: list[str] | None = []
+    routing_strategy: str | None = None
+    min_model_size: str | None = None
+    min_context: int | None = None
+
 
 class FallbackChain(BaseModel):
     """Fallback chain configuration"""
-    description: Optional[str] = "Fallback chain"  # Make description optional with default
-    chain: List[str | Dict[str, Any]]  # Allow both strings and dictionaries
-    retry_attempts: Optional[int] = 3
-    retry_delay_ms: Optional[int] = 500
+
+    description: str | None = "Fallback chain"  # Make description optional with default
+    chain: list[str | dict[str, Any]]  # Allow both strings and dictionaries
+    retry_attempts: int | None = 3
+    retry_delay_ms: int | None = 500
+
 
 class ModelMappingsYAML(BaseModel):
     """Complete model-mappings.yaml structure"""
-    exact_matches: Dict[str, ExactMatch]
-    patterns: List[PatternRouting]
-    capabilities: Dict[str, CapabilityRouting]
-    fallback_chains: Dict[str, FallbackChain]
-    load_balancing: Optional[Dict[str, Any]] = {}
-    routing_rules: Optional[Dict[str, Any]] = {}
-    special_cases: Optional[Dict[str, Any]] = {}
-    metadata: Optional[Dict[str, Any]] = {}
 
-    @model_validator(mode='after')
+    exact_matches: dict[str, ExactMatch]
+    patterns: list[PatternRouting]
+    capabilities: dict[str, CapabilityRouting]
+    fallback_chains: dict[str, FallbackChain]
+    load_balancing: dict[str, Any] | None = {}
+    routing_rules: dict[str, Any] | None = {}
+    special_cases: dict[str, Any] | None = {}
+    metadata: dict[str, Any] | None = {}
+
+    @model_validator(mode="after")
     def validate_provider_references(self):
         """Validate that referenced providers exist (requires providers.yaml context)"""
         # Note: Cross-file validation happens in validate_all_configs()
         return self
 
+
 # ============================================================================
 # LITELLM CONFIGURATION MODELS
 # ============================================================================
 
+
 class LiteLLMParams(BaseModel):
     """LiteLLM parameters for model configuration"""
+
     model: str
     api_base: str
-    stream: Optional[bool] = True
+    stream: bool | None = True
 
-    @field_validator('api_base')
+    @field_validator("api_base")
     @classmethod
     def validate_api_base(cls, v):
         """Validate API base URL format"""
-        if not v.startswith(('http://', 'https://')):
-            raise ValueError(f'api_base must start with http:// or https://, got: {v}')
+        if not v.startswith(("http://", "https://")):
+            raise ValueError(f"api_base must start with http:// or https://, got: {v}")
         return v
+
 
 class ModelInfo(BaseModel):
     """Model metadata information"""
-    tags: List[str]
+
+    tags: list[str]
     provider: str
-    context_length: Optional[int] = None
-    notes: Optional[str] = None
+    context_length: int | None = None
+    notes: str | None = None
+
 
 class ModelDefinition(BaseModel):
     """Individual model definition in LiteLLM config"""
+
     model_name: str
     litellm_params: LiteLLMParams
     model_info: ModelInfo
 
+
 class LiteLLMSettings(BaseModel):
     """LiteLLM settings configuration"""
-    request_timeout: Optional[int] = 60
-    stream_timeout: Optional[int] = 0
-    num_retries: Optional[int] = 3
-    timeout: Optional[int] = 300
-    cache: Optional[bool] = False
-    cache_params: Optional[Dict[str, Any]] = {}
-    set_verbose: Optional[bool] = False
-    json_logs: Optional[bool] = True
+
+    request_timeout: int | None = 60
+    stream_timeout: int | None = 0
+    num_retries: int | None = 3
+    timeout: int | None = 300
+    cache: bool | None = False
+    cache_params: dict[str, Any] | None = {}
+    set_verbose: bool | None = False
+    json_logs: bool | None = True
+
 
 class RouterSettings(BaseModel):
     """Router settings configuration"""
-    routing_strategy: Optional[str] = "usage-based-routing-v2"
-    model_group_alias: Optional[Dict[str, List[str]]] = {}
-    allowed_fails: Optional[int] = 3
-    num_retries: Optional[int] = 2
-    timeout: Optional[int] = 30
-    cooldown_time: Optional[int] = 60
-    fallbacks: Optional[List[Dict[str, Any]]] = []
+
+    routing_strategy: str | None = "usage-based-routing-v2"
+    model_group_alias: dict[str, list[str]] | None = {}
+    allowed_fails: int | None = 3
+    num_retries: int | None = 2
+    timeout: int | None = 30
+    cooldown_time: int | None = 60
+    fallbacks: list[dict[str, Any]] | None = []
+
 
 class ServerSettings(BaseModel):
     """Server settings configuration"""
+
     port: int = Field(ge=1, le=65535)
     host: str = "0.0.0.0"
-    cors: Optional[Dict[str, Any]] = {}
-    health_check_endpoint: Optional[str] = "/health"
-    prometheus: Optional[Dict[str, Any]] = {}
+    cors: dict[str, Any] | None = {}
+    health_check_endpoint: str | None = "/health"
+    prometheus: dict[str, Any] | None = {}
 
-    @field_validator('port')
+    @field_validator("port")
     @classmethod
     def validate_port_range(cls, v):
         """Ensure port is in valid range"""
         if not (1 <= v <= 65535):
-            raise ValueError(f'Port must be between 1 and 65535, got: {v}')
+            raise ValueError(f"Port must be between 1 and 65535, got: {v}")
         return v
+
 
 class LiteLLMUnifiedYAML(BaseModel):
     """Complete litellm-unified.yaml structure"""
-    model_list: List[ModelDefinition]
-    litellm_settings: Optional[LiteLLMSettings] = {}
-    router_settings: Optional[RouterSettings] = {}
-    server_settings: Optional[ServerSettings] = {}
-    rate_limit_settings: Optional[Dict[str, Any]] = {}
-    budget_settings: Optional[Dict[str, Any]] = {}
-    debug: Optional[bool] = False
-    debug_router: Optional[bool] = False
-    test_mode: Optional[bool] = False
 
-    @model_validator(mode='after')
+    model_list: list[ModelDefinition]
+    litellm_settings: LiteLLMSettings | None = {}
+    router_settings: RouterSettings | None = {}
+    server_settings: ServerSettings | None = {}
+    rate_limit_settings: dict[str, Any] | None = {}
+    budget_settings: dict[str, Any] | None = {}
+    debug: bool | None = False
+    debug_router: bool | None = False
+    test_mode: bool | None = False
+
+    @model_validator(mode="after")
     def validate_model_list(self):
         """Validate that model_list is not empty"""
         model_list = self.model_list
         if len(model_list) == 0:
-            raise ValueError('model_list cannot be empty')
+            raise ValueError("model_list cannot be empty")
         return self
+
 
 # ============================================================================
 # CROSS-CONFIGURATION VALIDATION
 # ============================================================================
+
 
 def validate_all_configs(providers_path: Path, mappings_path: Path, litellm_path: Path):
     """
@@ -242,8 +290,7 @@ def validate_all_configs(providers_path: Path, mappings_path: Path, litellm_path
 
         # Get active providers
         active_providers = {
-            name for name, config in providers.providers.items()
-            if config.status == 'active'
+            name for name, config in providers.providers.items() if config.status == "active"
         }
 
         # Check exact_matches reference active providers
@@ -260,7 +307,7 @@ def validate_all_configs(providers_path: Path, mappings_path: Path, litellm_path
                 if isinstance(step, str):
                     provider = step
                 else:
-                    provider = step.get('primary') or step.get('secondary') or step.get('tertiary')
+                    provider = step.get("primary") or step.get("secondary") or step.get("tertiary")
                 if provider and provider not in active_providers:
                     errors.append(
                         f"Fallback chain '{chain_name}' references inactive provider '{provider}'"
@@ -270,21 +317,21 @@ def validate_all_configs(providers_path: Path, mappings_path: Path, litellm_path
         if litellm.router_settings and litellm.router_settings.fallbacks:
             model_names = {m.model_name for m in litellm.model_list}
             for fallback_config in litellm.router_settings.fallbacks:
-                if 'fallback_models' in fallback_config:
-                    for fb_model in fallback_config['fallback_models']:
+                if "fallback_models" in fallback_config:
+                    for fb_model in fallback_config["fallback_models"]:
                         if fb_model not in model_names:
-                            errors.append(
-                                f"Fallback references non-existent model '{fb_model}'"
-                            )
+                            errors.append(f"Fallback references non-existent model '{fb_model}'")
 
         return errors
 
     except Exception as e:
         return [f"Cross-validation error: {str(e)}"]
 
+
 # ============================================================================
 # MAIN VALIDATION FUNCTION
 # ============================================================================
+
 
 def main():
     """Main validation function"""
@@ -304,7 +351,7 @@ def main():
     try:
         with open(providers_file) as f:
             providers_data = yaml.safe_load(f)
-        providers = ProvidersYAML(**providers_data)
+        ProvidersYAML(**providers_data)
         print("  ✅ providers.yaml is valid")
     except Exception as e:
         error_msg = f"  ❌ providers.yaml validation failed: {str(e)}"
@@ -316,7 +363,7 @@ def main():
     try:
         with open(mappings_file) as f:
             mappings_data = yaml.safe_load(f)
-        mappings = ModelMappingsYAML(**mappings_data)
+        ModelMappingsYAML(**mappings_data)
         print("  ✅ model-mappings.yaml is valid")
     except Exception as e:
         error_msg = f"  ❌ model-mappings.yaml validation failed: {str(e)}"
@@ -328,7 +375,7 @@ def main():
     try:
         with open(litellm_file) as f:
             litellm_data = yaml.safe_load(f)
-        litellm = LiteLLMUnifiedYAML(**litellm_data)
+        LiteLLMUnifiedYAML(**litellm_data)
         print("  ✅ litellm-unified.yaml is valid")
     except Exception as e:
         error_msg = f"  ❌ litellm-unified.yaml validation failed: {str(e)}"
@@ -354,5 +401,6 @@ def main():
         print("✅ All configuration validations passed!")
         sys.exit(0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -8,6 +8,10 @@ pyyaml>=6.0
 # Schema validation
 jsonschema>=4.17.0
 
+# Code quality and type checking
+mypy>=1.8.0
+ruff>=0.1.0
+
 # Pre-commit hooks (optional, can also be installed globally)
 pre-commit>=3.0.0
 yamllint>=1.33.0

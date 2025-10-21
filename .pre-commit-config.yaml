@@ -48,6 +48,27 @@ repos:
         args: ['-c', '.yamllint.yaml']
         files: \.(yaml|yml)$
 
+  # Python code quality
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        name: Ruff linting
+        args: [--fix, --exit-non-zero-on-fix]
+        files: \.py$
+      - id: ruff-format
+        name: Ruff formatting
+        files: \.py$
+
+  # Type checking (disabled for pre-commit, run manually: mypy scripts/)
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.8.0
+  #   hooks:
+  #     - id: mypy
+  #       name: Type checking with mypy
+  #       files: ^scripts/.*\.py$
+  #       additional_dependencies: [types-PyYAML, types-requests]
+
   # Custom validation scripts
   - repo: local
     hooks:

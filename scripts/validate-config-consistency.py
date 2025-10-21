@@ -24,21 +24,20 @@ Exit codes:
 """
 
 import argparse
-import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
 
 import yaml
 
 
 class Colors:
     """ANSI color codes for terminal output"""
-    RED = '\033[0;31m'
-    GREEN = '\033[0;32m'
-    YELLOW = '\033[1;33m'
-    BLUE = '\033[0;34m'
-    NC = '\033[0m'  # No Color
+
+    RED = "\033[0;31m"
+    GREEN = "\033[0;32m"
+    YELLOW = "\033[1;33m"
+    BLUE = "\033[0;34m"
+    NC = "\033[0m"  # No Color
 
 
 class ConfigValidator:
@@ -59,13 +58,13 @@ class ConfigValidator:
         self.litellm_config = None
 
         # Extracted model names
-        self.provider_models: Dict[str, Set[str]] = {}
-        self.mapping_models: Set[str] = set()
-        self.litellm_models: Set[str] = set()
+        self.provider_models: dict[str, set[str]] = {}
+        self.mapping_models: set[str] = set()
+        self.litellm_models: set[str] = set()
 
         # Validation errors
-        self.errors: List[str] = []
-        self.warnings: List[str] = []
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
 
     def log_info(self, message: str):
         """Print info message"""
@@ -127,18 +126,18 @@ class ConfigValidator:
         """Extract model names from providers.yaml"""
         self.log_info("Extracting model names from providers.yaml...")
 
-        providers = self.providers_config.get('providers', {})
+        providers = self.providers_config.get("providers", {})
 
         for provider_name, provider_config in providers.items():
-            if provider_config.get('status') != 'active':
+            if provider_config.get("status") != "active":
                 continue
 
-            models = provider_config.get('models', [])
+            models = provider_config.get("models", [])
             model_names = set()
 
             for model in models:
                 if isinstance(model, dict):
-                    name = model.get('name')
+                    name = model.get("name")
                     if name:
                         model_names.add(name)
                 elif isinstance(model, str):
@@ -153,19 +152,19 @@ class ConfigValidator:
         self.log_info("Extracting model names from model-mappings.yaml...")
 
         # Exact matches
-        exact_matches = self.mappings_config.get('exact_matches', {})
-        for model_name in exact_matches.keys():
+        exact_matches = self.mappings_config.get("exact_matches", {})
+        for model_name in exact_matches:
             self.mapping_models.add(model_name)
 
         # Load balancing configs
-        load_balancing = self.mappings_config.get('load_balancing', {})
-        for model_name in load_balancing.keys():
+        load_balancing = self.mappings_config.get("load_balancing", {})
+        for model_name in load_balancing:
             self.mapping_models.add(model_name)
 
         # Fallback chains
-        fallback_chains = self.mappings_config.get('fallback_chains', {})
-        for model_name in fallback_chains.keys():
-            if model_name != 'default':
+        fallback_chains = self.mappings_config.get("fallback_chains", {})
+        for model_name in fallback_chains:
+            if model_name != "default":
                 self.mapping_models.add(model_name)
 
         self.log_success(f"  Found {len(self.mapping_models)} model definitions")
@@ -174,24 +173,24 @@ class ConfigValidator:
         """Extract model names from litellm-unified.yaml"""
         self.log_info("Extracting model names from litellm-unified.yaml...")
 
-        model_list = self.litellm_config.get('model_list', [])
+        model_list = self.litellm_config.get("model_list", [])
 
         for model_entry in model_list:
-            model_name = model_entry.get('model_name')
+            model_name = model_entry.get("model_name")
             if model_name:
                 self.litellm_models.add(model_name)
 
                 # Also extract the actual model path from litellm_params
-                litellm_params = model_entry.get('litellm_params', {})
-                model_path = litellm_params.get('model', '')
+                litellm_params = model_entry.get("litellm_params", {})
+                model_path = litellm_params.get("model", "")
 
                 # Extract model name after provider prefix (e.g., "ollama/llama3.1:8b" -> "llama3.1:8b")
-                if '/' in model_path:
-                    parts = model_path.split('/', 1)
+                if "/" in model_path:
+                    parts = model_path.split("/", 1)
                     if len(parts) > 1:
                         actual_model = parts[1]
                         # Store mapping for validation
-                        model_entry['_extracted_model'] = actual_model
+                        model_entry["_extracted_model"] = actual_model
 
         self.log_success(f"  Found {len(self.litellm_models)} model definitions")
 
@@ -218,24 +217,23 @@ class ConfigValidator:
         """Validate that model routes target existing providers"""
         self.log_info("Validating mappings → providers consistency...")
 
-        active_providers = set(
-            name for name, config in self.providers_config.get('providers', {}).items()
-            if config.get('status') == 'active'
-        )
+        active_providers = {
+            name
+            for name, config in self.providers_config.get("providers", {}).items()
+            if config.get("status") == "active"
+        }
 
-        exact_matches = self.mappings_config.get('exact_matches', {})
+        exact_matches = self.mappings_config.get("exact_matches", {})
 
         for model_name, route_config in exact_matches.items():
-            provider = route_config.get('provider')
+            provider = route_config.get("provider")
 
             # Check primary provider exists
             if provider and provider not in active_providers:
-                self.log_error(
-                    f"Model '{model_name}' routes to non-existent provider '{provider}'"
-                )
+                self.log_error(f"Model '{model_name}' routes to non-existent provider '{provider}'")
 
             # Check fallback provider exists
-            fallback = route_config.get('fallback')
+            fallback = route_config.get("fallback")
             if fallback and fallback not in active_providers:
                 self.log_error(
                     f"Model '{model_name}' fallback provider '{fallback}' does not exist"
@@ -248,7 +246,7 @@ class ConfigValidator:
         """Validate LiteLLM model definitions match provider models"""
         self.log_info("Validating LiteLLM model definitions...")
 
-        model_list = self.litellm_config.get('model_list', [])
+        model_list = self.litellm_config.get("model_list", [])
 
         # Collect all provider model names for fuzzy matching
         all_provider_models = set()
@@ -256,23 +254,25 @@ class ConfigValidator:
             all_provider_models.update(models)
 
         for model_entry in model_list:
-            model_name = model_entry.get('model_name')
-            litellm_params = model_entry.get('litellm_params', {})
-            model_path = litellm_params.get('model', '')
+            model_name = model_entry.get("model_name")
+            litellm_params = model_entry.get("litellm_params", {})
+            model_path = litellm_params.get("model", "")
 
             # Extract actual model name
             extracted_model = None
-            if '/' in model_path:
-                parts = model_path.split('/', 1)
+            if "/" in model_path:
+                parts = model_path.split("/", 1)
                 if len(parts) > 1:
                     extracted_model = parts[1]
 
             # Validate extracted model exists in providers
             if extracted_model and extracted_model not in all_provider_models:
                 # Check if it's a vLLM HuggingFace path (acceptable)
-                if not extracted_model.startswith('meta-llama/') and \
-                   not extracted_model.startswith('mistralai/') and \
-                   not extracted_model.startswith('Qwen/'):
+                if (
+                    not extracted_model.startswith("meta-llama/")
+                    and not extracted_model.startswith("mistralai/")
+                    and not extracted_model.startswith("Qwen/")
+                ):
                     self.log_warning(
                         f"LiteLLM model '{model_name}' references '{extracted_model}' "
                         f"which is not defined in providers.yaml"
@@ -283,7 +283,7 @@ class ConfigValidator:
         self.log_info("Validating naming conventions...")
 
         # Common typo patterns
-        similar_names: Dict[str, List[str]] = {}
+        similar_names: dict[str, list[str]] = {}
 
         all_models = set()
         all_models.update(self.mapping_models)
@@ -296,8 +296,8 @@ class ConfigValidator:
             for model_b in all_models:
                 if model_a != model_b:
                     # Check if names are very similar (same base, different suffix)
-                    base_a = model_a.lower().replace('-', '').replace('_', '').replace(':', '')
-                    base_b = model_b.lower().replace('-', '').replace('_', '').replace(':', '')
+                    base_a = model_a.lower().replace("-", "").replace("_", "").replace(":", "")
+                    base_b = model_b.lower().replace("-", "").replace("_", "").replace(":", "")
 
                     # If 80% similar, flag as potential typo
                     similarity = len(set(base_a) & set(base_b)) / max(len(base_a), len(base_b))
@@ -317,7 +317,7 @@ class ConfigValidator:
         """Validate backend_model references in model-mappings.yaml"""
         self.log_info("Validating backend_model references...")
 
-        exact_matches = self.mappings_config.get('exact_matches', {})
+        exact_matches = self.mappings_config.get("exact_matches", {})
 
         # Collect all provider model names
         all_provider_models = set()
@@ -325,7 +325,7 @@ class ConfigValidator:
             all_provider_models.update(models)
 
         for model_name, route_config in exact_matches.items():
-            backend_model = route_config.get('backend_model')
+            backend_model = route_config.get("backend_model")
 
             if backend_model:
                 # Check if backend_model exists in providers
@@ -335,7 +335,7 @@ class ConfigValidator:
                         f"which is not defined in providers.yaml"
                     )
 
-        if not self.warnings[-1:] or 'backend_model' not in self.warnings[-1]:
+        if not self.warnings[-1:] or "backend_model" not in self.warnings[-1]:
             self.log_success("All backend_model references are valid")
 
     def run_validation(self) -> bool:
@@ -378,12 +378,11 @@ class ConfigValidator:
         if self.errors:
             print(f"\n{Colors.RED}❌ Validation FAILED{Colors.NC}")
             return False
-        elif self.warnings:
+        if self.warnings:
             print(f"\n{Colors.YELLOW}⚠️  Validation passed with warnings{Colors.NC}")
             return True
-        else:
-            print(f"\n{Colors.GREEN}✅ All validations passed{Colors.NC}")
-            return True
+        print(f"\n{Colors.GREEN}✅ All validations passed{Colors.NC}")
+        return True
 
 
 def main():
@@ -392,12 +391,12 @@ def main():
         description="Validate configuration consistency across AI backend configs"
     )
     parser.add_argument(
-        '--fix-common-issues',
-        action='store_true',
-        help='Attempt to fix common naming inconsistencies (not implemented yet)'
+        "--fix-common-issues",
+        action="store_true",
+        help="Attempt to fix common naming inconsistencies (not implemented yet)",
     )
 
-    args = parser.parse_args()
+    parser.parse_args()
 
     # Determine project root
     script_dir = Path(__file__).parent
@@ -411,5 +410,5 @@ def main():
     sys.exit(0 if success else 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

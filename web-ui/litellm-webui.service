@@ -1,0 +1,27 @@
+[Unit]
+Description=LiteLLM Web UI - Model Testing Interface
+Documentation=https://github.com/lab/ai-backend-unified
+After=litellm.service network.target
+Wants=litellm.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/miko/LAB/ai/backend/ai-backend-unified
+ExecStart=/home/miko/venvs/litellm/bin/python3 web-ui/app.py
+Restart=on-failure
+RestartSec=10s
+
+# Environment
+Environment="PATH=/home/miko/venvs/litellm/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=litellm-webui
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

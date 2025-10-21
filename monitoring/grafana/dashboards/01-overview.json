@@ -1,0 +1,226 @@
+{
+  "title": "LiteLLM Overview",
+  "tags": [
+    "litellm",
+    "overview"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 0,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (requests/sec)",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "rate(litellm_proxy_total_requests_metric[5m])",
+          "legendFormat": "{{requested_model}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "reqps",
+          "label": "Requests/sec"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error Rate (%)",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "100 * (rate(litellm_proxy_failed_requests_metric[5m]) / rate(litellm_proxy_total_requests_metric[5m]))",
+          "legendFormat": "{{requested_model}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "label": "Error %",
+          "max": 100,
+          "min": 0
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Average Latency (seconds)",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(litellm_request_total_latency_metric[5m])",
+          "legendFormat": "{{model}} - total",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(litellm_llm_api_latency_metric[5m])",
+          "legendFormat": "{{model}} - API",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Latency"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Active Models",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "count(count by (requested_model) (litellm_proxy_total_requests_metric))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Total Requests (1h)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(litellm_proxy_total_requests_metric[1h]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Requests by Provider",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum by (api_provider) (increase(litellm_proxy_total_requests_metric[1h]))",
+          "legendFormat": "{{api_provider}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Redis Health",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "litellm_redis_latency",
+          "legendFormat": "Latency (ms)",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(litellm_redis_fails[5m])",
+          "legendFormat": "Failures/sec",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ms",
+          "label": "Latency"
+        },
+        {
+          "format": "short",
+          "label": "Failures"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "System Self-Latency",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "litellm_self_latency",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ms",
+          "label": "Latency"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    }
+  ]
+}

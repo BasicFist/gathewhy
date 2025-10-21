@@ -362,6 +362,165 @@ rate_limit_settings:
       rpm: 150  # Fastest provider
       tpm: 75000
 
+# ============================================================================
+# OBSERVABILITY & MONITORING (Phase 2)
+# ============================================================================
+
+litellm_settings:
+  # Prometheus metrics integration
+  callbacks: ["prometheus"]
+  service_callback: ["prometheus_system"]  # System health (Redis, latency)
+
+  # Custom Prometheus configuration
+  prometheus_initialize_budget_metrics: true  # Initialize budget metrics on startup
+  enable_end_user_cost_tracking_prometheus_only: false  # Reduce cardinality (solo dev)
+
+  # Metrics endpoint authentication (optional - disabled for dev)
+  require_auth_for_metrics_endpoint: false
+
+  # Custom metadata labels (extract from request metadata)
+  custom_prometheus_metadata_labels:
+    - "metadata.project"      # Track by project
+    - "metadata.environment"  # dev/staging/prod
+    - "metadata.user_type"    # human/agent/api
+
+  # Custom tags (track specific request types)
+  custom_prometheus_tags:
+    - "production"
+    - "development"
+    - "batch-job"
+    - "interactive"
+    - "User-Agent: curl/*"       # Track CLI usage
+    - "User-Agent: python/*"     # Track Python SDK usage
+    - "User-Agent: openai/*"     # Track OpenAI SDK usage
+
+  # Prometheus metrics configuration (optimize cardinality)
+  prometheus_metrics_config:
+    # Token consumption metrics
+    - group: "token_usage"
+      metrics:
+        - "litellm_input_tokens_metric"
+        - "litellm_output_tokens_metric"
+        - "litellm_total_tokens_metric"
+      include_labels:
+        - "model"
+        - "requested_model"
+        - "api_provider"
+
+    # Request tracking metrics
+    - group: "requests"
+      metrics:
+        - "litellm_proxy_total_requests_metric"
+        - "litellm_proxy_failed_requests_metric"
+      include_labels:
+        - "status_code"
+        - "requested_model"
+        - "model_group"
+
+    # Latency metrics
+    - group: "performance"
+      metrics:
+        - "litellm_request_total_latency_metric"
+        - "litellm_llm_api_latency_metric"
+      include_labels:
+        - "model"
+        - "api_provider"
+        - "requested_model"
+
+    # Deployment health metrics
+    - group: "health"
+      metrics:
+        - "litellm_deployment_success_responses"
+        - "litellm_deployment_failure_responses"
+      include_labels:
+        - "api_provider"
+        - "requested_model"
+        - "model"
+
+    # System health metrics (Redis, self)
+    - group: "system"
+      metrics:
+        - "litellm_redis_latency"
+        - "litellm_redis_fails"
+        - "litellm_self_latency"
+      include_labels:
+        - "operation"
+
+  # ============================================================================
+  # REQUEST TRACING & DEBUG LOGGING
+  # ============================================================================
+
+  # Success/failure callbacks for detailed tracing
+  success_callback: ["langfuse"]  # Track successful requests (optional: langfuse, langsmith, etc.)
+  failure_callback: ["langfuse"]  # Track failed requests for debugging
+
+  # Detailed request/response logging
+  log_raw_request_response: true  # Log full request/response payloads (dev only)
+  detailed_debug: true             # Enable detailed debug information
+
+  # Request metadata preservation
+  metadata_persistence: true       # Preserve metadata across request lifecycle
+
+  # Logging configuration
+  logging:
+    # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    level: "INFO"  # Change to DEBUG for troubleshooting
+
+    # Log file settings
+    log_file: "/var/log/litellm/requests.log"
+    log_file_max_size_mb: 100
+    log_file_backup_count: 5
+
+    # Request logging format
+    log_format: "json"  # json or text
+
+    # What to log
+    log_requests: true
+    log_responses: true
+    log_errors: true
+    log_latency: true
+    log_token_usage: true
+
+    # Privacy & security
+    redact_user_api_keys: true      # Don't log API keys
+    redact_messages_in_exceptions: false  # Log full messages for debugging
+
+    # Performance logging
+    log_slow_requests: true
+    slow_request_threshold_ms: 5000  # Log requests slower than 5s
+
+  # Request tracing settings
+  tracing:
+    enabled: true
+
+    # Generate unique request IDs
+    generate_request_id: true
+
+    # Include in response headers
+    include_request_id_in_response: true
+
+    # Trace sampling (1.0 = all requests, 0.1 = 10% of requests)
+    sampling_rate: 1.0  # Full tracing for dev, reduce for production
+
+    # Trace attributes to capture
+    capture_attributes:
+      - "model"
+      - "api_provider"
+      - "requested_model"
+      - "user_id"
+      - "metadata.project"
+      - "metadata.environment"
+      - "http.status_code"
+      - "http.method"
+      - "http.url"
+
+  # Debug mode settings (environment-specific)
+  debug_mode:
+    enabled: false  # Enable for troubleshooting
+    verbose_logging: false
+    log_all_callbacks: false
+    log_internal_state: false
+
 # Budget management (optional)
 budget_settings:
   enabled: false

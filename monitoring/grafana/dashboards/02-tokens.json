@@ -1,0 +1,135 @@
+{
+  "title": "Token Usage & Cost Tracking",
+  "tags": [
+    "litellm",
+    "tokens",
+    "cost"
+  ],
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Token Rate by Model",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "rate(litellm_input_tokens_metric[5m])",
+          "legendFormat": "{{model}} - input",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(litellm_output_tokens_metric[5m])",
+          "legendFormat": "{{model}} - output",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(litellm_total_tokens_metric[5m])",
+          "legendFormat": "{{model}} - total",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Tokens/sec"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Total Tokens (1h)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(litellm_total_tokens_metric[1h]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Input Tokens (1h)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(litellm_input_tokens_metric[1h]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Output Tokens (1h)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(litellm_output_tokens_metric[1h]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tokens by Model (1h)",
+      "type": "barchart",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum by (model) (increase(litellm_total_tokens_metric[1h]))",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Tokens by Provider (1h)",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum by (api_provider) (increase(litellm_total_tokens_metric[1h]))",
+          "legendFormat": "{{api_provider}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

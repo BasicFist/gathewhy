@@ -81,23 +81,42 @@ ai-backend-unified/
 ├── config/                     # Configuration files
 │   ├── providers.yaml          # Provider registry (source of truth)
 │   ├── model-mappings.yaml     # Model routing rules
-│   ├── litellm-unified.yaml    # Extended LiteLLM config (generated)
+│   ├── litellm-unified.yaml    # Extended LiteLLM config with observability
 │   └── schemas/                # Pydantic validation schemas
 ├── docs/                       # Documentation
 │   ├── architecture.md
 │   ├── adding-providers.md
 │   ├── consuming-api.md
-│   └── troubleshooting.md
-├── monitoring/                 # Observability stack
-│   ├── prometheus/             # Metrics collection
-│   ├── grafana/                # Dashboards and visualization
-│   ├── loki/                   # Log aggregation
-│   ├── systemd/                # Service definitions
-│   └── README.md               # Monitoring documentation
+│   ├── troubleshooting.md
+│   └── observability.md        # Phase 2: Observability guide
+├── monitoring/                 # Monitoring stack (Phase 2)
+│   ├── docker-compose.yml      # Prometheus + Grafana stack
+│   ├── prometheus/
+│   │   └── prometheus.yml      # Metrics scraping config
+│   └── grafana/
+│       ├── datasources/        # Auto-provisioned datasources
+│       └── dashboards/         # 5 pre-built dashboards (JSON)
 ├── scripts/                    # Utilities and automation
+│   ├── debugging/              # Phase 2: Request tracing
+│   │   ├── analyze-logs.py
+│   │   ├── tail-requests.py
+│   │   ├── test-request.py
+│   │   └── README.md
+│   ├── profiling/              # Phase 2: Performance analysis
+│   │   ├── profile-latency.py
+│   │   ├── profile-throughput.py
+│   │   ├── compare-providers.py
+│   │   └── README.md
+│   ├── loadtesting/            # Phase 2: Capacity planning
+│   │   ├── locust/
+│   │   │   └── litellm_locustfile.py
+│   │   ├── k6/
+│   │   │   ├── litellm-load-test.js
+│   │   │   └── smoke-test.js
+│   │   └── README.md
 │   ├── validate-unified-backend.sh
+│   ├── validate-observability.sh  # Phase 2 validation
 │   ├── generate-litellm-config.py
-│   ├── setup-monitoring.sh
 │   └── test-rollback.sh
 ├── tests/                      # Automated test suite
 │   ├── unit/                   # Unit tests (30+ tests)
@@ -286,62 +305,167 @@ curl http://localhost:8001/v1/models  # vLLM
 
 ## Monitoring & Observability
 
-Comprehensive monitoring stack for metrics, logs, and alerts:
+**Phase 2: Developer Tools & Observability** - Complete observability stack for production monitoring, debugging, performance profiling, and load testing.
 
-### Stack Components
+### Stack Overview
 
-| Component | Purpose | Port | Documentation |
-|-----------|---------|------|---------------|
-| **Prometheus** | Metrics collection | 9090 | [prometheus.io](https://prometheus.io) |
-| **Grafana** | Visualization | 3000 | [grafana.com](https://grafana.com) |
-| **Loki** | Log aggregation | 3100 | [grafana.com/loki](https://grafana.com/loki) |
-| **Promtail** | Log shipping | 9080 | [grafana.com/promtail](https://grafana.com/promtail) |
-
-### Quick Setup
-
-```bash
-# Automated installation
-./scripts/setup-monitoring.sh --install-binaries
-
-# Start monitoring services
-systemctl --user enable prometheus grafana loki promtail
-systemctl --user start prometheus grafana loki promtail
-
-# Access dashboards
-# Prometheus: http://localhost:9090
-# Grafana: http://localhost:3000 (admin/admin)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  OBSERVABILITY ARCHITECTURE                      │
+├─────────────────────────────────────────────────────────────────┤
+│  1. MONITORING (Real-time Metrics)                             │
+│     • Prometheus + Grafana                                      │
+│     • 5 pre-built dashboards                                    │
+│     • 30-day metric retention                                   │
+│                                                                  │
+│  2. DEBUGGING (Request Tracing)                                │
+│     • JSON structured logging                                   │
+│     • Request ID tracing                                        │
+│     • 3 analysis utilities                                      │
+│                                                                  │
+│  3. PROFILING (Performance Analysis)                            │
+│     • Latency profiling (TTFB breakdown)                        │
+│     • Throughput testing                                        │
+│     • Provider comparison                                       │
+│                                                                  │
+│  4. LOAD TESTING (Capacity Planning)                            │
+│     • Locust (Python, Web UI)                                   │
+│     • k6 (JavaScript, CLI)                                      │
+│     • Multiple test scenarios                                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### What's Monitored
+### Quick Start
 
-**Metrics** (Prometheus):
-- LiteLLM gateway: Request rate, latency (P50/P95), error rate, fallback triggers
-- Provider health: Availability, error rates, response times
-- Cache performance: Hit rate, memory usage (Redis)
-- System resources: CPU, memory, disk utilization
-- Rate limiting: RPM usage, violations
+**1. Start Monitoring Stack**
+```bash
+cd monitoring
+docker compose up -d
 
-**Logs** (Loki via Promtail):
-- LiteLLM gateway logs with JSON parsing
-- Provider service logs (Ollama, llama.cpp, vLLM)
-- System logs (critical events only)
-- Redis logs
+# Access dashboards
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+```
 
-**Alerts** (Prometheus):
-- 8 alert groups: Gateway, Providers, Cache, Rate Limits, System, Fallbacks, Configuration
-- 3 severity levels: Critical (page), Warning (investigate), Info (review)
+**2. Monitor Requests Live**
+```bash
+./scripts/debugging/tail-requests.py
 
-### Dashboard
+# Filter by model
+./scripts/debugging/tail-requests.py --model llama3.1:8b
 
-Pre-configured Grafana dashboard (`monitoring/grafana/litellm-dashboard.json`):
-- 11 panels covering all critical metrics
-- Real-time request distribution by model
-- Provider health status
-- Active alerts table
+# Show only errors
+./scripts/debugging/tail-requests.py --level ERROR
+```
 
-**Import**: Grafana → Dashboards → Import → Upload dashboard JSON
+**3. Profile Performance**
+```bash
+# Latency analysis
+./scripts/profiling/profile-latency.py
 
-For complete monitoring documentation, see [`monitoring/README.md`](monitoring/README.md).
+# Find optimal concurrency
+./scripts/profiling/profile-throughput.py --sweep
+
+# Compare providers
+./scripts/profiling/compare-providers.py
+```
+
+**4. Run Load Tests**
+```bash
+# Quick smoke test
+k6 run scripts/loadtesting/k6/smoke-test.js
+
+# Full load test
+k6 run scripts/loadtesting/k6/litellm-load-test.js
+
+# Interactive Locust testing
+cd scripts/loadtesting/locust
+locust -f litellm_locustfile.py --host http://localhost:4000
+# Open http://localhost:8089
+```
+
+### Monitoring Stack
+
+**Grafana Dashboards (5 total)**:
+- **Overview**: Request rate, error rate, latency (P50/P95/P99), Redis health
+- **Token Usage**: Cost tracking, consumption by model/provider
+- **Performance**: Latency comparison, heatmaps, P95 trends
+- **Provider Health**: Success rates, failure analysis, traffic distribution
+- **System Health**: Redis metrics, cache hit rate, infrastructure status
+
+**Prometheus Metrics**:
+- Token consumption (input, output, total)
+- Request tracking (success, failure, rate)
+- Latency (total, TTFB, API call time)
+- Deployment health (per-provider success/failure)
+- System health (Redis latency, self-latency)
+
+**Configuration**: `config/litellm-unified.yaml` (litellm_settings section)
+
+### Debugging Tools
+
+**Scripts** (`scripts/debugging/`):
+- `analyze-logs.py` - Offline analysis (errors, performance, usage patterns)
+- `tail-requests.py` - Real-time monitoring with filtering
+- `test-request.py` - Make test requests with detailed debugging
+
+**Logging Features**:
+- JSON-formatted structured logs
+- Request ID generation for distributed tracing
+- Slow request detection (>5s threshold)
+- Metadata preservation across request lifecycle
+
+**Log Location**: `/var/log/litellm/requests.log` (configurable)
+
+### Performance Profiling
+
+**Scripts** (`scripts/profiling/`):
+- `profile-latency.py` - TTFB, network time, token generation speed
+- `profile-throughput.py` - Concurrency sweep, RPS measurement
+- `compare-providers.py` - Side-by-side provider benchmarking
+
+**Capabilities**:
+- Latency statistics (mean, median, P50, P95, P99)
+- Optimal concurrency recommendations
+- JSON export for regression tracking
+- Provider performance comparison
+
+### Load Testing Suite
+
+**Locust** (Python, Interactive):
+- Realistic user traffic patterns (60/25/15 model distribution)
+- Web UI for interactive testing
+- Stress testing modes
+- HTML report generation
+
+**k6** (JavaScript, CI/CD):
+- 3 scenarios: gradual ramp-up, spike test, constant load
+- Built-in performance thresholds
+- JSON export for automation
+- CI/CD pipeline integration
+
+**Test Scenarios**:
+- Smoke test (5 users, 30s) - Quick validation
+- Load test (10-50 users, 5-10m) - Normal operation
+- Stress test (100-500 users, 10-30m) - Find limits
+- Spike test (sudden 10x) - Resilience testing
+
+### Validation
+
+```bash
+# Validate entire observability stack
+./scripts/validate-observability.sh
+```
+
+**Checks**:
+- ✅ Configuration files (YAML syntax, settings)
+- ✅ Monitoring stack (Prometheus, Grafana, dashboards)
+- ✅ Debugging tools (syntax, executability)
+- ✅ Profiling utilities (syntax, executability)
+- ✅ Load testing files (Locust, k6)
+- ✅ Documentation completeness
+
+For complete observability documentation, see [`docs/observability.md`](docs/observability.md).
 
 ## Testing & Quality
 
@@ -474,6 +598,11 @@ For complete testing documentation, see [`tests/README.md`](tests/README.md).
    - 8 Serena memory files with operational knowledge
    - Pydantic-based configuration validation (schemas + validation script)
    - Security hardening (CORS, rate limits, master key authentication)
+   - Configuration hot-reload script with automatic backup/rollback
+   - Configuration consistency validator (model name validation)
+   - Pre-commit git hook for automatic validation
+   - Redis cache namespacing with monitoring tools
+   - Port conflict detection and management system
 
 3. **Phase 2: CI/CD & Automation**
    - GitHub Actions CI/CD pipeline (6-stage validation)
@@ -486,13 +615,14 @@ For complete testing documentation, see [`tests/README.md`](tests/README.md).
    - Rollback testing automation (8-step validation)
    - pytest configuration with parallel execution support
 
-5. **Phase 4: Monitoring & Observability**
-   - Prometheus metrics collection (LiteLLM, providers, system)
-   - Grafana dashboards (11 panels, pre-configured)
-   - Loki log aggregation (15-day retention)
-   - Promtail log shipping from journald
-   - 8 alert groups with 3 severity levels
-   - Setup automation script
+5. **Phase 2: Developer Tools & Observability** (2025-10-21)
+   - **Monitoring Stack**: Prometheus + Grafana with 5 pre-built dashboards
+   - **Debugging Tools**: 3 request tracing utilities (analyze, tail, test)
+   - **Performance Profiling**: 3 profiling scripts (latency, throughput, comparison)
+   - **Load Testing Suite**: Locust + k6 with multiple test scenarios
+   - **Configuration**: Extended litellm-unified.yaml with observability settings
+   - **Documentation**: Comprehensive observability guide (docs/observability.md)
+   - **Validation**: Complete observability stack validation script
 
 ### Recently Completed ✅
 
@@ -501,18 +631,17 @@ For complete testing documentation, see [`tests/README.md`](tests/README.md).
   - Production integration via LiteLLM gateway
   - Comprehensive testing and validation complete
 
-- **Phase 1: Foundation & Risk Mitigation** (2025-10-21)
-  - Configuration hot-reload script with automatic backup/rollback
-  - Configuration consistency validator (model name validation)
-  - Pre-commit git hook for automatic validation
-  - Redis cache namespacing with monitoring tools
-  - Port conflict detection and management system
-  - Addresses Codex-identified deployment risks (4/6 features complete)
+- **Phase 2: Developer Tools & Observability** (2025-10-21)
+  - Production-grade monitoring with Prometheus + Grafana
+  - Request tracing with JSON logging and request IDs
+  - Performance profiling with latency/throughput analysis
+  - Load testing with Locust and k6
+  - Complete observability documentation and validation
 
 ### In Progress 🔄
 
-- Documentation refinement based on usage feedback
-- Performance monitoring and optimization
+- Performance monitoring and optimization based on observability data
+- Advanced Grafana dashboard customization
 
 ### Future Enhancements ⏳
 
@@ -521,6 +650,8 @@ For complete testing documentation, see [`tests/README.md`](tests/README.md).
 - Request queuing and prioritization
 - Multi-region provider support
 - Advanced load balancing algorithms
+- Automated performance regression detection in CI/CD
+- Alert integration (PagerDuty, Slack)
 
 ## Contributing
 

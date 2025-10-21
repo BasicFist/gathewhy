@@ -387,13 +387,69 @@ pytest --cov=config --cov-report=html
 
 ### CI/CD Integration
 
-GitHub Actions pipeline (`.github/workflows/validate.yml`):
-1. **Validate**: YAML syntax, Pydantic schemas
-2. **Unit Tests**: Fast tests without dependencies
-3. **Integration**: Tests with Ollama (if available)
-4. **Contract**: Provider API compliance
-5. **Rollback**: Rollback procedure validation
-6. **Report**: Test results and coverage
+GitHub Actions pipeline (`.github/workflows/validate-config.yml`) runs on every push and PR:
+
+**Pipeline Stages** (~3-5 minutes total):
+
+1. **YAML Syntax Validation** (<30s)
+   - yamllint with custom rules
+   - Python YAML parsing verification
+   - All config/*.yaml files
+
+2. **Schema Validation** (<30s)
+   - Pydantic model validation
+   - Cross-configuration consistency
+   - Model name typo detection
+
+3. **Secret Scanning** (<30s)
+   - detect-secrets baseline check
+   - Prevents credential leaks
+   - Auto-fails on new secrets
+
+4. **Documentation Sync** (<30s)
+   - Provider config ↔ architecture.md
+   - Serena memory completeness (8 required files)
+   - Auto-generated marker verification
+
+5. **Generated Config Check** (<30s)
+   - AUTO-GENERATED marker presence
+   - Prevents manual edits to generated files
+
+6. **Comprehensive System Validation** (~1-2min)
+   - Runs `scripts/validate-all-configs.sh --json`
+   - 11 system-wide checks (YAML, models, ports, providers, Redis, schema, backups)
+   - JSON output uploaded as artifact (30-day retention)
+   - **Local equivalent**: `./scripts/validate-all-configs.sh`
+
+7. **Integration Tests** (optional, manual dispatch)
+   - Provider health checks
+   - Requires active provider services
+
+**Artifacts**:
+- `validation-results` - JSON summary of all checks (30 days)
+- `test-coverage` - HTML coverage reports (if tests run)
+
+**Running Locally**:
+```bash
+# Quick validation (same as CI stage 6)
+./scripts/validate-all-configs.sh
+
+# With JSON output (CI format)
+./scripts/validate-all-configs.sh --json | jq .
+
+# Critical checks only
+./scripts/validate-all-configs.sh --critical
+```
+
+**Expected Runtime**:
+- Full pipeline: **3-5 minutes**
+- Comprehensive validation alone: **1-2 minutes**
+- Local validation: **~10 seconds** (depends on provider reachability)
+
+**Failure Handling**:
+- Pipeline fails on: YAML errors, schema violations, new secrets, failed validations
+- Warnings allowed: Provider offline (vLLM), backup warnings
+- Auto-rollback: Not triggered by CI (pre-commit hook prevents bad commits)
 
 For complete testing documentation, see [`tests/README.md`](tests/README.md).
 

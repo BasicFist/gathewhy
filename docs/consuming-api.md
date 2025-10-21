@@ -44,7 +44,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key="not-needed"  # Required by SDK but unused locally
+    api_key="not-needed"  # pragma: allowlist secret - Required by SDK but unused locally
 )
 
 response = client.chat.completions.create(
@@ -82,7 +82,7 @@ import OpenAI from 'openai';
 
 const client = new OpenAI({
   baseURL: 'http://localhost:4000/v1',
-  apiKey: 'not-needed'
+  apiKey: 'not-needed'  # pragma: allowlist secret
 });
 
 const response = await client.chat.completions.create({
@@ -220,7 +220,7 @@ curl http://localhost:4000/v1/models | jq
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
 
 stream = client.chat.completions.create(
     model="llama3.1:8b",
@@ -350,7 +350,7 @@ class SimpleChatBot:
     def __init__(self):
         self.client = OpenAI(
             base_url="http://localhost:4000/v1",
-            api_key="not-needed"
+            api_key="not-needed"  # pragma: allowlist secret
         )
         self.conversation = []
 
@@ -387,7 +387,7 @@ class CodeAssistant:
     def __init__(self):
         self.client = OpenAI(
             base_url="http://localhost:4000/v1",
-            api_key="not-needed"
+            api_key="not-needed"  # pragma: allowlist secret
         )
 
     def generate_code(self, task: str, language: str = "python") -> str:
@@ -442,7 +442,7 @@ class BatchProcessor:
     def __init__(self):
         self.client = AsyncOpenAI(
             base_url="http://localhost:4000/v1",
-            api_key="not-needed"
+            api_key="not-needed"  # pragma: allowlist secret
         )
 
     async def process_batch(self, prompts: list[str]) -> list[str]:
@@ -477,7 +477,7 @@ class VLLMCodeGenerator:
     def __init__(self):
         self.client = OpenAI(
             base_url="http://localhost:4000/v1",
-            api_key="not-needed"
+            api_key="not-needed"  # pragma: allowlist secret
         )
 
     def generate_code(
@@ -559,7 +559,7 @@ class ResilientClient:
     def __init__(self, max_retries=3):
         self.client = OpenAI(
             base_url="http://localhost:4000/v1",
-            api_key="not-needed"
+            api_key="not-needed"  # pragma: allowlist secret
         )
         self.max_retries = max_retries
 
@@ -766,7 +766,7 @@ response = client.chat.completions.create(
 cat > test_api.py << 'EOF'
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
 
 print("Testing unified API...")
 

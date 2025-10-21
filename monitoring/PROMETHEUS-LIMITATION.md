@@ -115,7 +115,7 @@ journalctl --user -u litellm.service -f --output=json-pretty
 LiteLLM supports logging to PostgreSQL for analytics:
 ```yaml
 litellm_settings:
-  database_url: "postgresql://user:pass@localhost/litellm"
+  database_url: "postgresql://user:pass@localhost/litellm"  # pragma: allowlist secret
   store_model_in_db: true
 ```
 

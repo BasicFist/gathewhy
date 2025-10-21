@@ -286,7 +286,7 @@ from openai import OpenAI
 # Use via Web UI or programmatically
 client = OpenAI(
     base_url="http://localhost:4000",
-    api_key="not-needed"
+    api_key="not-needed"  # pragma: allowlist secret
 )
 
 response = client.chat.completions.create(

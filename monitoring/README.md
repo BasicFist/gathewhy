@@ -475,8 +475,8 @@ curl -X POST http://localhost:9090/api/v1/admin/tsdb/snapshot
 
 ```bash
 # Export all dashboards via API
-for dash in $(curl -s http://admin:admin@localhost:3000/api/search | jq -r '.[].uid'); do
-  curl -s "http://admin:admin@localhost:3000/api/dashboards/uid/$dash" | jq .dashboard > "grafana-backup-${dash}.json"
+for dash in $(curl -s http://admin:admin@localhost:3000/api/search | jq -r '.[].uid'); do  # pragma: allowlist secret
+  curl -s "http://admin:admin@localhost:3000/api/dashboards/uid/$dash" | jq .dashboard > "grafana-backup-${dash}.json"  # pragma: allowlist secret
 done
 ```
 
@@ -506,8 +506,8 @@ systemctl --user start prometheus loki promtail grafana
 ```bash
 # Change default admin password immediately
 curl -X PUT -H "Content-Type: application/json" \
-  -d '{"oldPassword":"admin","newPassword":"NEW_SECURE_PASSWORD","confirmNew":"NEW_SECURE_PASSWORD"}' \
-  http://admin:admin@localhost:3000/api/user/password
+  -d '{"oldPassword":"admin","newPassword":"NEW_SECURE_PASSWORD","confirmNew":"NEW_SECURE_PASSWORD"}' \  # pragma: allowlist secret
+  http://admin:admin@localhost:3000/api/user/password  # pragma: allowlist secret
 ```
 
 ### Log Scrubbing

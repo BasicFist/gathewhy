@@ -484,7 +484,7 @@ Switched to AWQ-quantized Qwen model:
    pip install vllm
    ```
 3. **Model Download**: Qwen AWQ model from HuggingFace
-4. **Server Startup**: 
+4. **Server Startup**:
    ```bash
    vllm serve Qwen/Qwen2.5-Coder-7B-Instruct-AWQ \
      --port 8001 --gpu-memory-utilization 0.9 --max-model-len 4096
@@ -546,7 +546,7 @@ curl http://localhost:8001/v1/models | jq
 # Test inference
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ", 
+  -d '{"model": "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ",
        "messages": [{"role": "user", "content": "Hello"}],
        "max_tokens": 50}'
 ```
@@ -556,4 +556,3 @@ curl -X POST http://localhost:8001/v1/chat/completions \
 **Deployment Complete**: 2025-10-21
 **Ready for Integration**: Yes
 **Maintained By**: LAB AI Infrastructure Team
-

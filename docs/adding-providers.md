@@ -383,7 +383,7 @@ model_list:
       api_key: ${OPENAI_API_KEY}
 
 # Set environment variable
-export OPENAI_API_KEY="sk-..."
+export OPENAI_API_KEY="sk-..."  # pragma: allowlist secret
 ```
 
 ### Scenario 2: Adding Local GPU Server

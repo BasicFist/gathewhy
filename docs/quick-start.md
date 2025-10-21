@@ -40,7 +40,7 @@ from openai import OpenAI
 # Point to the unified gateway
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key="not-needed"  # No auth required for local development
+    api_key="not-needed"  # No auth required for local development  # pragma: allowlist secret
 )
 
 # Make your first request
@@ -61,7 +61,7 @@ import OpenAI from 'openai';
 
 const client = new OpenAI({
   baseURL: 'http://localhost:4000/v1',
-  apiKey: 'not-needed'
+  apiKey: 'not-needed'  # pragma: allowlist secret
 });
 
 async function chat() {
@@ -125,7 +125,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key="not-needed"
+    api_key="not-needed"  # pragma: allowlist secret
 )
 
 # Stream tokens as they're generated

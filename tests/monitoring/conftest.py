@@ -3,7 +3,7 @@ Pytest configuration for monitoring tests
 """
 
 import pytest
-from playwright.sync_api import Page, Browser, BrowserContext
+from playwright.sync_api import Browser, BrowserContext
 
 
 @pytest.fixture(scope="session")
@@ -24,6 +24,7 @@ def browser_context_args(browser_context_args):
 def browser_type_launch_args(browser_type_launch_args):
     """Configure browser launch arguments"""
     import os
+
     return {
         **browser_type_launch_args,
         "headless": os.getenv("PLAYWRIGHT_HEADED") != "1",

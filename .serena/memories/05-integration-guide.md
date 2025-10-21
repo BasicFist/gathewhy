@@ -31,7 +31,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key="not-needed-for-local"  # Required by SDK but unused locally
+    api_key="not-needed-for-local"  # Required by SDK but unused locally  # pragma: allowlist secret
 )
 
 response = client.chat.completions.create(
@@ -68,7 +68,7 @@ class UnifiedAIBackend:
     def __init__(self):
         self.client = OpenAI(
             base_url="http://localhost:4000/v1",
-            api_key="not-needed"
+            api_key="not-needed"  # pragma: allowlist secret
         )
 
     def research_query(self, query: str) -> str:
@@ -382,7 +382,7 @@ app = FastAPI()
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key="not-needed"
+    api_key="not-needed"  # pragma: allowlist secret
 )
 
 class ChatRequest(BaseModel):
@@ -466,7 +466,7 @@ class MultiModelWorkflow:
     """Use different models for different stages"""
 
     def __init__(self):
-        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
 
     def research_and_code(self, topic: str, language: str) -> dict:
         # Stage 1: Research with general model
@@ -506,7 +506,7 @@ class SmartModelSelector:
     }
 
     def __init__(self):
-        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
 
     def infer_capability(self, prompt: str) -> str:
         """Infer task type from prompt"""
@@ -538,7 +538,7 @@ class ResilientAIClient:
     """Handle failures gracefully with custom fallback logic"""
 
     def __init__(self):
-        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
         self.fallback_models = ["llama3.1:8b", "llama-cpp-python"]
 
     def generate_with_fallback(self, prompt: str, preferred_model: str) -> dict:
@@ -574,7 +574,7 @@ class CachedAIClient:
     """Client-side caching layer"""
 
     def __init__(self):
-        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
         self.redis = redis.Redis(host='localhost', port=6379, decode_responses=True)
         self.cache_ttl = 3600  # 1 hour
 
@@ -616,7 +616,7 @@ from openai import OpenAI, OpenAIError, APIError, RateLimitError, APIConnectionE
 
 class SafeAIClient:
     def __init__(self):
-        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+        self.client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
 
     def generate(self, model: str, prompt: str, max_retries: int = 3) -> Optional[str]:
         for attempt in range(max_retries):
@@ -781,7 +781,7 @@ response = requests.post(
 ```python
 # New: Provider-agnostic
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")  # pragma: allowlist secret
 response = client.chat.completions.create(
     model="llama3.1:8b",
     messages=[{"role": "user", "content": "Hello"}]

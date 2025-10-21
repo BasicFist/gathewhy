@@ -4,16 +4,15 @@ LiteLLM Log Analyzer
 Analyzes JSON-formatted LiteLLM request logs for debugging and performance analysis.
 """
 
+import argparse
 import json
 import sys
-from datetime import datetime
+from collections import Counter, defaultdict
 from pathlib import Path
-from collections import defaultdict, Counter
-from typing import List, Dict, Any
-import argparse
+from typing import Any
 
 
-def parse_log_file(log_path: Path) -> List[Dict[str, Any]]:
+def parse_log_file(log_path: Path) -> list[dict[str, Any]]:
     """Parse JSON log file and return list of log entries."""
     entries = []
     with open(log_path) as f:
@@ -29,9 +28,11 @@ def parse_log_file(log_path: Path) -> List[Dict[str, Any]]:
     return entries
 
 
-def analyze_errors(entries: List[Dict[str, Any]]) -> None:
+def analyze_errors(entries: list[dict[str, Any]]) -> None:
     """Analyze and display error patterns."""
-    errors = [e for e in entries if e.get('level') == 'ERROR' or 'error' in e.get('message', '').lower()]
+    errors = [
+        e for e in entries if e.get("level") == "ERROR" or "error" in e.get("message", "").lower()
+    ]
 
     if not errors:
         print("✅ No errors found")
@@ -46,10 +47,10 @@ def analyze_errors(entries: List[Dict[str, Any]]) -> None:
     error_providers = Counter()
 
     for error in errors:
-        msg = error.get('message', '')
+        msg = error.get("message", "")
         error_types[msg] += 1
-        error_models[error.get('model', 'unknown')] += 1
-        error_providers[error.get('api_provider', 'unknown')] += 1
+        error_models[error.get("model", "unknown")] += 1
+        error_providers[error.get("api_provider", "unknown")] += 1
 
     print("\nMost common errors:")
     for error_msg, count in error_types.most_common(10):
@@ -64,7 +65,7 @@ def analyze_errors(entries: List[Dict[str, Any]]) -> None:
         print(f"  {count:>3}x {provider}")
 
 
-def analyze_performance(entries: List[Dict[str, Any]]) -> None:
+def analyze_performance(entries: list[dict[str, Any]]) -> None:
     """Analyze request latency and performance."""
     latencies = []
     latency_by_model = defaultdict(list)
@@ -72,17 +73,17 @@ def analyze_performance(entries: List[Dict[str, Any]]) -> None:
     slow_requests = []
 
     for entry in entries:
-        latency = entry.get('latency_ms') or entry.get('duration_ms')
+        latency = entry.get("latency_ms") or entry.get("duration_ms")
         if latency:
             latencies.append(latency)
 
-            model = entry.get('model', 'unknown')
-            provider = entry.get('api_provider', 'unknown')
+            model = entry.get("model", "unknown")
+            provider = entry.get("api_provider", "unknown")
             latency_by_model[model].append(latency)
             latency_by_provider[provider].append(latency)
 
             if latency > 5000:  # > 5 seconds
-                slow_requests.append((latency, model, provider, entry.get('request_id', 'unknown')))
+                slow_requests.append((latency, model, provider, entry.get("request_id", "unknown")))
 
     if not latencies:
         print("\n⚠️  No latency data found")
@@ -97,7 +98,7 @@ def analyze_performance(entries: List[Dict[str, Any]]) -> None:
     p95 = sorted_latencies[int(len(sorted_latencies) * 0.95)]
     p99 = sorted_latencies[int(len(sorted_latencies) * 0.99)]
 
-    print(f"\nOverall latency:")
+    print("\nOverall latency:")
     print(f"  Average: {avg_latency:.0f} ms")
     print(f"  P50:     {p50:.0f} ms")
     print(f"  P95:     {p95:.0f} ms")
@@ -106,12 +107,16 @@ def analyze_performance(entries: List[Dict[str, Any]]) -> None:
     print(f"  Max:     {max(latencies):.0f} ms")
 
     print("\nLatency by model:")
-    for model, model_latencies in sorted(latency_by_model.items(), key=lambda x: sum(x[1])/len(x[1]), reverse=True)[:5]:
+    for model, model_latencies in sorted(
+        latency_by_model.items(), key=lambda x: sum(x[1]) / len(x[1]), reverse=True
+    )[:5]:
         avg = sum(model_latencies) / len(model_latencies)
         print(f"  {avg:>6.0f} ms  {model} ({len(model_latencies)} requests)")
 
     print("\nLatency by provider:")
-    for provider, prov_latencies in sorted(latency_by_provider.items(), key=lambda x: sum(x[1])/len(x[1]), reverse=True):
+    for provider, prov_latencies in sorted(
+        latency_by_provider.items(), key=lambda x: sum(x[1]) / len(x[1]), reverse=True
+    ):
         avg = sum(prov_latencies) / len(prov_latencies)
         print(f"  {avg:>6.0f} ms  {provider} ({len(prov_latencies)} requests)")
 
@@ -121,7 +126,7 @@ def analyze_performance(entries: List[Dict[str, Any]]) -> None:
             print(f"  {latency:>7.0f} ms  {model:20} {provider:15} {req_id}")
 
 
-def analyze_usage(entries: List[Dict[str, Any]]) -> None:
+def analyze_usage(entries: list[dict[str, Any]]) -> None:
     """Analyze token usage and request patterns."""
     total_tokens = 0
     tokens_by_model = defaultdict(int)
@@ -129,11 +134,11 @@ def analyze_usage(entries: List[Dict[str, Any]]) -> None:
     requests_by_provider = Counter()
 
     for entry in entries:
-        tokens = entry.get('total_tokens', 0)
+        tokens = entry.get("total_tokens", 0)
         total_tokens += tokens
 
-        model = entry.get('model', 'unknown')
-        provider = entry.get('api_provider', 'unknown')
+        model = entry.get("model", "unknown")
+        provider = entry.get("api_provider", "unknown")
 
         tokens_by_model[model] += tokens
         requests_by_model[model] += 1
@@ -156,9 +161,9 @@ def analyze_usage(entries: List[Dict[str, Any]]) -> None:
         print(f"  {count:>4}x ({pct:>5.1f}%)  {provider}")
 
 
-def trace_request(entries: List[Dict[str, Any]], request_id: str) -> None:
+def trace_request(entries: list[dict[str, Any]], request_id: str) -> None:
     """Trace a specific request through the logs."""
-    request_entries = [e for e in entries if e.get('request_id') == request_id]
+    request_entries = [e for e in entries if e.get("request_id") == request_id]
 
     if not request_entries:
         print(f"❌ No entries found for request_id: {request_id}")
@@ -167,28 +172,28 @@ def trace_request(entries: List[Dict[str, Any]], request_id: str) -> None:
     print(f"\n🔍 REQUEST TRACE: {request_id}")
     print("=" * 80)
 
-    for entry in sorted(request_entries, key=lambda x: x.get('timestamp', '')):
-        timestamp = entry.get('timestamp', 'unknown')
-        level = entry.get('level', 'INFO')
-        message = entry.get('message', '')
+    for entry in sorted(request_entries, key=lambda x: x.get("timestamp", "")):
+        timestamp = entry.get("timestamp", "unknown")
+        level = entry.get("level", "INFO")
+        message = entry.get("message", "")
 
         print(f"\n[{timestamp}] {level}")
         print(f"  {message}")
 
         # Show important fields
-        for key in ['model', 'api_provider', 'status_code', 'latency_ms', 'total_tokens', 'error']:
+        for key in ["model", "api_provider", "status_code", "latency_ms", "total_tokens", "error"]:
             if key in entry:
                 print(f"  {key}: {entry[key]}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze LiteLLM request logs")
-    parser.add_argument('log_file', type=Path, help="Path to log file")
-    parser.add_argument('--errors', action='store_true', help="Analyze errors only")
-    parser.add_argument('--performance', action='store_true', help="Analyze performance only")
-    parser.add_argument('--usage', action='store_true', help="Analyze usage only")
-    parser.add_argument('--trace', metavar='REQUEST_ID', help="Trace specific request")
-    parser.add_argument('--all', action='store_true', help="Show all analyses (default)")
+    parser.add_argument("log_file", type=Path, help="Path to log file")
+    parser.add_argument("--errors", action="store_true", help="Analyze errors only")
+    parser.add_argument("--performance", action="store_true", help="Analyze performance only")
+    parser.add_argument("--usage", action="store_true", help="Analyze usage only")
+    parser.add_argument("--trace", metavar="REQUEST_ID", help="Trace specific request")
+    parser.add_argument("--all", action="store_true", help="Show all analyses (default)")
 
     args = parser.parse_args()
 
@@ -215,5 +220,5 @@ def main():
         analyze_usage(entries)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

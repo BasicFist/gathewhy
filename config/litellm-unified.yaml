@@ -58,7 +58,7 @@ model_list:
     litellm_params:
       model: openai/local-model  # llama.cpp uses OpenAI-compatible API
       api_base: http://127.0.0.1:8000
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       stream: true
     model_info:
       tags: ["gguf", "cuda", "high-performance"]
@@ -69,7 +69,7 @@ model_list:
     litellm_params:
       model: openai/local-model
       api_base: http://127.0.0.1:8080
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       stream: true
     model_info:
       tags: ["gguf", "cuda", "maximum-performance"]
@@ -108,7 +108,7 @@ model_list:
     litellm_params:
       model: openai/academic_search  # OpenAI-compatible API format
       api_base: http://127.0.0.1:9099/v1
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       custom_llm_provider: openai
       stream: true
     model_info:
@@ -121,7 +121,7 @@ model_list:
     litellm_params:
       model: openai/market_snapshot
       api_base: http://127.0.0.1:9099/v1
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       custom_llm_provider: openai
       stream: true
     model_info:
@@ -133,7 +133,7 @@ model_list:
     litellm_params:
       model: openai/smart_router
       api_base: http://127.0.0.1:9099/v1
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       custom_llm_provider: openai
       stream: true
     model_info:
@@ -146,7 +146,7 @@ model_list:
     litellm_params:
       model: openai/hybrid_search
       api_base: http://127.0.0.1:9099/v1
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       custom_llm_provider: openai
       stream: true
     model_info:
@@ -158,7 +158,7 @@ model_list:
     litellm_params:
       model: openai/consensus
       api_base: http://127.0.0.1:9099/v1
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       custom_llm_provider: openai
       stream: true
     model_info:
@@ -170,7 +170,7 @@ model_list:
     litellm_params:
       model: openai/code_analyzer
       api_base: http://127.0.0.1:9099/v1
-      api_key: "not-needed"
+      api_key: "not-needed"  # pragma: allowlist secret
       custom_llm_provider: openai
       stream: true
     model_info:
@@ -227,146 +227,14 @@ litellm_settings:
     # - Per-provider TTLs can be configured via router_settings below
     # - Monitor cache hit rates: redis-cli --scan --pattern "litellm:*"
 
-  # Logging
+  # Basic logging
   set_verbose: false
   json_logs: true
 
-  # Success/Failure tracking (disabled - langfuse not installed)
-  # success_callback: ["langfuse"]  # Optional: if using Langfuse
-  # failure_callback: ["langfuse"]
+  # ============================================================================
+  # OBSERVABILITY & MONITORING (Phase 2)
+  # ============================================================================
 
-# ============================================================================
-# SECURITY SETTINGS
-# ============================================================================
-
-general_settings:
-  # Master Key Authentication
-  # SECURITY: Set via environment variable for production
-  # Format: Must start with "sk-"
-  # Setup:
-  #   1. Generate: LITELLM_MASTER_KEY="sk-$(openssl rand -hex 16)"
-  #   2. Add to systemd service:
-  #      systemctl --user edit litellm.service
-  #      [Service]
-  #      Environment="LITELLM_MASTER_KEY=sk-..."
-  #   3. Restart: systemctl --user daemon-reload && systemctl --user restart litellm.service
-  #
-  # When enabled, all requests must include header:
-  #   Authorization: Bearer sk-your-master-key
-  #
-  # Uncomment to enable:
-  # master_key: ${LITELLM_MASTER_KEY}
-
-  # Salt Key for DB encryption
-  # IMPORTANT: Do not change after adding models to DB
-  # salt_key: ${LITELLM_SALT_KEY}
-
-  # Database connection (if using DB for model management)
-  # database_url: ${DATABASE_URL}
-
-# ============================================================================
-# ROUTER SETTINGS
-# ============================================================================
-
-router_settings:
-  # Routing strategy
-  routing_strategy: usage-based-routing-v2
-  # Options: simple-shuffle, least-busy, usage-based-routing, latency-based-routing
-
-  # Model fallback
-  model_group_alias:
-    general_chat:
-      - llama3.1-ollama
-      - llama2-13b-vllm
-      - llama-cpp-python
-    code_generation:
-      - qwen-coder
-      - deepseek-coder
-    high_throughput:
-      - llama2-13b-vllm  # vLLM excels here
-
-  # Reliability
-  allowed_fails: 3
-  num_retries: 2
-  timeout: 30  # seconds
-  cooldown_time: 60  # seconds before retrying failed provider
-
-  # Load balancing
-  enable_pre_call_checks: true  # Check provider health before routing
-  redis_host: 127.0.0.1
-  redis_port: 6379
-
-  # Fallback chains (simple list format for LiteLLM v1.x)
-  fallbacks:
-    - llama3.1:8b:
-        - llama3.1-backup
-        - llama-cpp-python
-    - llama2-13b-vllm:
-        - llama3.1-ollama  # Smaller model if vLLM fails
-
-# ============================================================================
-# SERVER SETTINGS
-# ============================================================================
-
-server_settings:
-  port: 4000
-  host: 0.0.0.0  # Listen on all interfaces
-
-  # CORS (for web access)
-  # SECURITY: Restricted to localhost for local network deployment
-  cors:
-    enabled: true
-    allowed_origins:
-      - "http://localhost:*"
-      - "http://127.0.0.1:*"
-      - "http://[::1]:*"
-    # For production with external access, add specific domains:
-    # - "https://yourdomain.com"
-
-  # Health checks
-  health_check_endpoint: /health
-
-  # Monitoring
-  prometheus:
-    enabled: true
-    port: 9090
-
-# ============================================================================
-# ADVANCED FEATURES
-# ============================================================================
-
-# Rate limiting - SECURITY: Enabled with sensible defaults
-rate_limit_settings:
-  enabled: true
-  limits:
-    # General models - moderate limits
-    llama3.1:8b:
-      rpm: 100  # requests per minute
-      tpm: 50000  # tokens per minute
-
-    qwen-coder:
-      rpm: 80
-      tpm: 40000
-
-    # High-throughput models - higher limits
-    llama2-13b-vllm:
-      rpm: 50  # Lower RPM due to higher per-request cost
-      tpm: 100000
-
-    # High-performance models - balanced limits
-    llama-cpp-python:
-      rpm: 120
-      tpm: 60000
-
-    llama-cpp-native:
-      rpm: 150  # Fastest provider
-      tpm: 75000
-
-# ============================================================================
-# OBSERVABILITY & MONITORING (Phase 2)
-# ============================================================================
-
-litellm_settings:
   # Prometheus metrics integration
   callbacks: ["prometheus"]
   service_callback: ["prometheus_system"]  # System health (Redis, latency)
@@ -520,6 +388,133 @@ litellm_settings:
     verbose_logging: false
     log_all_callbacks: false
     log_internal_state: false
+
+# ============================================================================
+# SECURITY SETTINGS
+# ============================================================================
+# Master Key Authentication - Set via environment variable for production
+# Format: Must start with "sk-"
+# Setup:
+#   1. Generate: LITELLM_MASTER_KEY="sk-$(openssl rand -hex 16)"
+#   2. Add to systemd service:
+#      systemctl --user edit litellm.service
+#      [Service]
+#      Environment="LITELLM_MASTER_KEY=sk-..."
+#   3. Restart: systemctl --user daemon-reload && systemctl --user restart litellm.service
+#
+# When enabled, all requests must include header:
+#   Authorization: Bearer sk-your-master-key
+
+# yamllint disable rule:comments-indentation
+general_settings:
+  # All security settings are optional and commented out by default
+  # Uncomment to enable master key authentication:
+  # master_key: ${LITELLM_MASTER_KEY}
+
+  # Uncomment for DB encryption (do not change after adding models to DB):
+  # salt_key: ${LITELLM_SALT_KEY}
+
+  # Uncomment for DB-based model management:
+  # database_url: ${DATABASE_URL}
+# yamllint enable rule:comments-indentation
+
+# ============================================================================
+# ROUTER SETTINGS
+# ============================================================================
+
+router_settings:
+  # Routing strategy
+  routing_strategy: usage-based-routing-v2
+  # Options: simple-shuffle, least-busy, usage-based-routing, latency-based-routing
+
+  # Model fallback
+  model_group_alias:
+    general_chat:
+      - llama3.1-ollama
+      - llama2-13b-vllm
+      - llama-cpp-python
+    code_generation:
+      - qwen-coder
+      - deepseek-coder
+    high_throughput:
+      - llama2-13b-vllm  # vLLM excels here
+
+  # Reliability
+  allowed_fails: 3
+  num_retries: 2
+  timeout: 30  # seconds
+  cooldown_time: 60  # seconds before retrying failed provider
+
+  # Load balancing
+  enable_pre_call_checks: true  # Check provider health before routing
+  redis_host: 127.0.0.1
+  redis_port: 6379
+
+  # Fallback chains (simple list format for LiteLLM v1.x)
+  fallbacks:
+    - llama3.1:8b:
+        - llama3.1-backup
+        - llama-cpp-python
+    - llama2-13b-vllm:
+        - llama3.1-ollama  # Smaller model if vLLM fails
+
+# ============================================================================
+# SERVER SETTINGS
+# ============================================================================
+
+server_settings:
+  port: 4000
+  host: 0.0.0.0  # Listen on all interfaces
+
+  # CORS (for web access)
+  # SECURITY: Restricted to localhost for local network deployment
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:*"
+      - "http://127.0.0.1:*"
+      - "http://[::1]:*"
+      # For production with external access, add specific domains:
+      # - "https://yourdomain.com"
+
+  # Health checks
+  health_check_endpoint: /health
+
+  # Monitoring
+  prometheus:
+    enabled: true
+    port: 9090
+
+# ============================================================================
+# ADVANCED FEATURES
+# ============================================================================
+
+# Rate limiting - SECURITY: Enabled with sensible defaults
+rate_limit_settings:
+  enabled: true
+  limits:
+    # General models - moderate limits
+    llama3.1:8b:
+      rpm: 100  # requests per minute
+      tpm: 50000  # tokens per minute
+
+    qwen-coder:
+      rpm: 80
+      tpm: 40000
+
+    # High-throughput models - higher limits
+    llama2-13b-vllm:
+      rpm: 50  # Lower RPM due to higher per-request cost
+      tpm: 100000
+
+    # High-performance models - balanced limits
+    llama-cpp-python:
+      rpm: 120
+      tpm: 60000
+
+    llama-cpp-native:
+      rpm: 150  # Fastest provider
+      tpm: 75000
 
 # Budget management (optional)
 budget_settings:

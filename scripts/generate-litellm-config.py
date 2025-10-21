@@ -74,7 +74,7 @@ class ConfigGenerator:
                 .strip()
             )
             return f"git-{git_hash}"
-        except:
+        except (subprocess.SubprocessError, OSError, FileNotFoundError):
             # Fallback to timestamp if git not available
             return datetime.now().strftime("%Y%m%d-%H%M%S")
 

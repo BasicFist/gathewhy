@@ -82,8 +82,8 @@ Open Grafana in your browser:
 ```
 
 Or manually visit: http://localhost:3000
-- Username: `admin`
-- Password: `admin`
+- Username: `admin`  # pragma: allowlist secret
+- Password: `admin`  # pragma: allowlist secret
 
 ### Step 5: Run Dashboard Tests
 
@@ -183,7 +183,7 @@ from openai import OpenAI
 # Point to local LiteLLM gateway
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key="dummy-key"  # Not required for local
+    api_key="dummy-key"  # pragma: allowlist secret - Not required for local
 )
 
 # Make a request

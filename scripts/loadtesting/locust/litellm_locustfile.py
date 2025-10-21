@@ -5,9 +5,8 @@ Tests LiteLLM unified backend under various load patterns.
 
 import json
 import random
-from locust import HttpUser, task, between, events
-from locust.runners import MasterRunner
 
+from locust import HttpUser, between, events, task
 
 # Test prompts for realistic load
 PROMPTS = [
@@ -25,9 +24,9 @@ PROMPTS = [
 
 # Model distribution (simulate realistic usage patterns)
 MODEL_WEIGHTS = {
-    "llama3.1:8b": 0.60,            # Primary model (60% of requests)
+    "llama3.1:8b": 0.60,  # Primary model (60% of requests)
     "llama-3.1-8b-instruct": 0.25,  # Secondary (25%)
-    "qwen-coder-vllm": 0.15,        # Specialized (15%)
+    "qwen-coder-vllm": 0.15,  # Specialized (15%)
 }
 
 
@@ -48,24 +47,20 @@ class LiteLLMUser(HttpUser):
 
         # Select model based on weights
         model = random.choices(
-            list(MODEL_WEIGHTS.keys()),
-            weights=list(MODEL_WEIGHTS.values()),
-            k=1
+            list(MODEL_WEIGHTS.keys()), weights=list(MODEL_WEIGHTS.values()), k=1
         )[0]
 
         prompt = random.choice(PROMPTS)
 
         payload = {
             "model": model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
+            "messages": [{"role": "user", "content": prompt}],
             "max_tokens": random.choice([50, 100, 150]),
             "metadata": {
                 "user_id": self.user_id,
                 "environment": "loadtest",
-                "test_type": "standard_completion"
-            }
+                "test_type": "standard_completion",
+            },
         }
 
         with self.client.post(
@@ -73,12 +68,12 @@ class LiteLLMUser(HttpUser):
             json=payload,
             headers={"Content-Type": "application/json"},
             catch_response=True,
-            name="/chat/completions (standard)"
+            name="/chat/completions (standard)",
         ) as response:
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    tokens = data.get('usage', {}).get('total_tokens', 0)
+                    tokens = data.get("usage", {}).get("total_tokens", 0)
                     response.success()
                     print(f"✅ {model}: {tokens} tokens")
                 except json.JSONDecodeError:
@@ -99,16 +94,14 @@ class LiteLLMUser(HttpUser):
 
         payload = {
             "model": model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
+            "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 100,
             "stream": True,
             "metadata": {
                 "user_id": self.user_id,
                 "environment": "loadtest",
-                "test_type": "streaming"
-            }
+                "test_type": "streaming",
+            },
         }
 
         with self.client.post(
@@ -117,7 +110,7 @@ class LiteLLMUser(HttpUser):
             headers={"Content-Type": "application/json"},
             stream=True,
             catch_response=True,
-            name="/chat/completions (streaming)"
+            name="/chat/completions (streaming)",
         ) as response:
             if response.status_code == 200:
                 try:
@@ -137,15 +130,10 @@ class LiteLLMUser(HttpUser):
     def list_models(self):
         """List available models (lightweight health check)."""
 
-        with self.client.get(
-            "/v1/models",
-            catch_response=True,
-            name="/models"
-        ) as response:
+        with self.client.get("/v1/models", catch_response=True, name="/models") as response:
             if response.status_code == 200:
                 try:
-                    data = response.json()
-                    model_count = len(data.get('data', []))
+                    response.json()  # Validate JSON response
                     response.success()
                 except json.JSONDecodeError:
                     response.failure("Invalid JSON response")
@@ -166,24 +154,21 @@ class LiteLLMStressUser(HttpUser):
 
         payload = {
             "model": model,
-            "messages": [
-                {"role": "user", "content": "Say hello"}
-            ],
+            "messages": [{"role": "user", "content": "Say hello"}],
             "max_tokens": 10,  # Minimal generation for speed
-            "metadata": {
-                "test_type": "stress_test"
-            }
+            "metadata": {"test_type": "stress_test"},
         }
 
         self.client.post(
             "/v1/chat/completions",
             json=payload,
             headers={"Content-Type": "application/json"},
-            name="/chat/completions (stress)"
+            name="/chat/completions (stress)",
         )
 
 
 # Custom event handlers for detailed statistics
+
 
 @events.test_start.add_listener
 def on_test_start(environment, **kwargs):

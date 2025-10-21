@@ -113,7 +113,7 @@ class PatternRouting(BaseModel):
         try:
             re.compile(v)
         except re.error as e:
-            raise ValueError(f"Invalid regex pattern: {v} - {e}")
+            raise ValueError(f"Invalid regex pattern: {v} - {e}") from e
         return v
 
 

@@ -266,17 +266,18 @@ class ConfigValidator:
                     extracted_model = parts[1]
 
             # Validate extracted model exists in providers
-            if extracted_model and extracted_model not in all_provider_models:
-                # Check if it's a vLLM HuggingFace path (acceptable)
-                if (
-                    not extracted_model.startswith("meta-llama/")
-                    and not extracted_model.startswith("mistralai/")
-                    and not extracted_model.startswith("Qwen/")
-                ):
-                    self.log_warning(
-                        f"LiteLLM model '{model_name}' references '{extracted_model}' "
-                        f"which is not defined in providers.yaml"
-                    )
+            # Check if it's a vLLM HuggingFace path (acceptable)
+            if (
+                extracted_model
+                and extracted_model not in all_provider_models
+                and not extracted_model.startswith("meta-llama/")
+                and not extracted_model.startswith("mistralai/")
+                and not extracted_model.startswith("Qwen/")
+            ):
+                self.log_warning(
+                    f"LiteLLM model '{model_name}' references '{extracted_model}' "
+                    f"which is not defined in providers.yaml"
+                )
 
     def validate_naming_conventions(self):
         """Validate model naming conventions and detect typos"""
@@ -327,13 +328,12 @@ class ConfigValidator:
         for model_name, route_config in exact_matches.items():
             backend_model = route_config.get("backend_model")
 
-            if backend_model:
-                # Check if backend_model exists in providers
-                if backend_model not in all_provider_models:
-                    self.log_warning(
-                        f"Model '{model_name}' references backend_model '{backend_model}' "
-                        f"which is not defined in providers.yaml"
-                    )
+            # Check if backend_model exists in providers
+            if backend_model and backend_model not in all_provider_models:
+                self.log_warning(
+                    f"Model '{model_name}' references backend_model '{backend_model}' "
+                    f"which is not defined in providers.yaml"
+                )
 
         if not self.warnings[-1:] or "backend_model" not in self.warnings[-1]:
             self.log_success("All backend_model references are valid")

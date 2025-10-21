@@ -4,19 +4,21 @@ LiteLLM Latency Profiler
 Measures end-to-end request latency with detailed breakdown and statistics.
 """
 
-import sys
-import json
-import time
 import argparse
+import json
 import statistics
-from typing import List, Dict, Any
-from dataclasses import dataclass, asdict
+import sys
+import time
+from dataclasses import asdict, dataclass
+from typing import Any
+
 import requests
 
 
 @dataclass
 class LatencyMeasurement:
     """Single latency measurement."""
+
     request_id: str
     model: str
     provider: str
@@ -33,22 +35,17 @@ class LatencyProfiler:
     """Profile request latency with detailed metrics."""
 
     def __init__(self, base_url: str = "http://localhost:4000"):
-        self.base_url = base_url.rstrip('/')
-        self.measurements: List[LatencyMeasurement] = []
+        self.base_url = base_url.rstrip("/")
+        self.measurements: list[LatencyMeasurement] = []
 
-    def measure_request(
-        self,
-        model: str,
-        prompt: str,
-        max_tokens: int = 100
-    ) -> LatencyMeasurement:
+    def measure_request(self, model: str, prompt: str, max_tokens: int = 100) -> LatencyMeasurement:
         """Measure latency for a single request."""
 
         request_data = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
-            "stream": False
+            "stream": False,
         }
 
         # Start timing
@@ -65,22 +62,22 @@ class LatencyProfiler:
                 json=request_data,
                 headers={"Content-Type": "application/json"},
                 timeout=120,
-                stream=True  # Stream to measure TTFB
+                stream=True,  # Stream to measure TTFB
             )
 
             # Measure time to first byte
-            for chunk in response.iter_content(chunk_size=1):
+            for _chunk in response.iter_content(chunk_size=1):
                 if ttfb is None:
                     ttfb = (time.time() - start_time) * 1000
                 break
 
             # Read rest of response
-            response_text = response.content.decode('utf-8')
+            response_text = response.content.decode("utf-8")
             total_time = (time.time() - start_time) * 1000
 
             if response.status_code == 200:
                 data = json.loads(response_text)
-                tokens_generated = data.get('usage', {}).get('completion_tokens', 0)
+                tokens_generated = data.get("usage", {}).get("completion_tokens", 0)
                 success = True
             else:
                 error_msg = f"HTTP {response.status_code}"
@@ -95,7 +92,11 @@ class LatencyProfiler:
         # Calculate metrics
         ttfb_ms = ttfb if ttfb else total_time
         network_ms = total_time - ttfb_ms if ttfb else 0
-        tokens_per_second = (tokens_generated / (total_time / 1000)) if total_time > 0 and tokens_generated > 0 else 0
+        tokens_per_second = (
+            (tokens_generated / (total_time / 1000))
+            if total_time > 0 and tokens_generated > 0
+            else 0
+        )
 
         # Extract provider from model name (simplified)
         provider = "unknown"
@@ -116,22 +117,16 @@ class LatencyProfiler:
             tokens_generated=tokens_generated,
             tokens_per_second=tokens_per_second,
             success=success,
-            error=error_msg
+            error=error_msg,
         )
 
         self.measurements.append(measurement)
         return measurement
 
-    def run_profile(
-        self,
-        model: str,
-        prompt: str,
-        iterations: int = 10,
-        warmup: int = 2
-    ) -> None:
+    def run_profile(self, model: str, prompt: str, iterations: int = 10, warmup: int = 2) -> None:
         """Run profiling with multiple iterations."""
 
-        print(f"🔥 Latency Profiler")
+        print("🔥 Latency Profiler")
         print(f"   Model: {model}")
         print(f"   Prompt: {prompt[:60]}{'...' if len(prompt) > 60 else ''}")
         print(f"   Iterations: {iterations} (+ {warmup} warmup)")
@@ -143,7 +138,7 @@ class LatencyProfiler:
             for i in range(warmup):
                 result = self.measure_request(model, prompt)
                 print(f"   Warmup {i+1}: {result.total_ms:.0f}ms", end="")
-                print(f" ✅" if result.success else f" ❌ {result.error}")
+                print(" ✅" if result.success else f" ❌ {result.error}")
 
             # Clear warmup measurements
             self.measurements.clear()
@@ -153,12 +148,15 @@ class LatencyProfiler:
         print(f"📊 Profiling ({iterations} requests)...")
         for i in range(iterations):
             result = self.measure_request(model, prompt)
-            print(f"   Request {i+1:2d}/{iterations}: "
-                  f"{result.total_ms:6.0f}ms "
-                  f"(TTFB: {result.ttfb_ms:5.0f}ms, "
-                  f"Tokens: {result.tokens_generated:3d}, "
-                  f"Speed: {result.tokens_per_second:5.1f} t/s)", end="")
-            print(f" ✅" if result.success else f" ❌ {result.error}")
+            print(
+                f"   Request {i+1:2d}/{iterations}: "
+                f"{result.total_ms:6.0f}ms "
+                f"(TTFB: {result.ttfb_ms:5.0f}ms, "
+                f"Tokens: {result.tokens_generated:3d}, "
+                f"Speed: {result.tokens_per_second:5.1f} t/s)",
+                end="",
+            )
+            print(" ✅" if result.success else f" ❌ {result.error}")
 
         print()
         self.print_statistics()
@@ -179,8 +177,9 @@ class LatencyProfiler:
 
         # Success rate
         success_rate = (len(successful) / len(self.measurements)) * 100
-        print(f"\nSuccess rate: {len(successful)}/{len(self.measurements)} "
-              f"({success_rate:.1f}%)")
+        print(
+            f"\nSuccess rate: {len(successful)}/{len(self.measurements)} " f"({success_rate:.1f}%)"
+        )
 
         if not successful:
             print("\n❌ No successful requests to analyze")
@@ -214,7 +213,7 @@ class LatencyProfiler:
             for error, count in sorted(error_counts.items(), key=lambda x: x[1], reverse=True):
                 print(f"   {count:2d}x {error}")
 
-    def _print_stats(self, values: List[float]) -> None:
+    def _print_stats(self, values: list[float]) -> None:
         """Print statistics for a list of values."""
         if not values:
             print("   No data")
@@ -242,15 +241,15 @@ class LatencyProfiler:
         """Export measurements to JSON file."""
         data = {
             "measurements": [asdict(m) for m in self.measurements],
-            "summary": self._get_summary()
+            "summary": self._get_summary(),
         }
 
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(data, f, indent=2)
 
         print(f"\n📁 Exported to: {output_file}")
 
-    def _get_summary(self) -> Dict[str, Any]:
+    def _get_summary(self) -> dict[str, Any]:
         """Get summary statistics."""
         successful = [m for m in self.measurements if m.success]
 
@@ -272,18 +271,12 @@ class LatencyProfiler:
 
 def main():
     parser = argparse.ArgumentParser(description="Profile LiteLLM request latency")
-    parser.add_argument('--url', default='http://localhost:4000',
-                       help="LiteLLM base URL")
-    parser.add_argument('--model', default='llama3.1:8b',
-                       help="Model to profile")
-    parser.add_argument('--prompt', default='Count from 1 to 10.',
-                       help="Test prompt")
-    parser.add_argument('--iterations', type=int, default=10,
-                       help="Number of profiling iterations")
-    parser.add_argument('--warmup', type=int, default=2,
-                       help="Number of warmup requests")
-    parser.add_argument('--export', type=str,
-                       help="Export results to JSON file")
+    parser.add_argument("--url", default="http://localhost:4000", help="LiteLLM base URL")
+    parser.add_argument("--model", default="llama3.1:8b", help="Model to profile")
+    parser.add_argument("--prompt", default="Count from 1 to 10.", help="Test prompt")
+    parser.add_argument("--iterations", type=int, default=10, help="Number of profiling iterations")
+    parser.add_argument("--warmup", type=int, default=2, help="Number of warmup requests")
+    parser.add_argument("--export", type=str, help="Export results to JSON file")
 
     args = parser.parse_args()
 
@@ -291,10 +284,7 @@ def main():
 
     try:
         profiler.run_profile(
-            model=args.model,
-            prompt=args.prompt,
-            iterations=args.iterations,
-            warmup=args.warmup
+            model=args.model, prompt=args.prompt, iterations=args.iterations, warmup=args.warmup
         )
 
         if args.export:
@@ -307,5 +297,5 @@ def main():
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

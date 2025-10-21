@@ -3,9 +3,10 @@
 Playwright test to validate Grafana dashboard is configured correctly
 """
 
+import time
+
 import pytest
 from playwright.sync_api import Page, expect
-import time
 
 
 @pytest.mark.monitoring
@@ -19,16 +20,17 @@ class TestGrafanaDashboard:
     def setup_grafana(self):
         """Wait for Grafana to be ready"""
         import requests
+
         max_retries = 30
         for i in range(max_retries):
             try:
                 response = requests.get(f"{self.GRAFANA_URL}/api/health", timeout=2)
                 if response.status_code == 200:
-                    print(f"✓ Grafana is ready")
+                    print("✓ Grafana is ready")
                     break
-            except Exception as e:
+            except Exception:
                 if i == max_retries - 1:
-                    raise Exception(f"Grafana not available after {max_retries} attempts")
+                    raise Exception(f"Grafana not available after {max_retries} attempts") from None
                 time.sleep(2)
 
     def test_grafana_login(self, page: Page):
@@ -53,11 +55,11 @@ class TestGrafanaDashboard:
             page.wait_for_url("**/", timeout=10000)
 
             # Skip change password if prompted
-            if "change-password" in page.url or page.locator('text=Skip').is_visible():
-                page.click('text=Skip')
+            if "change-password" in page.url or page.locator("text=Skip").is_visible():
+                page.click("text=Skip")
 
         # Verify we're logged in
-        expect(page.locator('body')).to_be_visible()
+        expect(page.locator("body")).to_be_visible()
         print("   ✓ Successfully logged in to Grafana")
 
     def test_datasources_configured(self, page: Page):
@@ -69,12 +71,12 @@ class TestGrafanaDashboard:
         page.wait_for_load_state("networkidle")
 
         # Check for Prometheus datasource
-        prometheus_locator = page.locator('text=Prometheus')
+        prometheus_locator = page.locator("text=Prometheus")
         expect(prometheus_locator.first).to_be_visible()
         print("   ✓ Prometheus datasource found")
 
         # Check for Loki datasource
-        loki_locator = page.locator('text=Loki')
+        loki_locator = page.locator("text=Loki")
         expect(loki_locator.first).to_be_visible()
         print("   ✓ Loki datasource found")
 
@@ -92,7 +94,7 @@ class TestGrafanaDashboard:
         page.wait_for_timeout(1000)  # Wait for search results
 
         # Check dashboard appears in results
-        dashboard_link = page.locator(f'text={self.DASHBOARD_NAME}')
+        dashboard_link = page.locator(f"text={self.DASHBOARD_NAME}")
         expect(dashboard_link.first).to_be_visible()
         print(f"   ✓ Dashboard '{self.DASHBOARD_NAME}' found")
 
@@ -110,7 +112,7 @@ class TestGrafanaDashboard:
         page.wait_for_timeout(1000)
 
         # Click on the dashboard
-        dashboard_link = page.locator(f'text={self.DASHBOARD_NAME}').first
+        dashboard_link = page.locator(f"text={self.DASHBOARD_NAME}").first
         dashboard_link.click()
 
         # Wait for dashboard to load
@@ -129,14 +131,14 @@ class TestGrafanaDashboard:
             "System CPU Usage",
             "System Memory Usage",
             "Request Distribution by Model",
-            "Active Alerts"
+            "Active Alerts",
         ]
 
         found_panels = []
         missing_panels = []
 
         for panel_title in expected_panels:
-            panel = page.locator(f'text={panel_title}').first
+            panel = page.locator(f"text={panel_title}").first
             if panel.is_visible(timeout=2000):
                 found_panels.append(panel_title)
                 print(f"   ✓ Found panel: {panel_title}")
@@ -163,13 +165,13 @@ class TestGrafanaDashboard:
         search_box.fill("AI Backend")
         page.wait_for_timeout(1000)
 
-        dashboard_link = page.locator(f'text={self.DASHBOARD_NAME}').first
+        dashboard_link = page.locator(f"text={self.DASHBOARD_NAME}").first
         dashboard_link.click()
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(3000)
 
         # Check for "No data" indicators
-        no_data_elements = page.locator('text=No data').count()
+        no_data_elements = page.locator("text=No data").count()
 
         if no_data_elements > 0:
             print(f"   ⚠ Warning: {no_data_elements} panels showing 'No data'")
@@ -199,9 +201,9 @@ class TestGrafanaDashboard:
 
         # Check for success message
         success_indicators = [
-            page.locator('text=Data source is working'),
-            page.locator('text=successfully'),
-            page.locator('[data-testid="data-testid Alert success"]')
+            page.locator("text=Data source is working"),
+            page.locator("text=successfully"),
+            page.locator('[data-testid="data-testid Alert success"]'),
         ]
 
         success_found = any(indicator.is_visible(timeout=5000) for indicator in success_indicators)
@@ -221,17 +223,19 @@ class TestGrafanaDashboard:
         page.wait_for_load_state("networkidle")
 
         # Make sure Prometheus is selected as datasource
-        datasource_picker = page.locator('[data-testid="data-testid Data source picker select container"]').first
+        datasource_picker = page.locator(
+            '[data-testid="data-testid Data source picker select container"]'
+        ).first
         if datasource_picker.is_visible():
             datasource_picker.click()
             page.wait_for_timeout(500)
-            page.locator('text=Prometheus').first.click()
+            page.locator("text=Prometheus").first.click()
             page.wait_for_timeout(500)
 
         # Enter a simple query
         query_input = page.locator('textarea[placeholder*="Enter a PromQL query"]').first
         if not query_input.is_visible():
-            query_input = page.locator('textarea').first
+            query_input = page.locator("textarea").first
 
         query_input.fill("up")
 
@@ -256,7 +260,7 @@ class TestGrafanaDashboard:
 
         # Check if alert rules are present
         # Note: This depends on Prometheus alert rules being imported
-        alert_section = page.locator('text=Alert rules').first
+        alert_section = page.locator("text=Alert rules").first
 
         if alert_section.is_visible():
             print("   ✓ Alert rules section is visible")
@@ -286,4 +290,5 @@ def browser_context_args(browser_context_args):
 if __name__ == "__main__":
     # Run tests with pytest
     import sys
+
     sys.exit(pytest.main([__file__, "-v", "-s"]))

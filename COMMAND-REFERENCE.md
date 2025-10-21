@@ -178,7 +178,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:4000/v1",
-    api_key="dummy-key"
+    api_key="dummy-key"  # pragma: allowlist secret
 )
 
 response = client.chat.completions.create(

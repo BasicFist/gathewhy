@@ -58,6 +58,7 @@ model_list:
     litellm_params:
       model: openai/local-model  # llama.cpp uses OpenAI-compatible API
       api_base: http://127.0.0.1:8000
+      api_key: "not-needed"
       stream: true
     model_info:
       tags: ["gguf", "cuda", "high-performance"]
@@ -68,6 +69,7 @@ model_list:
     litellm_params:
       model: openai/local-model
       api_base: http://127.0.0.1:8080
+      api_key: "not-needed"
       stream: true
     model_info:
       tags: ["gguf", "cuda", "maximum-performance"]
@@ -97,6 +99,84 @@ model_list:
   #   model_info:
   #     tags: ["chat", "7b", "vllm"]
   #     provider: vllm
+
+  # ============================================================================
+  # OPENWEBUI PIPELINES (INTEGRATED)
+  # ============================================================================
+
+  - model_name: academic_search
+    litellm_params:
+      model: openai/academic_search  # OpenAI-compatible API format
+      api_base: http://127.0.0.1:9099/v1
+      api_key: "not-needed"
+      custom_llm_provider: openai
+      stream: true
+    model_info:
+      tags: ["pipeline", "academic", "arxiv", "pubmed"]
+      provider: openwebui_pipelines
+      description: "Search academic papers from arXiv and PubMed"
+      notes: "Uses toolsrv for arXiv/PubMed APIs"
+
+  - model_name: market_snapshot
+    litellm_params:
+      model: openai/market_snapshot
+      api_base: http://127.0.0.1:9099/v1
+      api_key: "not-needed"
+      custom_llm_provider: openai
+      stream: true
+    model_info:
+      tags: ["pipeline", "market", "data"]
+      provider: openwebui_pipelines
+      description: "Market data snapshots with ticker extraction"
+
+  - model_name: smart_router
+    litellm_params:
+      model: openai/smart_router
+      api_base: http://127.0.0.1:9099/v1
+      api_key: "not-needed"
+      custom_llm_provider: openai
+      stream: true
+    model_info:
+      tags: ["pipeline", "router", "query-classification"]
+      provider: openwebui_pipelines
+      description: "Query classification routing (code→deepseek, math→qwen, vision→llava)"
+      notes: "Depends on Ollama models being available"
+
+  - model_name: hybrid_search
+    litellm_params:
+      model: openai/hybrid_search
+      api_base: http://127.0.0.1:9099/v1
+      api_key: "not-needed"
+      custom_llm_provider: openai
+      stream: true
+    model_info:
+      tags: ["pipeline", "search", "hybrid", "rag"]
+      provider: openwebui_pipelines
+      description: "Hybrid keyword + semantic search"
+
+  - model_name: consensus
+    litellm_params:
+      model: openai/consensus
+      api_base: http://127.0.0.1:9099/v1
+      api_key: "not-needed"
+      custom_llm_provider: openai
+      stream: true
+    model_info:
+      tags: ["pipeline", "consensus", "multi-model"]
+      provider: openwebui_pipelines
+      description: "Multi-model consensus generation"
+
+  - model_name: code_analyzer
+    litellm_params:
+      model: openai/code_analyzer
+      api_base: http://127.0.0.1:9099/v1
+      api_key: "not-needed"
+      custom_llm_provider: openai
+      stream: true
+    model_info:
+      tags: ["pipeline", "code", "analysis"]
+      provider: openwebui_pipelines
+      description: "Code analysis and review pipeline"
 
   # ============================================================================
   # ROUTER CONFIGURATIONS
@@ -131,21 +211,29 @@ litellm_settings:
   num_retries: 3
   timeout: 300
 
-  # Caching (Redis)
+  # Caching (Redis) with Provider Namespacing
+  # Addresses Codex risk: "Redis cache implications - vLLM's high throughput could surge cache keys"
   cache: true
   cache_params:
     type: redis
     host: 127.0.0.1
     port: 6379
     ttl: 3600  # 1 hour cache
+    namespace: "litellm"  # Global namespace prefix
+
+    # Provider-specific cache isolation strategy:
+    # - Uses model_name as part of cache key (automatic in LiteLLM)
+    # - Global namespace prevents conflicts with other Redis users
+    # - Per-provider TTLs can be configured via router_settings below
+    # - Monitor cache hit rates: redis-cli --scan --pattern "litellm:*"
 
   # Logging
   set_verbose: false
   json_logs: true
 
-  # Success/Failure tracking
-  success_callback: ["langfuse"]  # Optional: if using Langfuse
-  failure_callback: ["langfuse"]
+  # Success/Failure tracking (disabled - langfuse not installed)
+  # success_callback: ["langfuse"]  # Optional: if using Langfuse
+  # failure_callback: ["langfuse"]
 
 # ============================================================================
 # SECURITY SETTINGS
@@ -208,15 +296,12 @@ router_settings:
   redis_host: 127.0.0.1
   redis_port: 6379
 
-  # Fallback chains
+  # Fallback chains (simple list format for LiteLLM v1.x)
   fallbacks:
-    - model: llama3.1:8b
-      fallback_models:
+    - llama3.1:8b:
         - llama3.1-backup
         - llama-cpp-python
-
-    - model: llama2-13b-vllm
-      fallback_models:
+    - llama2-13b-vllm:
         - llama3.1-ollama  # Smaller model if vLLM fails
 
 # ============================================================================

@@ -135,16 +135,19 @@ curl http://localhost:4000/v1/models | jq
 - Performance: Fast (~50-150ms)
 - Provider: Ollama
 
-**Code Generation**: `qwen-coder`
+**Code Generation (Ollama)**: `qwen-coder`
 - Best for: Writing code, explaining code, debugging
 - Performance: Fast (~50-150ms)
 - Context: 32K tokens (exceptional)
-- Provider: Ollama
+- Provider: Ollama (GGUF quantized)
 
-**High Throughput**: `llama2-13b-vllm`
-- Best for: Many concurrent requests, batch processing
-- Performance: ~100-300ms (batched)
-- Provider: vLLM
+**Code Generation (vLLM)**: `qwen-coder-vllm` or `llama2-13b-vllm`
+- Best for: Code generation with high concurrency
+- Performance: ~100-200ms TTFT (first token)
+- Context: 4096 tokens
+- Provider: vLLM (AWQ 4-bit quantized)
+- Model: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ
+- Concurrency: Excellent (33.63x for 4096-token requests)
 
 **Low Latency**: `llama-cpp-python` or `llama-cpp-native`
 - Best for: Single-request speed priority
@@ -463,6 +466,86 @@ prompts = [
 ]
 summaries = asyncio.run(processor.process_batch(prompts))
 ```
+
+### Pattern 4: vLLM Code Generation
+
+```python
+from openai import OpenAI
+
+class VLLMCodeGenerator:
+    """Leverage vLLM's high concurrency for code generation tasks"""
+    def __init__(self):
+        self.client = OpenAI(
+            base_url="http://localhost:4000/v1",
+            api_key="not-needed"
+        )
+
+    def generate_code(
+        self,
+        task: str,
+        language: str = "python",
+        streaming: bool = True
+    ) -> str:
+        """Generate code using vLLM's AWQ-quantized Qwen model"""
+        response = self.client.chat.completions.create(
+            model="qwen-coder-vllm",  # Routes to vLLM
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"You are an expert {language} programmer. Write clean, production-ready code."
+                },
+                {"role": "user", "content": task}
+            ],
+            temperature=0.3,  # Lower for code accuracy
+            max_tokens=1024,
+            stream=streaming
+        )
+
+        if streaming:
+            # Stream tokens for better UX
+            full_response = ""
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    print(content, end="", flush=True)
+                    full_response += content
+            print()  # Newline after streaming
+            return full_response
+        else:
+            return response.choices[0].message.content
+
+    def batch_generate(self, tasks: list[str]) -> list[str]:
+        """Leverage vLLM's 33.63x concurrency for batch code generation"""
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [
+                executor.submit(self.generate_code, task, streaming=False)
+                for task in tasks
+            ]
+            return [f.result() for f in concurrent.futures.as_completed(futures)]
+
+# Usage
+generator = VLLMCodeGenerator()
+
+# Single code generation with streaming
+print("Generating prime number function...")
+code = generator.generate_code("Write a Python function to check if a number is prime")
+
+# Batch code generation (leverages vLLM's high concurrency)
+tasks = [
+    "Write a function to reverse a string",
+    "Write a function to find factorial",
+    "Write a function for binary search"
+]
+results = generator.batch_generate(tasks)
+```
+
+**Why vLLM for Code Generation?**
+- **High Concurrency**: 33.63x parallel requests (vs 2-4x for Ollama)
+- **Code Specialist**: Qwen2.5-Coder trained specifically for code
+- **Production Quality**: AWQ quantization with minimal quality loss
+- **Streaming Support**: Real-time token delivery for better UX
 
 ## Error Handling
 

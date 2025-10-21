@@ -1,0 +1,166 @@
+# Port Registry
+# Explicit port allocation for all AI backend services
+# Prevents port conflicts and provides documentation
+
+# ============================================================================
+# CORE SERVICES
+# ============================================================================
+
+litellm_gateway:
+  port: 4000
+  protocol: http
+  required: true
+  service: litellm.service
+  description: "LiteLLM unified gateway - primary entry point"
+  health_check: "curl -f http://localhost:4000/health"
+
+# ============================================================================
+# LLM INFERENCE PROVIDERS
+# ============================================================================
+
+ollama:
+  port: 11434
+  protocol: http
+  required: true
+  service: ollama.service
+  description: "Ollama local model server"
+  health_check: "curl -f http://localhost:11434/api/tags"
+
+llama_cpp_python:
+  port: 8000
+  protocol: http
+  required: false
+  service: llamacpp-python.service
+  description: "llama.cpp Python bindings server"
+  health_check: "curl -f http://localhost:8000/v1/models"
+
+llama_cpp_native:
+  port: 8080
+  protocol: http
+  required: false
+  service: null  # Manual launch
+  description: "llama.cpp native C++ server"
+  health_check: "curl -f http://localhost:8080/v1/models"
+
+vllm:
+  port: 8001
+  protocol: http
+  required: false
+  service: null  # Launched via venv
+  description: "vLLM high-throughput inference engine"
+  health_check: "curl -f http://localhost:8001/v1/models"
+
+# ============================================================================
+# OPENWEBUI ECOSYSTEM
+# ============================================================================
+
+openwebui_frontend:
+  port: 5000
+  protocol: http
+  required: false
+  service: openwebui-native.service
+  description: "OpenWebUI web interface"
+  health_check: "curl -f http://localhost:5000/"
+
+openwebui_pipelines:
+  port: 9099
+  protocol: http
+  required: false
+  service: openwebui-pipelines.service
+  description: "OpenWebUI custom pipelines server"
+  health_check: "curl -f http://localhost:9099/health"
+
+openwebui_toolsrv:
+  port: 8600
+  protocol: http
+  required: false
+  service: toolsrv.service
+  description: "OpenWebUI FastAPI tool server (arXiv, PubMed)"
+  health_check: "curl -f http://localhost:8600/health"
+
+# ============================================================================
+# MONITORING & OBSERVABILITY
+# ============================================================================
+
+prometheus:
+  port: 9090
+  protocol: http
+  required: false
+  service: prometheus.service
+  description: "Prometheus metrics collection"
+  health_check: "curl -f http://localhost:9090/-/healthy"
+
+grafana:
+  port: 3000
+  protocol: http
+  required: false
+  service: grafana.service
+  description: "Grafana visualization dashboards"
+  health_check: "curl -f http://localhost:3000/api/health"
+
+loki:
+  port: 3100
+  protocol: http
+  required: false
+  service: loki.service
+  description: "Loki log aggregation"
+  health_check: "curl -f http://localhost:3100/ready"
+
+promtail:
+  port: 9080
+  protocol: http
+  required: false
+  service: promtail.service
+  description: "Promtail log shipping agent"
+  health_check: "curl -f http://localhost:9080/ready"
+
+# ============================================================================
+# INFRASTRUCTURE
+# ============================================================================
+
+redis:
+  port: 6379
+  protocol: tcp
+  required: true
+  service: redis-server.service
+  description: "Redis cache server for LiteLLM"
+  health_check: "redis-cli -p 6379 ping"
+
+# ============================================================================
+# RESERVED/FUTURE PORTS
+# ============================================================================
+
+reserved:
+  # Reserve ports for future expansion
+  embedding_service:
+    port: 8002
+    description: "Future: Dedicated embedding service (sentence-transformers)"
+
+  ab_testing_service:
+    port: 8003
+    description: "Future: A/B testing framework API"
+
+  web_ui:
+    port: 5001
+    description: "Future: Dedicated testing/experimentation web UI"
+
+# ============================================================================
+# PORT RANGES
+# ============================================================================
+
+ranges:
+  llm_inference: "8000-8999"
+  web_interfaces: "5000-5999"
+  monitoring: "3000-3999,9000-9999"
+  infrastructure: "6000-6999"
+
+# ============================================================================
+# METADATA
+# ============================================================================
+
+metadata:
+  version: "1.0"
+  last_updated: "2025-10-21"
+  total_ports_allocated: 13
+  total_ports_reserved: 3
+  conflict_check_command: "./scripts/check-port-conflicts.sh"

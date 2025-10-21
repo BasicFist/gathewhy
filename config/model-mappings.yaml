@@ -19,13 +19,13 @@ exact_matches:
     fallback: null
     description: "Code generation specialist"
 
-  # vLLM models (when integrated)
-  "llama2-13b-vllm":
+  # vLLM models (AWQ quantized)
+  "qwen-coder-7b-vllm":
     provider: vllm
     priority: primary
     fallback: ollama
-    description: "High-throughput 13B chat model via vLLM"
-    backend_model: "meta-llama/Llama-2-13b-chat-hf"
+    description: "AWQ-quantized 7B code generation model via vLLM"
+    backend_model: "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
 
   # llama.cpp models
   "llama-cpp-default":
@@ -40,6 +40,11 @@ exact_matches:
 
 patterns:
   # HuggingFace model paths → vLLM
+  - pattern: "^Qwen/Qwen2\\.5-Coder.*"
+    provider: vllm
+    fallback: ollama
+    description: "Qwen Coder models via vLLM (AWQ quantized)"
+
   - pattern: "^meta-llama/.*"
     provider: vllm
     fallback: ollama

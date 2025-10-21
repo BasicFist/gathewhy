@@ -129,6 +129,8 @@ Standard OpenAI API format works across all providers.
 
 ## Documentation
 
+- **Quick Start**: `docs/quick-start.md` - Get started in under 5 minutes
+- **Model Selection**: `docs/model-selection-guide.md` - Choose the right model for your use case
 - **Architecture**: `docs/architecture.md` - Complete system design
 - **Adding Providers**: `docs/adding-providers.md` - Integration guide
 - **API Usage**: `docs/consuming-api.md` - How to use from LAB projects
@@ -145,6 +147,127 @@ serena activate ai-backend-unified
 # Access memories for architecture knowledge
 # Serena will have complete context about all providers and routing
 ```
+
+## Configuration Hot-Reload
+
+Safe configuration updates without service downtime:
+
+```bash
+# Validate configuration before deploying
+./scripts/reload-litellm-config.sh --validate-only
+
+# Deploy with confirmation
+./scripts/reload-litellm-config.sh
+
+# Force reload without confirmation
+./scripts/reload-litellm-config.sh --force
+```
+
+**Features**:
+- ✅ Automatic configuration validation (YAML syntax, required fields)
+- ✅ Automatic backup before reload (timestamped in `backups/`)
+- ✅ Service health verification after reload
+- ✅ Automatic rollback on failure
+- ✅ Configuration diff display before reload
+
+**Workflow**:
+1. Update `config/litellm-unified.yaml`
+2. Run validation: `./scripts/reload-litellm-config.sh --validate-only`
+3. Review changes and reload: `./scripts/reload-litellm-config.sh`
+4. Service automatically validates and rolls back if issues detected
+
+## Configuration Consistency Validation
+
+Automatic validation of model name consistency across all configuration files:
+
+```bash
+# Manual validation
+python3 scripts/validate-config-consistency.py
+
+# Automatic validation on git commit (pre-commit hook installed)
+git add config/
+git commit -m "Update model configuration"  # Validation runs automatically
+```
+
+**Validation Checks**:
+- ✅ Model names in `providers.yaml` match `model-mappings.yaml`
+- ✅ Routing targets reference existing active providers
+- ✅ Backend model references are valid
+- ✅ LiteLLM model definitions align with provider models
+- ✅ Naming convention consistency (detect typos)
+
+**Pre-Commit Hook**:
+- Automatically validates configuration before commits
+- Blocks commits with validation errors
+- Prevents deployment of inconsistent configurations
+- Addresses Codex-identified risk: "Model name consistency across configs"
+
+**Bypass (not recommended)**:
+```bash
+git commit --no-verify  # Skip validation hook
+```
+
+## Redis Cache Management
+
+Provider-isolated caching with monitoring and management tools:
+
+```bash
+# View cache statistics
+./scripts/monitor-redis-cache.sh
+
+# List all cache keys
+./scripts/monitor-redis-cache.sh --keys
+
+# Continuous monitoring (updates every 5s)
+./scripts/monitor-redis-cache.sh --watch
+
+# Flush cache (requires confirmation)
+./scripts/monitor-redis-cache.sh --flush
+```
+
+**Cache Strategy**:
+- ✅ Global namespace prefix (`litellm:`) prevents conflicts
+- ✅ Model name automatically included in cache keys
+- ✅ Per-provider cache isolation via model naming
+- ✅ Configurable TTL (default: 1 hour)
+- ✅ Addresses Codex-identified risk: "Redis cache implications"
+
+**Monitoring**:
+- Cache hit rate tracking
+- Provider-specific key counts
+- Memory usage statistics
+- TTL management
+
+## Port Conflict Management
+
+Explicit port registry and automated conflict detection:
+
+```bash
+# Check all registered ports
+./scripts/check-port-conflicts.sh
+
+# Check only required ports (litellm_gateway, ollama, redis)
+./scripts/check-port-conflicts.sh --required
+
+# Check specific port
+./scripts/check-port-conflicts.sh --port 8001
+
+# Attempt to free conflicting ports (kills processes with confirmation)
+./scripts/check-port-conflicts.sh --fix
+```
+
+**Port Registry** (`config/ports.yaml`):
+- ✅ 13 service ports documented (LiteLLM, Ollama, vLLM, llama.cpp, OpenWebUI, monitoring)
+- ✅ 3 reserved ports for future expansion
+- ✅ Port ranges defined by service category
+- ✅ Health check commands for each service
+- ✅ Addresses Codex-identified risk: "Port conflicts"
+
+**Conflict Detection**:
+- Multi-method port checking (netstat, ss, lsof)
+- Process identification for occupied ports
+- Optional automated conflict resolution
+- Supports multiple check modes (all, required, specific)
 
 ## Health Monitoring
 
@@ -281,7 +404,7 @@ For complete testing documentation, see [`tests/README.md`](tests/README.md).
 | Ollama | 11434 | ✅ Active | llama3.1:8b, qwen2.5-coder:7b |
 | llama.cpp (Python) | 8000 | ✅ Active | GGUF models |
 | llama.cpp (Native) | 8080 | ✅ Active | GGUF models |
-| vLLM | 8001 | 🔄 Integrating | Llama-2-13b-chat-hf |
+| vLLM | 8001 | ✅ Active | Qwen2.5-Coder-7B-Instruct-AWQ |
 
 ## Implementation Status
 
@@ -315,11 +438,25 @@ For complete testing documentation, see [`tests/README.md`](tests/README.md).
    - 8 alert groups with 3 severity levels
    - Setup automation script
 
+### Recently Completed ✅
+
+- **vLLM Provider Integration** (2025-10-21)
+  - AWQ-quantized Qwen2.5-Coder-7B model deployed
+  - Production integration via LiteLLM gateway
+  - Comprehensive testing and validation complete
+
+- **Phase 1: Foundation & Risk Mitigation** (2025-10-21)
+  - Configuration hot-reload script with automatic backup/rollback
+  - Configuration consistency validator (model name validation)
+  - Pre-commit git hook for automatic validation
+  - Redis cache namespacing with monitoring tools
+  - Port conflict detection and management system
+  - Addresses Codex-identified deployment risks (4/6 features complete)
+
 ### In Progress 🔄
 
-- vLLM provider integration and testing
-- Production deployment to LAB infrastructure
 - Documentation refinement based on usage feedback
+- Performance monitoring and optimization
 
 ### Future Enhancements ⏳
 

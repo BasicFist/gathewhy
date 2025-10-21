@@ -5,7 +5,7 @@ Provides strong typing and semantic validation beyond YAML syntax checking
 """
 
 from typing import List, Optional, Dict, Any, Literal
-from pydantic import BaseModel, Field, HttpUrl, validator, root_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 import yaml
 import sys
 from pathlib import Path
@@ -25,23 +25,24 @@ class ProviderModel(BaseModel):
 
 class ProviderConfig(BaseModel):
     """Individual provider configuration"""
-    type: Literal["ollama", "llama_cpp", "vllm", "openai", "anthropic", "openai_compatible"]
+    type: Literal["ollama", "llama_cpp", "vllm", "openai", "anthropic", "openai_compatible", "tool_server", "web_ui"]
     base_url: str
     status: Literal["active", "disabled", "pending_integration", "template"]
     description: str
-    models: Optional[List[ProviderModel]] = []
+    models: Optional[List[ProviderModel | str]] = []  # Allow both ProviderModel objects and simple strings
     health_endpoint: Optional[str] = None
     features: Optional[List[str]] = []
     configuration: Optional[Dict[str, Any]] = {}
 
-    @validator('base_url')
+    @field_validator('base_url')
+    @classmethod
     def validate_url_format(cls, v):
         """Validate URL format without requiring https"""
         if not v.startswith(('http://', 'https://')):
             raise ValueError(f'URL must start with http:// or https://, got: {v}')
-        # Basic validation of format
+        # Basic validation of format (allow placeholders for templates)
         import re
-        if not re.match(r'^https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?$', v):
+        if not re.match(r'^https?://[a-zA-Z0-9._-]+(:[A-Z0-9_]+|:[0-9]+)?(/.*)?$', v):
             raise ValueError(f'Invalid URL format: {v}')
         return v
 
@@ -51,14 +52,14 @@ class ProvidersYAML(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
     health_checks: Optional[Dict[str, Any]] = {}
 
-    @root_validator
-    def validate_active_providers(cls, values):
+    @model_validator(mode='after')
+    def validate_active_providers(self):
         """Ensure at least one provider is active"""
-        providers = values.get('providers', {})
+        providers = self.providers
         active = [p for p in providers.values() if p.status == 'active']
         if len(active) == 0:
             raise ValueError('At least one provider must have status="active"')
-        return values
+        return self
 
 # ============================================================================
 # MODEL MAPPINGS CONFIGURATION MODELS
@@ -79,7 +80,8 @@ class PatternRouting(BaseModel):
     fallback: Optional[str] = None
     description: str
 
-    @validator('pattern')
+    @field_validator('pattern')
+    @classmethod
     def validate_regex(cls, v):
         """Validate that pattern is valid regex"""
         import re
@@ -101,8 +103,8 @@ class CapabilityRouting(BaseModel):
 
 class FallbackChain(BaseModel):
     """Fallback chain configuration"""
-    description: str
-    chain: List[Dict[str, Any]]
+    description: Optional[str] = "Fallback chain"  # Make description optional with default
+    chain: List[str | Dict[str, Any]]  # Allow both strings and dictionaries
     retry_attempts: Optional[int] = 3
     retry_delay_ms: Optional[int] = 500
 
@@ -117,11 +119,11 @@ class ModelMappingsYAML(BaseModel):
     special_cases: Optional[Dict[str, Any]] = {}
     metadata: Optional[Dict[str, Any]] = {}
 
-    @root_validator
-    def validate_provider_references(cls, values):
+    @model_validator(mode='after')
+    def validate_provider_references(self):
         """Validate that referenced providers exist (requires providers.yaml context)"""
         # Note: Cross-file validation happens in validate_all_configs()
-        return values
+        return self
 
 # ============================================================================
 # LITELLM CONFIGURATION MODELS
@@ -133,7 +135,8 @@ class LiteLLMParams(BaseModel):
     api_base: str
     stream: Optional[bool] = True
 
-    @validator('api_base')
+    @field_validator('api_base')
+    @classmethod
     def validate_api_base(cls, v):
         """Validate API base URL format"""
         if not v.startswith(('http://', 'https://')):
@@ -182,7 +185,8 @@ class ServerSettings(BaseModel):
     health_check_endpoint: Optional[str] = "/health"
     prometheus: Optional[Dict[str, Any]] = {}
 
-    @validator('port')
+    @field_validator('port')
+    @classmethod
     def validate_port_range(cls, v):
         """Ensure port is in valid range"""
         if not (1 <= v <= 65535):
@@ -201,13 +205,13 @@ class LiteLLMUnifiedYAML(BaseModel):
     debug_router: Optional[bool] = False
     test_mode: Optional[bool] = False
 
-    @root_validator
-    def validate_model_list(cls, values):
+    @model_validator(mode='after')
+    def validate_model_list(self):
         """Validate that model_list is not empty"""
-        model_list = values.get('model_list', [])
+        model_list = self.model_list
         if len(model_list) == 0:
             raise ValueError('model_list cannot be empty')
-        return values
+        return self
 
 # ============================================================================
 # CROSS-CONFIGURATION VALIDATION
@@ -252,7 +256,11 @@ def validate_all_configs(providers_path: Path, mappings_path: Path, litellm_path
         # Check fallback chains reference active providers
         for chain_name, chain in mappings.fallback_chains.items():
             for step in chain.chain:
-                provider = step.get('primary') or step.get('secondary') or step.get('tertiary')
+                # Handle both string and dictionary formats
+                if isinstance(step, str):
+                    provider = step
+                else:
+                    provider = step.get('primary') or step.get('secondary') or step.get('tertiary')
                 if provider and provider not in active_providers:
                     errors.append(
                         f"Fallback chain '{chain_name}' references inactive provider '{provider}'"

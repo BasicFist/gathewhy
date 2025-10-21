@@ -249,47 +249,145 @@ nvidia-smi
 
 ### Issue: vLLM Integration Not Working
 
+**Current Deployment** (2025-10-21):
+- Model: `Qwen/Qwen2.5-Coder-7B-Instruct-AWQ`
+- Port: 8001
+- Installation: Manual (vLLM 0.11.0 in `~/venvs/vllm`)
+
 **Symptoms**:
 - vLLM models return errors
-- "llama2-13b-vllm" not found
+- "qwen-coder-7b-vllm" not found
+- CUDA out of memory errors
+- vLLM server not responding
 
 **Diagnosis**:
 ```bash
 # Check vLLM service
 curl http://localhost:8001/v1/models
 
-# Check CrushVLLM status
-cd ../CRUSHVLLM
-./crush status
+# Check if vLLM process is running
+ps aux | grep vllm
+
+# Check GPU memory
+nvidia-smi
+
+# Check vLLM logs
+tail -50 ~/vllm_awq.log
 ```
 
 **Solutions**:
 
 1. **vLLM not started**:
 ```bash
-cd ../CRUSHVLLM
-./crush start
+# Activate venv and start server
+source ~/venvs/vllm/bin/activate
+vllm serve Qwen/Qwen2.5-Coder-7B-Instruct-AWQ \
+  --port 8001 \
+  --gpu-memory-utilization 0.9 \
+  --max-model-len 4096
 ```
 
-2. **Model not loaded**:
+2. **CUDA Out of Memory errors**:
 ```bash
-# Check which model is loaded
-curl http://localhost:8001/v1/models | jq
+# Symptoms: "Available KV cache memory: -X.XX GiB" (negative!)
+# Root cause: Model too large for available VRAM
 
-# Load correct model
-cd ../CRUSHVLLM
-./crush model load meta-llama/Llama-2-13b-chat-hf
+# Solution 1: Use AWQ quantized model (recommended)
+vllm serve Qwen/Qwen2.5-Coder-7B-Instruct-AWQ \  # AWQ quantized
+  --port 8001 \
+  --gpu-memory-utilization 0.9 \
+  --max-model-len 4096
+
+# Solution 2: Reduce memory settings (if still using unquantized)
+vllm serve Qwen/Qwen2.5-Coder-7B-Instruct \
+  --port 8001 \
+  --gpu-memory-utilization 0.7 \  # Reduced from 0.9
+  --max-model-len 2048 \            # Reduced from 4096
+  --max-num-seqs 32                 # Limit concurrent requests
+
+# Solution 3: Use smaller model
+vllm serve Qwen/Qwen2.5-Coder-3B-Instruct \  # 3B instead of 7B
+  --port 8001 \
+  --gpu-memory-utilization 0.9
 ```
 
-3. **Configuration not applied**:
+**Memory Requirements**:
+- **Qwen-7B unquantized**: ~14GB model + KV cache = 19GB+ VRAM (won't fit on 16GB GPU)
+- **Qwen-7B AWQ**: ~5.2GB model + 7.36GB KV cache = 12.5GB VRAM (fits comfortably)
+- **Llama-2-13B**: ~26GB VRAM required (use AWQ or smaller GPU)
+
+3. **Configuration not applied to LiteLLM**:
 ```bash
 # Apply vLLM integration config
 cp config/litellm-unified.yaml ../openwebui/config/litellm.yaml
 systemctl --user restart litellm.service
 
 # Verify vLLM model appears
-curl http://localhost:4000/v1/models | jq '.data[] | select(.id | contains("vllm"))'
+curl http://localhost:4000/v1/models | jq '.data[] | select(.id | contains("qwen"))'
 ```
+
+4. **Wrong model name in requests**:
+```bash
+# Use exact model name from config
+# Correct: "qwen-coder-7b-vllm" or "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
+# Incorrect: "llama2-13b-vllm" (outdated, no longer deployed)
+
+# Test with correct model name
+curl -X POST http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ",
+    "messages": [{"role": "user", "content": "test"}],
+    "max_tokens": 10
+  }'
+```
+
+5. **CRUSHVLLM quick-setup fails**:
+```bash
+# Symptoms: "Failed to build vllm==0.2.5"
+# Root cause: CRUSHVLLM uses outdated vLLM version
+
+# Solution: Use manual installation instead
+python3 -m venv ~/venvs/vllm
+source ~/venvs/vllm/bin/activate
+pip install --upgrade pip
+pip install vllm  # Installs latest version (0.11.0+)
+```
+
+**Performance Validation**:
+```bash
+# Check if vLLM is healthy
+curl http://localhost:8001/health
+
+# List available models
+curl http://localhost:8001/v1/models | jq
+
+# Test inference
+curl -X POST http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ",
+    "messages": [{"role": "user", "content": "Write a Python hello world"}],
+    "max_tokens": 50
+  }' | jq '.choices[0].message.content'
+
+# Test streaming
+curl -N -X POST http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ",
+    "messages": [{"role": "user", "content": "Count to 3"}],
+    "max_tokens": 20,
+    "stream": true
+  }'
+```
+
+**AWQ Quantization Benefits**:
+- 65% memory reduction (14.2GB → 5.2GB)
+- Minimal quality loss (4-bit weights)
+- Enables deployment on 16GB VRAM GPUs
+- Same API compatibility
+- Faster inference (less data movement)
 
 ---
 

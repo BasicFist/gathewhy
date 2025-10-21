@@ -44,10 +44,10 @@ The AI Unified Backend provides a single API endpoint that routes requests to mu
 │  │  Ollama  │  │ llama.cpp│  │   vLLM   │  │  Future   │ │
 │  │  :11434  │  │:8000/8080│  │  :8001   │  │ Providers │ │
 │  │          │  │          │  │          │  │           │ │
-│  │ • llama  │  │ • GGUF   │  │ • Llama2 │  │ • OpenAI  │ │
-│  │   3.1:8b │  │   models │  │   13B    │  │ • Anthrop │ │
+│  │ • llama  │  │ • GGUF   │  │ • Qwen   │  │ • OpenAI  │ │
+│  │   3.1:8b │  │   models │  │   7B AWQ │  │ • Anthrop │ │
 │  │ • qwen   │  │ • CUDA   │  │ • High   │  │ • Custom  │ │
-│  │   coder  │  │   opt    │  │   thru   │  │           │ │
+│  │   coder  │  │   opt    │  │   conc   │  │           │ │
 │  └──────────┘  └──────────┘  └──────────┘  └───────────┘ │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -106,12 +106,15 @@ The AI Unified Backend provides a single API endpoint that routes requests to mu
 - **Best For**: Maximum single-request performance
 - **Performance**: 20-150ms TTFT, ~40-60 tokens/sec
 
-#### 3. vLLM (Port 8001)
-- **Type**: Production-grade batched inference
-- **Models**: meta-llama/Llama-2-13b-chat-hf
-- **Best For**: High concurrency, large models (13B+)
-- **Performance**: 100-300ms TTFT, ~80-120 tokens/sec (batched)
-- **Special**: MCP integration for advanced features
+#### 3. vLLM (Port 8001) ✅ **Production**
+- **Type**: Production-grade batched inference with AWQ quantization
+- **Models**: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ (7B, 4-bit)
+- **Quantization**: AWQ 4-bit (65% memory reduction: 14.2GB → 5.2GB)
+- **Best For**: Code generation, high concurrency (33.63x)
+- **Performance**: 100-200ms TTFT, real-time streaming
+- **Hardware**: Quadro RTX 5000 (16GB VRAM, 90% utilization)
+- **Context Window**: 4096 tokens
+- **Deployed**: 2025-10-21
 
 ## Request Flow
 

@@ -6,6 +6,7 @@ Interactive Gradio interface for testing LiteLLM unified backend.
 Implements Phase 2.1: Web UI (Gradio)
 """
 
+import json
 import time
 
 import gradio as gr
@@ -273,7 +274,7 @@ def get_recent_history(limit: int = 20) -> str:
     for req in requests:
         timestamp = req["timestamp"]
         model = req["model"]
-        messages = eval(req["messages"])  # JSON string to list
+        messages = json.loads(req["messages"])  # JSON string to list
         user_msg = messages[-1]["content"][:100]  # First 100 chars
 
         response_time = f"{req['response_time_ms']}ms" if req["response_time_ms"] else "N/A"

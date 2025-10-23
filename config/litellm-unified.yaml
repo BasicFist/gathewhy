@@ -47,9 +47,6 @@ litellm_settings:
   fallbacks: [{"qwen-coder-vllm": ["qwen2.5-coder:7b"]}]
 router_settings:
   routing_strategy: usage-based-routing-v2
-  model_group_alias:
-    qwen-coder-vllm:
-      - Qwen/Qwen2.5-Coder-7B-Instruct-AWQ
   allowed_fails: 3
   num_retries: 2
   timeout: 30

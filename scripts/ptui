@@ -1,0 +1,600 @@
+#!/usr/bin/env bash
+# Provider TUI (ptui) - AI Backend Unified Command Center
+# Comprehensive management interface for LiteLLM, vLLM, Ollama, and llama.cpp
+
+set -e
+
+VERSION="2.0.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Service endpoints
+LITELLM_URL="http://localhost:4000"
+OLLAMA_URL="http://localhost:11434"
+LLAMACPP_PYTHON_URL="http://localhost:8000"
+LLAMACPP_NATIVE_URL="http://localhost:8080"
+VLLM_URL="http://localhost:8001"
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
+# Icons
+ICON_RUNNING="✅"
+ICON_STOPPED="❌"
+ICON_WARNING="⚠️ "
+ICON_INFO="ℹ️ "
+ICON_ROCKET="🚀"
+ICON_GEAR="⚙️ "
+ICON_CHART="📊"
+ICON_SERVER="🖥️ "
+ICON_MODEL="🤖"
+ICON_HEALTH="💚"
+
+# Logging
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
+log_error() { echo -e "${RED}[✗]${NC} $1"; }
+log_header() { echo -e "${BOLD}${CYAN}$1${NC}"; }
+
+# Clear screen and show header
+show_header() {
+    clear
+    echo -e "${BOLD}${CYAN}"
+    cat << 'EOF'
+╔═══════════════════════════════════════════════════════════════╗
+║                  AI Backend Unified - PTUI                    ║
+║              Provider Command & Control Center                ║
+╚═══════════════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+    echo -e "${GRAY}Version: $VERSION | Project: ai-backend-unified${NC}"
+    echo
+}
+
+# Check if service is running
+check_service_health() {
+    local name=$1
+    local url=$2
+    local endpoint=${3:-"/health"}
+
+    if curl -s -f -m 2 "$url$endpoint" > /dev/null 2>&1; then
+        echo -e "${GREEN}${ICON_RUNNING}${NC} ${BOLD}$name${NC} ${GRAY}($url)${NC}"
+        return 0
+    else
+        echo -e "${RED}${ICON_STOPPED}${NC} ${BOLD}$name${NC} ${GRAY}($url)${NC}"
+        return 1
+    fi
+}
+
+# Get vLLM current model
+get_vllm_model() {
+    if pgrep -f "vllm serve" > /dev/null 2>&1; then
+        local pid=$(pgrep -f "vllm serve")
+        local model=$(ps -p "$pid" -o args= | grep -oP '(?<=vllm serve )[^ ]+' || echo "unknown")
+        echo "$model"
+    else
+        echo "not running"
+    fi
+}
+
+# Service status overview
+show_status() {
+    show_header
+    log_header "━━━ Service Status ━━━"
+    echo
+
+    # LiteLLM Gateway
+    check_service_health "LiteLLM Gateway" "$LITELLM_URL" "/health"
+    litellm_status=$?
+
+    # Ollama
+    check_service_health "Ollama" "$OLLAMA_URL" "/api/tags"
+    ollama_status=$?
+
+    # llama.cpp Python
+    check_service_health "llama.cpp (Python)" "$LLAMACPP_PYTHON_URL" "/v1/models"
+    llamacpp_py_status=$?
+
+    # llama.cpp Native
+    check_service_health "llama.cpp (Native)" "$LLAMACPP_NATIVE_URL" "/v1/models"
+    llamacpp_native_status=$?
+
+    # vLLM
+    if check_service_health "vLLM" "$VLLM_URL" "/v1/models"; then
+        vllm_model=$(get_vllm_model)
+        echo -e "  ${GRAY}└─ Model: ${WHITE}$vllm_model${NC}"
+        vllm_status=0
+    else
+        vllm_status=1
+    fi
+
+    echo
+    log_header "━━━ Quick Stats ━━━"
+    echo
+
+    # Count running services
+    local running=0
+    [[ $litellm_status -eq 0 ]] && ((running++))
+    [[ $ollama_status -eq 0 ]] && ((running++))
+    [[ $llamacpp_py_status -eq 0 ]] && ((running++))
+    [[ $llamacpp_native_status -eq 0 ]] && ((running++))
+    [[ $vllm_status -eq 0 ]] && ((running++))
+
+    echo -e "${ICON_SERVER} Services Running: ${GREEN}${running}/5${NC}"
+
+    # Show available models if LiteLLM is up
+    if [[ $litellm_status -eq 0 ]]; then
+        local model_count=$(curl -s "$LITELLM_URL/v1/models" 2>/dev/null | jq -r '.data | length' 2>/dev/null || echo "0")
+        echo -e "${ICON_MODEL} Models Available: ${GREEN}${model_count}${NC}"
+    fi
+
+    echo
+}
+
+# List all available models
+list_models() {
+    show_header
+    log_header "━━━ Available Models ━━━"
+    echo
+
+    if ! curl -s -f "$LITELLM_URL/v1/models" > /dev/null 2>&1; then
+        log_error "LiteLLM Gateway is not running"
+        return 1
+    fi
+
+    echo -e "${BOLD}LiteLLM Models:${NC}"
+    curl -s "$LITELLM_URL/v1/models" | jq -r '.data[] | "  • \(.id)"' 2>/dev/null || echo "  (unable to fetch)"
+    echo
+
+    if curl -s -f "$OLLAMA_URL/api/tags" > /dev/null 2>&1; then
+        echo -e "${BOLD}Ollama Models:${NC}"
+        curl -s "$OLLAMA_URL/api/tags" | jq -r '.models[]? | "  • \(.name) (\(.size / 1024 / 1024 / 1024 | floor)GB)"' 2>/dev/null || echo "  (none)"
+        echo
+    fi
+
+    if pgrep -f "vllm serve" > /dev/null 2>&1; then
+        echo -e "${BOLD}vLLM Current Model:${NC}"
+        local vllm_model=$(get_vllm_model)
+        echo -e "  ${GREEN}•${NC} $vllm_model"
+        echo
+    fi
+}
+
+# Health check with details
+health_check() {
+    show_header
+    log_header "━━━ Comprehensive Health Check ━━━"
+    echo
+
+    local all_healthy=true
+
+    # Test each endpoint
+    echo -e "${BOLD}Testing Endpoints:${NC}"
+
+    # LiteLLM
+    if curl -s -f -m 5 "$LITELLM_URL/health" > /dev/null 2>&1; then
+        log_success "LiteLLM health endpoint"
+
+        # Test a completion
+        local test_response=$(curl -s -X POST "$LITELLM_URL/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -d '{"model": "llama3.1:latest", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5}' \
+            2>/dev/null | jq -r '.choices[0].message.content // "ERROR"' 2>/dev/null)
+
+        if [[ "$test_response" != "ERROR" && -n "$test_response" ]]; then
+            log_success "LiteLLM completion test"
+        else
+            log_warning "LiteLLM completion test failed"
+            all_healthy=false
+        fi
+    else
+        log_error "LiteLLM health endpoint"
+        all_healthy=false
+    fi
+
+    # Ollama
+    if curl -s -f -m 5 "$OLLAMA_URL/api/tags" > /dev/null 2>&1; then
+        log_success "Ollama API"
+    else
+        log_warning "Ollama API (optional)"
+    fi
+
+    # vLLM
+    if curl -s -f -m 5 "$VLLM_URL/v1/models" > /dev/null 2>&1; then
+        log_success "vLLM API"
+    else
+        log_warning "vLLM API (optional)"
+    fi
+
+    echo
+    if $all_healthy; then
+        echo -e "${GREEN}${ICON_HEALTH} System Status: HEALTHY${NC}"
+    else
+        echo -e "${YELLOW}${ICON_WARNING} System Status: DEGRADED${NC}"
+    fi
+    echo
+}
+
+# vLLM model management
+vllm_menu() {
+    while true; do
+        show_header
+        log_header "━━━ vLLM Model Management ━━━"
+        echo
+
+        local current_model=$(get_vllm_model)
+        echo -e "${BOLD}Current Model:${NC} ${CYAN}$current_model${NC}"
+        echo
+
+        echo "1. Switch to Qwen Coder (code generation)"
+        echo "2. Switch to Dolphin (uncensored conversational)"
+        echo "3. Check vLLM status"
+        echo "4. Stop vLLM"
+        echo "5. View vLLM logs"
+        echo "b. Back to main menu"
+        echo
+        read -p "Select option: " choice
+
+        case $choice in
+            1)
+                log_info "Switching to Qwen Coder..."
+                "$SCRIPT_DIR/vllm-model-switch.sh" qwen
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                log_info "Switching to Dolphin..."
+                "$SCRIPT_DIR/vllm-model-switch.sh" dolphin
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                "$SCRIPT_DIR/vllm-model-switch.sh" status
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                "$SCRIPT_DIR/vllm-model-switch.sh" stop
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                echo
+                log_info "Last 50 lines of vLLM logs:"
+                echo
+                if [[ -f /tmp/vllm-qwen-coder.log ]]; then
+                    tail -50 /tmp/vllm-qwen-coder.log
+                elif [[ -f /tmp/vllm-dolphin.log ]]; then
+                    tail -50 /tmp/vllm-dolphin.log
+                else
+                    echo "No logs found"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# Configuration viewer
+view_config() {
+    show_header
+    log_header "━━━ Configuration Viewer ━━━"
+    echo
+
+    echo "1. LiteLLM Unified Config"
+    echo "2. Model Mappings"
+    echo "3. Provider Registry"
+    echo "4. vLLM Model Info"
+    echo "b. Back"
+    echo
+    read -p "Select config to view: " choice
+
+    case $choice in
+        1)
+            if [[ -f "$PROJECT_ROOT/config/litellm-unified.yaml" ]]; then
+                less "$PROJECT_ROOT/config/litellm-unified.yaml"
+            else
+                log_error "Config file not found"
+            fi
+            ;;
+        2)
+            if [[ -f "$PROJECT_ROOT/config/model-mappings.yaml" ]]; then
+                less "$PROJECT_ROOT/config/model-mappings.yaml"
+            else
+                log_error "Config file not found"
+            fi
+            ;;
+        3)
+            if [[ -f "$PROJECT_ROOT/config/providers.yaml" ]]; then
+                less "$PROJECT_ROOT/config/providers.yaml"
+            else
+                log_error "Config file not found"
+            fi
+            ;;
+        4)
+            show_header
+            log_header "━━━ vLLM Model Information ━━━"
+            echo
+            if pgrep -f "vllm serve" > /dev/null; then
+                ps aux | grep "vllm serve" | grep -v grep
+            else
+                echo "vLLM is not running"
+            fi
+            read -p "Press Enter to continue..."
+            ;;
+        b|B)
+            return
+            ;;
+    esac
+}
+
+# Service logs
+view_logs() {
+    show_header
+    log_header "━━━ Service Logs ━━━"
+    echo
+
+    echo "1. LiteLLM logs (journalctl)"
+    echo "2. vLLM logs"
+    echo "3. System logs (dmesg)"
+    echo "b. Back"
+    echo
+    read -p "Select logs to view: " choice
+
+    case $choice in
+        1)
+            echo
+            log_info "Last 100 lines of LiteLLM service:"
+            echo
+            journalctl --user -u litellm.service -n 100 --no-pager
+            read -p "Press Enter to continue..."
+            ;;
+        2)
+            echo
+            log_info "vLLM logs:"
+            echo
+            if [[ -f /tmp/vllm-qwen-coder.log ]]; then
+                tail -100 /tmp/vllm-qwen-coder.log
+            elif [[ -f /tmp/vllm-dolphin.log ]]; then
+                tail -100 /tmp/vllm-dolphin.log
+            else
+                echo "No vLLM logs found"
+            fi
+            read -p "Press Enter to continue..."
+            ;;
+        3)
+            dmesg | tail -50
+            read -p "Press Enter to continue..."
+            ;;
+        b|B)
+            return
+            ;;
+    esac
+}
+
+# Test endpoints
+test_endpoints() {
+    show_header
+    log_header "━━━ Endpoint Testing ━━━"
+    echo
+
+    echo "1. Test LiteLLM completion"
+    echo "2. Test Ollama"
+    echo "3. Test vLLM"
+    echo "4. Test all endpoints"
+    echo "b. Back"
+    echo
+    read -p "Select test: " choice
+
+    case $choice in
+        1)
+            echo
+            log_info "Testing LiteLLM completion..."
+            curl -X POST "$LITELLM_URL/v1/chat/completions" \
+                -H "Content-Type: application/json" \
+                -d '{"model": "llama3.1:latest", "messages": [{"role": "user", "content": "Say hello"}], "max_tokens": 20}' \
+                | jq
+            read -p "Press Enter to continue..."
+            ;;
+        2)
+            echo
+            log_info "Testing Ollama..."
+            curl -s "$OLLAMA_URL/api/tags" | jq
+            read -p "Press Enter to continue..."
+            ;;
+        3)
+            echo
+            log_info "Testing vLLM..."
+            curl -s "$VLLM_URL/v1/models" | jq
+            read -p "Press Enter to continue..."
+            ;;
+        4)
+            health_check
+            read -p "Press Enter to continue..."
+            ;;
+        b|B)
+            return
+            ;;
+    esac
+}
+
+# Quick actions
+quick_actions() {
+    show_header
+    log_header "━━━ Quick Actions ━━━"
+    echo
+
+    echo "1. Restart LiteLLM service"
+    echo "2. Run validation script"
+    echo "3. Check GPU status"
+    echo "4. Check port usage"
+    echo "5. Kill all vLLM processes"
+    echo "b. Back"
+    echo
+    read -p "Select action: " choice
+
+    case $choice in
+        1)
+            log_info "Restarting LiteLLM service..."
+            systemctl --user restart litellm.service
+            sleep 2
+            systemctl --user status litellm.service --no-pager
+            read -p "Press Enter to continue..."
+            ;;
+        2)
+            if [[ -f "$PROJECT_ROOT/scripts/validate-unified-backend.sh" ]]; then
+                "$PROJECT_ROOT/scripts/validate-unified-backend.sh"
+            else
+                log_error "Validation script not found"
+            fi
+            read -p "Press Enter to continue..."
+            ;;
+        3)
+            nvidia-smi 2>/dev/null || log_warning "nvidia-smi not available"
+            read -p "Press Enter to continue..."
+            ;;
+        4)
+            echo
+            log_info "Port usage:"
+            echo
+            lsof -i :4000 -i :8001 -i :11434 -i :8000 -i :8080 2>/dev/null || echo "No processes found"
+            read -p "Press Enter to continue..."
+            ;;
+        5)
+            log_warning "Killing all vLLM processes..."
+            pkill -f "vllm serve" && log_success "vLLM processes killed" || log_info "No vLLM processes found"
+            read -p "Press Enter to continue..."
+            ;;
+        b|B)
+            return
+            ;;
+    esac
+}
+
+# Main menu
+main_menu() {
+    while true; do
+        show_status
+
+        log_header "━━━ Main Menu ━━━"
+        echo
+        echo "  ${CYAN}1${NC}. ${ICON_CHART} Show detailed status"
+        echo "  ${CYAN}2${NC}. ${ICON_MODEL} List all models"
+        echo "  ${CYAN}3${NC}. ${ICON_HEALTH} Run health check"
+        echo "  ${CYAN}4${NC}. ${ICON_GEAR} vLLM model management"
+        echo "  ${CYAN}5${NC}. ${ICON_INFO} View configuration"
+        echo "  ${CYAN}6${NC}. ${ICON_SERVER} View service logs"
+        echo "  ${CYAN}7${NC}. ${ICON_ROCKET} Test endpoints"
+        echo "  ${CYAN}8${NC}. ${ICON_GEAR} Quick actions"
+        echo "  ${CYAN}q${NC}. Quit"
+        echo
+        read -p "Select option: " choice
+
+        case $choice in
+            1)
+                show_status
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                list_models
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                health_check
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                vllm_menu
+                ;;
+            5)
+                view_config
+                ;;
+            6)
+                view_logs
+                ;;
+            7)
+                test_endpoints
+                ;;
+            8)
+                quick_actions
+                ;;
+            q|Q)
+                clear
+                echo -e "${GREEN}${ICON_ROCKET} Thanks for using PTUI!${NC}"
+                echo
+                exit 0
+                ;;
+            *)
+                log_error "Invalid option. Please try again."
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# Command-line interface (non-interactive mode)
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        status|s)
+            show_status
+            ;;
+        models|m)
+            list_models
+            ;;
+        health|h)
+            health_check
+            ;;
+        vllm|v)
+            shift
+            if [[ -f "$SCRIPT_DIR/vllm-model-switch.sh" ]]; then
+                "$SCRIPT_DIR/vllm-model-switch.sh" "$@"
+            else
+                log_error "vLLM management script not found"
+            fi
+            ;;
+        test|t)
+            test_endpoints
+            ;;
+        help|--help|-h)
+            cat << EOF
+PTUI - Provider TUI v$VERSION
+AI Backend Unified Command Center
+
+Usage:
+  ptui              Interactive TUI mode
+  ptui status       Show service status
+  ptui models       List all models
+  ptui health       Run health check
+  ptui vllm <cmd>   vLLM management (status|qwen|dolphin|stop)
+  ptui test         Test endpoints
+  ptui help         Show this help
+
+Interactive mode provides full menu-driven interface.
+EOF
+            ;;
+        version|--version|-v)
+            echo "PTUI v$VERSION"
+            ;;
+        *)
+            log_error "Unknown command: $1"
+            echo "Run 'ptui help' for usage information"
+            exit 1
+            ;;
+    esac
+else
+    # No arguments - run interactive TUI
+    main_menu
+fi

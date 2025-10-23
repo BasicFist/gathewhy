@@ -43,6 +43,133 @@ All monitoring operations through a single command:
 ./scripts/monitor test
 ```
 
+## PTUI - Provider TUI Command Center
+
+Comprehensive command center for managing all AI backend services.
+
+**Version**: 2.0.0 | **Command**: `ptui` or `providers`
+
+### Quick Start
+
+```bash
+# Interactive mode (full TUI)
+ptui
+
+# Command-line mode (quick checks)
+ptui status        # Show service status
+ptui models        # List all models
+ptui health        # Run health check
+ptui vllm status   # Check vLLM status
+ptui help          # Show help
+```
+
+### Interactive Mode Features
+
+| Menu Option | Description | When to Use |
+|-------------|-------------|-------------|
+| Detailed Status | Comprehensive service health | Daily health check |
+| List Models | All models across providers | Check model availability |
+| Health Check | Endpoint testing + inference | Troubleshooting connectivity |
+| vLLM Management | Model switching, logs, status | Switch between Qwen/Dolphin |
+| View Configuration | Browse config files | Review settings |
+| Service Logs | LiteLLM, vLLM, system logs | Debug issues |
+| Test Endpoints | Interactive API testing | Validate routing |
+| Quick Actions | Restart, GPU check, port check | Fast operations |
+
+### Command-Line Mode
+
+```bash
+# Service monitoring
+ptui status                    # Check all 5 services
+ptui models                    # List models by provider
+
+# Health validation
+ptui health                    # Comprehensive health check
+
+# vLLM operations
+ptui vllm status              # Current vLLM model
+ptui vllm qwen                # Switch to Qwen Coder
+ptui vllm dolphin             # Switch to Dolphin
+ptui vllm stop                # Stop vLLM
+
+# Interactive testing
+ptui test                     # Open endpoint testing menu
+```
+
+### Integration with Other Tools
+
+```bash
+# vLLM Model Switching
+ptui vllm qwen                # Calls vllm-model-switch.sh qwen
+ptui vllm dolphin             # Calls vllm-model-switch.sh dolphin
+
+# Service Restart
+ptui                          # Interactive → Quick Actions → Restart LiteLLM
+# Executes: systemctl --user restart litellm.service
+
+# Validation
+ptui                          # Interactive → Quick Actions → Run validation
+# Executes: ./scripts/validate-unified-backend.sh
+```
+
+### Service Status Indicators
+
+```
+✅ LiteLLM Gateway (http://localhost:4000)         # Running
+✅ Ollama (http://localhost:11434)                 # Running
+✅ llama.cpp (Python) (http://localhost:8000)      # Running
+✅ llama.cpp (Native) (http://localhost:8080)      # Running
+✅ vLLM (http://localhost:8001)                    # Running
+  └─ Model: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ
+
+🖥️  Services Running: 5/5
+🤖 Models Available: 4
+```
+
+### Examples
+
+```bash
+# Morning workflow: Check everything
+ptui status
+
+# Need to switch vLLM model for creative writing
+ptui vllm dolphin
+
+# Test LiteLLM routing after config change
+ptui health
+
+# Interactive debugging session
+ptui                          # Opens full TUI
+# Navigate: Menu → View service logs → LiteLLM
+
+# Scripting example: Auto-restart if unhealthy
+if ! ptui health | grep -q "HEALTHY"; then
+    systemctl --user restart litellm.service
+    ptui vllm restart
+fi
+
+# Watch service status (updates every 5 seconds)
+watch -n 5 "ptui status"
+```
+
+### Troubleshooting
+
+```bash
+# Service not responding
+ptui status                   # Identify which service
+ptui health                   # Run diagnostics
+ptui                          # Interactive → View logs
+
+# vLLM issues
+ptui vllm status             # Check current model
+ptui                         # Interactive → vLLM management → View logs
+
+# Port conflicts
+ptui                         # Interactive → Quick Actions → Check port usage
+```
+
+**Full Documentation**: See `docs/ptui-user-guide.md`
+
 ## Testing Commands
 
 ### Quick Tests

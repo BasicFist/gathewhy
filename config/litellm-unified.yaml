@@ -31,6 +31,22 @@ model_list:
         - vllm
         - awq
       provider: vllm
+  - model_name: dolphin-uncensored-vllm
+    litellm_params:
+      model: solidrust/dolphin-2.8-mistral-7b-v02-AWQ
+      api_base: http://127.0.0.1:8001/v1
+      api_key: not-needed  # pragma: allowlist secret
+      custom_llm_provider: openai
+      stream: true
+    model_info:
+      tags:
+        - uncensored
+        - mistral
+        - dolphin
+        - vllm
+        - awq
+        - 7b
+      provider: vllm
 litellm_settings:
   request_timeout: 60
   stream_timeout: 0
@@ -44,7 +60,7 @@ litellm_settings:
     ttl: 3600
   set_verbose: false
   json_logs: true
-  fallbacks: [{"qwen-coder-vllm": ["qwen2.5-coder:7b"]}]
+  fallbacks: [{"qwen-coder-vllm": ["qwen2.5-coder:7b"]}, {"dolphin-uncensored-vllm": ["llama3.1:latest"]}]
 router_settings:
   routing_strategy: usage-based-routing-v2
   allowed_fails: 3
@@ -74,6 +90,9 @@ rate_limit_settings:
       rpm: 100
       tpm: 50000
     qwen2.5-coder:7b:
+      rpm: 100
+      tpm: 50000
+    dolphin-uncensored-vllm:
       rpm: 100
       tpm: 50000
 general_settings:

@@ -27,6 +27,14 @@ exact_matches:
     description: "AWQ-quantized 7B code generation model via vLLM"
     backend_model: "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
 
+  # Dolphin Uncensored (Mistral-based)
+  "dolphin-uncensored-vllm":
+    provider: vllm
+    priority: primary
+    fallback: ollama
+    description: "7B uncensored Mistral-based model via vLLM (AWQ quantized)"
+    backend_model: "solidrust/dolphin-2.8-mistral-7b-v02-AWQ"
+
   # llama.cpp models
   "llama-cpp-default":
     provider: llama_cpp_python
@@ -44,6 +52,11 @@ patterns:
     provider: vllm
     fallback: ollama
     description: "Qwen Coder models via vLLM (AWQ quantized)"
+
+  - pattern: "^solidrust/dolphin.*AWQ$"
+    provider: vllm
+    fallback: ollama
+    description: "Dolphin uncensored models via vLLM (AWQ quantized)"
 
   - pattern: "^meta-llama/.*"
     provider: vllm
@@ -78,6 +91,20 @@ capabilities:
       - deepseek-coder-v2  # If pulled
     provider: ollama
     routing_strategy: load_balance
+
+  uncensored:
+    description: "Uncensored models without content filters"
+    preferred_models:
+      - dolphin-uncensored-vllm
+    provider: vllm
+    routing_strategy: direct
+
+  conversational:
+    description: "Natural conversation and general assistance"
+    preferred_models:
+      - dolphin-uncensored-vllm
+      - llama3.1:latest
+    routing_strategy: usage_based
 
   high_throughput:
     description: "When you need to handle many concurrent requests"
@@ -245,9 +272,9 @@ special_cases:
 # ============================================================================
 
 metadata:
-  version: "1.2"
+  version: "1.4"
   last_updated: "2025-10-23"
-  total_routing_rules: 15+
+  total_routing_rules: 18+
   supported_routing_strategies:
     - exact_match
     - pattern_match
@@ -255,10 +282,11 @@ metadata:
     - load_balanced
     - fallback_chain
   changes:
-    - "Restored vLLM provider consistency"
-    - "Standardized to llama3.1:latest canonical name"
-    - "Removed duplicate qwen-coder entry"
-    - "Removed stale llama2-13b-vllm fallback"
+    - "Replaced DeepSeek-R1 with Dolphin 2.8 Mistral AWQ (uncensored, fits 16GB VRAM)"
+    - "Added solidrust/dolphin-2.8-mistral-7b-v02-AWQ model"
+    - "Updated uncensored and conversational capability routing"
+    - "Added Dolphin AWQ pattern matching"
+    - "Optimized for 16GB VRAM constraint with AWQ quantization"
 
 notes: |
   This configuration is consumed by LiteLLM's router.

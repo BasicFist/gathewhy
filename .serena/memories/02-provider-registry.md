@@ -24,12 +24,13 @@ The provider registry (`config/providers.yaml`) is the master catalog of all LLM
 
 **Models Available**:
 
-1. **llama3.1:8b**
+1. **llama3.1:latest**
    - Size: 8B parameters
    - Quantization: Q4_K_M (4-bit medium quality)
    - Use Case: General-purpose chat, reasoning
    - Context Window: 8192 tokens
    - Pulled: 2025-10-19
+   - **Note**: Canonical name changed from `:8b` to `:latest` for version flexibility
 
 2. **qwen2.5-coder:7b**
    - Size: 7.6B parameters
@@ -150,7 +151,7 @@ threads: 6                # CPU threads for non-GPU ops
 - Base URL: `http://127.0.0.1:8001`
 - Health Endpoint: `/v1/models`
 - API Format: OpenAI-compatible
-- Status: **Active** ✅ (deployed 2025-10-21)
+- Status: **Active** ✅ (restored 2025-10-23)
 
 **Features**:
 - Continuous batching for high throughput
@@ -193,13 +194,6 @@ vllm serve Qwen/Qwen2.5-Coder-7B-Instruct-AWQ \
   --max-model-len 4096
 ```
 
-**Advanced Features**:
-- GPU Memory Utilization: 0.9 (90% VRAM usage)
-- AWQ Quantization: 4-bit weights (65% memory reduction)
-- PagedAttention: Dynamic KV cache management
-- Continuous Batching: High-throughput concurrent requests
-- Streaming: Server-Sent Events (SSE) format
-
 **Integration Location**:
 - Installation: `~/venvs/vllm` (Python virtual environment)
 - vLLM Version: 0.11.0
@@ -226,6 +220,8 @@ vllm serve Qwen/Qwen2.5-Coder-7B-Instruct-AWQ \
 - Production workloads on 16GB VRAM GPUs
 - Memory-efficient inference with AWQ quantization
 - Real-time streaming code suggestions
+
+**Configuration Status**: ✅ Restored 2025-10-23 after accidental removal
 
 ---
 
@@ -305,6 +301,20 @@ custom_provider:
 
 ---
 
+## OpenWebUI Integration (Relocated)
+
+**Status**: Services relocated to OpenWebUI project (../openwebui)
+
+**Note**: As of 2025-10-23, OpenWebUI pipelines, toolsrv, and frontend are managed within the OpenWebUI project, not this coordination project. These services run independently:
+
+- **Pipelines**: Port 9099 (academic_search, market_snapshot, smart_router, hybrid_search, consensus, code_analyzer, comfyui_generator)
+- **Toolsrv**: Port 8600 (arXiv, PubMed, market data APIs)
+- **Frontend**: Port 5000 (Web UI with RAG)
+
+**Integration**: These services are available but documented separately in the OpenWebUI project.
+
+---
+
 ## Provider Selection Criteria
 
 ### When to Use Ollama
@@ -325,11 +335,11 @@ custom_provider:
 
 ### When to Use vLLM
 ✅ High concurrency requirements (10+ concurrent)
-✅ Large models (13B+ parameters)
+✅ Code generation workloads
 ✅ Production-grade reliability needed
-✅ Batched inference scenarios
+✅ AWQ quantization for memory efficiency
 ❌ Not for low-latency single requests
-❌ Requires significant VRAM
+❌ Requires 16GB+ VRAM
 
 ### When to Use Cloud Providers (OpenAI/Anthropic)
 ✅ Cutting-edge capabilities required
@@ -419,7 +429,7 @@ curl http://localhost:4000/v1/models | jq
 ## Provider Metadata Summary
 
 **Total Providers**: 4 active (Ollama, llama.cpp Python, llama.cpp Native, vLLM)
-**Total Models Available**: 6 (2 Ollama, 1 vLLM, 2 llama.cpp endpoints)
+**Total Models Available**: 4 (2 Ollama, 1 vLLM, 1 llama.cpp)
 **Total Capacity**: ~70+ concurrent requests across all providers
 **Combined VRAM**: ~20GB required for all providers active (with AWQ quantization)
 **API Compatibility**: 100% OpenAI-compatible
@@ -431,11 +441,16 @@ curl http://localhost:4000/v1/models | jq
 - **openai**: Cloud API providers (disabled)
 - **openai_compatible**: Generic compatible servers (template)
 
-**Deployment Status** (2025-10-21):
-- ✅ Ollama: Active with llama3.1:8b and qwen2.5-coder:7b
+**Deployment Status** (2025-10-23):
+- ✅ Ollama: Active with llama3.1:latest and qwen2.5-coder:7b
 - ✅ llama.cpp Python: Active on port 8000
 - ✅ llama.cpp Native: Active on port 8080
-- ✅ vLLM: Active with Qwen2.5-Coder-7B-Instruct-AWQ on port 8001
+- ✅ vLLM: Active with Qwen2.5-Coder-7B-Instruct-AWQ on port 8001 (restored)
 
-**Version**: 1.1
-**Last Updated**: 2025-10-21 (vLLM deployment complete)
+**Recent Changes**:
+- 2025-10-23: Restored vLLM provider after accidental removal
+- 2025-10-23: Standardized llama3.1 model name to `:latest`
+- 2025-10-23: Removed OpenWebUI pipeline documentation (relocated to OpenWebUI project)
+
+**Version**: 1.2
+**Last Updated**: 2025-10-23

@@ -17,7 +17,7 @@ providers:
       - QuantizedGGUF format
       - Fast model switching
     models:
-      - name: llama3.1:8b
+      - name: llama3.1:latest
         size: "8B"
         quantization: Q4_K_M
         pulled_at: "2025-10-19"
@@ -65,7 +65,7 @@ providers:
   vllm:
     type: vllm
     base_url: http://127.0.0.1:8001
-    status: active  # Deployed with AWQ quantized Qwen model
+    status: active
     description: vLLM high-throughput inference with AWQ quantization
     features:
       - Continuous batching
@@ -90,88 +90,6 @@ providers:
       gpu_vram_gb: 16
       gpu_model: "Quadro RTX 5000"
       compute_capability: "7.5"
-    mcp_integration: true
-    mcp_tools:
-      - generate_text
-      - chat_completion
-      - stream_completion
-      - server_status
-      - server_metrics
-
-  # ============================================================================
-  # OPENWEBUI SERVICES (INTEGRATED)
-  # ============================================================================
-
-  openwebui_pipelines:
-    type: openai_compatible
-    base_url: http://127.0.0.1:9099/v1
-    status: active
-    description: OpenWebUI custom pipeline server with 6 pipelines
-    features:
-      - Academic paper search (arXiv, PubMed)
-      - Market data snapshots
-      - Smart query routing
-      - Hybrid search (keyword + semantic)
-      - Multi-model consensus
-      - Code analysis pipeline
-    pipelines:
-      - academic_search
-      - market_snapshot
-      - smart_router
-      - hybrid_search
-      - consensus
-      - code_analyzer
-    health_endpoint: /health
-    api_format: openai_compatible
-    service_file: ~/.config/systemd/user/openwebui-pipelines.service
-    location: ../openwebui/pipelines
-    dependencies:
-      - toolsrv  # For academic_search pipeline
-      - ollama   # For smart_router pipeline
-
-  openwebui_toolsrv:
-    type: tool_server
-    base_url: http://127.0.0.1:8600
-    status: active
-    description: OpenWebUI FastAPI tool server (arXiv, PubMed, market data)
-    features:
-      - arXiv paper search
-      - PubMed biomedical search
-      - Market data retrieval (mock fallback)
-      - Rate limiting (60 req/min per IP)
-      - Request queueing
-    tools:
-      - arxiv_search
-      - pubmed_search
-      - market_snapshot
-    health_endpoint: /health
-    service_file: ~/.config/systemd/user/toolsrv.service
-    location: ../openwebui/toolsrv
-    rate_limit:
-      requests_per_minute: 60
-      per_ip: true
-
-  openwebui_frontend:
-    type: web_ui
-    base_url: http://127.0.0.1:5000
-    status: active
-    description: OpenWebUI web interface (GPU-accelerated, RAG-enabled)
-    features:
-      - Chat interface
-      - Model selection (Ollama, llama.cpp, pipelines)
-      - RAG knowledge base
-      - Tool integration
-      - Admin panel
-    health_endpoint: /
-    service_file: ~/.config/systemd/user/openwebui-native.service
-    location: ../openwebui
-    data_directory: ~/.local/share/openwebui
-    rag_config:
-      chunk_size: 768
-      chunk_overlap: 128
-      top_k: 10
-      min_score: 0.35
-      embed_model: snowflake-arctic-embed:33m
 
   # ============================================================================
   # TEMPLATE PROVIDERS (Disabled, for reference)
@@ -222,10 +140,10 @@ providers:
 # ============================================================================
 
 metadata:
-  version: "1.1"
-  last_updated: "2025-10-21"
-  total_providers: 4  # active providers (ollama, llama_cpp_python, llama_cpp_native, vllm)
-  total_models_available: 6  # Including vLLM models
+  version: "1.2"
+  last_updated: "2025-10-23"
+  total_providers: 4  # ollama, llama_cpp_python, llama_cpp_native, vllm
+  total_models_available: 4  # 2 Ollama + 1 vLLM + 1 llama.cpp
 
   provider_types:
     - ollama: Simple local server

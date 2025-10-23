@@ -7,7 +7,7 @@
 
 exact_matches:
   # Ollama models (exact name)
-  "llama3.1:8b":
+  "llama3.1:latest":
     provider: ollama
     priority: primary
     fallback: null
@@ -20,7 +20,7 @@ exact_matches:
     description: "Code generation specialist"
 
   # vLLM models (AWQ quantized)
-  "qwen-coder-7b-vllm":
+  "qwen-coder-vllm":
     provider: vllm
     priority: primary
     fallback: ollama
@@ -94,7 +94,7 @@ capabilities:
   general_chat:
     description: "General conversational AI"
     preferred_models:
-      - llama3.1:8b
+      - llama3.1:latest
       - llama2-13b-vllm
     routing_strategy: usage_based
 
@@ -112,7 +112,7 @@ capabilities:
 # Same model available on multiple providers with weighted distribution
 
 load_balancing:
-  "llama3.1:8b":
+  "llama3.1:latest":
     providers:
       - provider: ollama
         weight: 0.7  # Primary
@@ -143,12 +143,18 @@ fallback_chains:
       - ollama
       - llama_cpp_python
 
-  "llama3.1:8b":
+  "llama3.1:latest":
     # Ollama with llama.cpp fallbacks
     chain:
       - ollama
       - llama_cpp_python
       - llama_cpp_native
+
+  "qwen-coder-vllm":
+    chain:
+      - vllm
+      - ollama
+      - llama_cpp_python
 
   "qwen2.5-coder:7b":
     # Code generation with fallbacks
@@ -239,8 +245,8 @@ special_cases:
 # ============================================================================
 
 metadata:
-  version: "1.1"
-  last_updated: "2025-10-21"
+  version: "1.2"
+  last_updated: "2025-10-23"
   total_routing_rules: 15+
   supported_routing_strategies:
     - exact_match
@@ -249,9 +255,10 @@ metadata:
     - load_balanced
     - fallback_chain
   changes:
-    - "Activated vLLM provider"
-    - "Simplified load balancing structure for test compatibility"
-    - "Simplified fallback chains to use string arrays"
+    - "Restored vLLM provider consistency"
+    - "Standardized to llama3.1:latest canonical name"
+    - "Removed duplicate qwen-coder entry"
+    - "Removed stale llama2-13b-vllm fallback"
 
 notes: |
   This configuration is consumed by LiteLLM's router.

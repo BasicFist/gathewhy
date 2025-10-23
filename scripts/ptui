@@ -48,7 +48,7 @@ log_header() { echo -e "${BOLD}${CYAN}$1${NC}"; }
 
 # Clear screen and show header
 show_header() {
-    clear
+    clear 2>/dev/null || true
     echo -e "${BOLD}${CYAN}"
     cat << 'EOF'
 ╔═══════════════════════════════════════════════════════════════╗

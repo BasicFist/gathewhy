@@ -18,6 +18,19 @@ model_list:
         - 7.6b
         - q4_k_m
       provider: ollama
+  # ============================================================================
+  # vLLM Models - SINGLE INSTANCE STRATEGY (16GB VRAM constraint)
+  # ============================================================================
+  # IMPORTANT: Both models use port 8001. Only ONE can run at a time due to
+  # VRAM constraints (each needs ~12-13GB, total available: 16GB).
+  #
+  # To switch models:
+  #   1. Stop current: pkill -f "vllm serve"
+  #   2. Start desired model (see scripts/vllm-model-switch.sh)
+  #
+  # Current default: Qwen Coder (code generation optimized)
+  # Alternative: Dolphin (uncensored conversational)
+  # ============================================================================
   - model_name: qwen-coder-vllm
     litellm_params:
       model: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ
@@ -31,6 +44,8 @@ model_list:
         - vllm
         - awq
       provider: vllm
+      vram_required: "~12.6GB"
+      note: "Default vLLM model - code generation specialist"
   - model_name: dolphin-uncensored-vllm
     litellm_params:
       model: solidrust/dolphin-2.8-mistral-7b-v02-AWQ
@@ -47,6 +62,8 @@ model_list:
         - awq
         - 7b
       provider: vllm
+      vram_required: "~12-13GB"
+      note: "Alternate vLLM model - requires manual switch (see config header)"
 litellm_settings:
   request_timeout: 60
   stream_timeout: 0

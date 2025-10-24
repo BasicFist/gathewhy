@@ -484,6 +484,85 @@ quick_actions() {
     esac
 }
 
+# Provider management
+provider_management() {
+    while true; do
+        show_header
+        log_header "━━━ Provider Management ━━━"
+        echo
+
+        # Show current models status
+        python3 "$SCRIPT_DIR/manage-providers.py" list
+
+        echo
+        log_header "━━━ Management Options ━━━"
+        echo
+        echo "  ${CYAN}1${NC}. Enable a model"
+        echo "  ${CYAN}2${NC}. Disable a model"
+        echo "  ${CYAN}3${NC}. Enable all models from a provider"
+        echo "  ${CYAN}4${NC}. Disable all models from a provider"
+        echo "  ${CYAN}5${NC}. Apply changes (restart LiteLLM)"
+        echo "  ${CYAN}b${NC}. Back to main menu"
+        echo
+        read -p "Select option: " choice
+
+        case $choice in
+            1)
+                echo
+                read -p "Enter model name to enable: " model_name
+                python3 "$SCRIPT_DIR/manage-providers.py" enable "$model_name"
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                echo
+                read -p "Enter model name to disable: " model_name
+                python3 "$SCRIPT_DIR/manage-providers.py" disable "$model_name"
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                echo
+                python3 "$SCRIPT_DIR/manage-providers.py" providers
+                echo
+                read -p "Enter provider name: " provider_name
+                python3 "$SCRIPT_DIR/manage-providers.py" enable-provider "$provider_name"
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                echo
+                python3 "$SCRIPT_DIR/manage-providers.py" providers
+                echo
+                read -p "Enter provider name: " provider_name
+                python3 "$SCRIPT_DIR/manage-providers.py" disable-provider "$provider_name"
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                echo
+                log_info "Restarting LiteLLM service to apply changes..."
+                if systemctl --user restart litellm.service; then
+                    log_success "LiteLLM service restarted successfully"
+                    log_info "Waiting for service to be ready..."
+                    sleep 3
+                    if curl -s -f "$LITELLM_URL/health" > /dev/null 2>&1; then
+                        log_success "LiteLLM is healthy and ready"
+                    else
+                        log_warning "LiteLLM may still be starting up"
+                    fi
+                else
+                    log_error "Failed to restart LiteLLM service"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                return
+                ;;
+            *)
+                log_error "Invalid option"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
 # Main menu
 main_menu() {
     while true; do
@@ -499,6 +578,7 @@ main_menu() {
         echo "  ${CYAN}6${NC}. ${ICON_SERVER} View service logs"
         echo "  ${CYAN}7${NC}. ${ICON_ROCKET} Test endpoints"
         echo "  ${CYAN}8${NC}. ${ICON_GEAR} Quick actions"
+        echo "  ${CYAN}9${NC}. 🔌 Provider management (enable/disable)"
         echo "  ${CYAN}q${NC}. Quit"
         echo
         read -p "Select option: " choice
@@ -531,8 +611,11 @@ main_menu() {
             8)
                 quick_actions
                 ;;
+            9)
+                provider_management
+                ;;
             q|Q)
-                clear
+                clear 2>/dev/null || true
                 echo -e "${GREEN}${ICON_ROCKET} Thanks for using PTUI!${NC}"
                 echo
                 exit 0

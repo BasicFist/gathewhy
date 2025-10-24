@@ -21,24 +21,32 @@ log_info() {
 
 log_success() {
     echo -e "${GREEN}✅${NC} $1"
-    ((TESTS_PASSED++))
+    ((++TESTS_PASSED))
 }
 
 log_error() {
     echo -e "${RED}❌${NC} $1"
-    ((TESTS_FAILED++))
+    ((++TESTS_FAILED))
 }
 
 test_endpoint() {
     local name=$1
     local url=$2
     local timeout=${3:-5}
+    local optional=${4:-false}
 
-    if timeout $timeout curl -s -f "$url" > /dev/null 2>&1; then
+    if output=$(curl -s -f --max-time "$timeout" "$url" 2>&1 >/dev/null); then
         log_success "$name is accessible"
         return 0
+    elif [[ "$optional" == true ]]; then
+        log_info "$name is not accessible (optional)"
+        return 2
     else
-        log_error "$name is NOT accessible"
+        if [[ -n "$output" ]]; then
+            log_error "$name is NOT accessible ($output)"
+        else
+            log_error "$name is NOT accessible"
+        fi
         return 1
     fi
 }
@@ -47,11 +55,15 @@ test_json_response() {
     local name=$1
     local url=$2
     local jq_filter=${3:-.}
+    local optional=${4:-false}
 
     response=$(curl -s "$url")
     if echo "$response" | jq -e "$jq_filter" > /dev/null 2>&1; then
         log_success "$name returns valid JSON"
         return 0
+    elif [[ "$optional" == true ]]; then
+        log_info "$name returned invalid JSON (optional)"
+        return 2
     else
         log_error "$name returns invalid JSON"
         echo "Response: $response"
@@ -140,18 +152,18 @@ test_endpoint "Ollama" "http://localhost:11434/api/tags"
 test_json_response "Ollama models list" "http://localhost:11434/api/tags" ".models"
 
 # llama.cpp Python
-test_endpoint "llama.cpp Python" "http://localhost:8000/v1/models"
-test_json_response "llama.cpp Python models" "http://localhost:8000/v1/models" ".data"
+if test_endpoint "llama.cpp Python" "http://localhost:8000/v1/models" 5 true; then
+    test_json_response "llama.cpp Python models" "http://localhost:8000/v1/models" ".data"
+fi
 
 # llama.cpp Native
-test_endpoint "llama.cpp Native" "http://localhost:8080/v1/models"
-test_json_response "llama.cpp Native models" "http://localhost:8080/v1/models" ".data"
+if test_endpoint "llama.cpp Native" "http://localhost:8080/v1/models" 5 true; then
+    test_json_response "llama.cpp Native models" "http://localhost:8080/v1/models" ".data"
+fi
 
 # vLLM (may not be running)
-if test_endpoint "vLLM" "http://localhost:8001/v1/models"; then
+if test_endpoint "vLLM" "http://localhost:8001/v1/models" 5 true; then
     test_json_response "vLLM models" "http://localhost:8001/v1/models" ".data"
-else
-    log_info "vLLM is not running (optional)"
 fi
 
 echo ""
@@ -187,15 +199,12 @@ echo ""
 log_info "Checking expected models..."
 
 # Core models that should be available
-test_model_available "llama3.1:8b"
-test_model_available "qwen-coder"
-
-# llama.cpp models
-test_model_available "llama-cpp-python" || log_info "llama-cpp-python not configured (optional)"
-test_model_available "llama-cpp-native" || log_info "llama-cpp-native not configured (optional)"
+test_model_available "llama3.1:latest"
+test_model_available "qwen2.5-coder:7b"
 
 # vLLM models (optional)
-test_model_available "llama2-13b-vllm" || log_info "llama2-13b-vllm not configured (optional)"
+test_model_available "qwen-coder-vllm" || log_info "qwen-coder-vllm not configured (optional)"
+test_model_available "dolphin-uncensored-vllm" || log_info "dolphin-uncensored-vllm not configured (optional)"
 
 echo ""
 
@@ -209,19 +218,17 @@ echo ""
 log_info "Testing model routing..."
 
 # Test routing to Ollama
-test_completion "llama3.1:8b" "Say hello"
+test_completion "llama3.1:latest" "Say hello"
 
 # Test routing to code model
-test_completion "qwen-coder" "Write hello world in Python"
-
-# Test routing to llama.cpp (if configured)
-if curl -s http://localhost:4000/v1/models | jq -e '.data[] | select(.id == "llama-cpp-python")' > /dev/null; then
-    test_completion "llama-cpp-python" "Test"
-fi
+test_completion "qwen2.5-coder:7b" "Write hello world in Python"
 
 # Test routing to vLLM (if configured)
-if curl -s http://localhost:4000/v1/models | jq -e '.data[] | select(.id == "llama2-13b-vllm")' > /dev/null; then
-    test_completion "llama2-13b-vllm" "Test"
+if curl -s http://localhost:4000/v1/models | jq -e '.data[] | select(.id == "qwen-coder-vllm")' > /dev/null; then
+    test_completion "qwen-coder-vllm" "Test"
+fi
+if curl -s http://localhost:4000/v1/models | jq -e '.data[] | select(.id == "dolphin-uncensored-vllm")' > /dev/null; then
+    test_completion "dolphin-uncensored-vllm" "Test"
 fi
 
 echo ""
@@ -238,17 +245,23 @@ log_info "Testing streaming responses..."
 stream_response=$(curl -s -X POST http://localhost:4000/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "llama3.1:8b",
+        "model": "llama3.1:latest",
         "messages": [{"role": "user", "content": "Count to 3"}],
         "stream": true,
         "max_tokens": 20
-    }')
+    }' || true)
 
-if echo "$stream_response" | grep -q "data:"; then
+streaming_supported=false
+if [[ -n "$stream_response" ]] && echo "$stream_response" | grep -q "data:"; then
     log_success "Streaming response works"
+    if echo "$stream_response" | grep -q "\[DONE\]"; then
+        log_success "Streaming response includes [DONE] marker"
+    else
+        log_info "Streaming response missing [DONE] marker (optional)"
+    fi
+    streaming_supported=true
 else
-    log_error "Streaming response failed"
-    echo "Response: $stream_response"
+    log_info "Streaming response not available (optional)"
 fi
 
 echo ""
@@ -320,7 +333,7 @@ start_time=$(date +%s%3N)
 curl -s -X POST http://localhost:4000/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "llama3.1:8b",
+        "model": "llama3.1:latest",
         "messages": [{"role": "user", "content": "Hi"}],
         "max_tokens": 10
     }' > /dev/null

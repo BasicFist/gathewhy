@@ -2,18 +2,22 @@
 # Provider TUI (ptui) - AI Backend Unified Command Center
 # Comprehensive management interface for LiteLLM, vLLM, Ollama, and llama.cpp
 
-set -e
+set -euo pipefail
 
-VERSION="2.0.0"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+readonly VERSION="2.0.0"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+readonly INVOCATION_NAME="$(basename "$0")"
 
 # Service endpoints
-LITELLM_URL="http://localhost:4000"
-OLLAMA_URL="http://localhost:11434"
-LLAMACPP_PYTHON_URL="http://localhost:8000"
-LLAMACPP_NATIVE_URL="http://localhost:8080"
-VLLM_URL="http://localhost:8001"
+readonly LITELLM_URL="http://localhost:4000"
+readonly OLLAMA_URL="http://localhost:11434"
+readonly LLAMACPP_PYTHON_URL="http://localhost:8000"
+readonly LLAMACPP_NATIVE_URL="http://localhost:8080"
+readonly VLLM_URL="http://localhost:8001"
+readonly DEFAULT_HTTP_TIMEOUT=15
+readonly AUTO_REFRESH_SECONDS=5
+readonly PYTHON_BIN="${PYTHON:-python3}"
 
 # Color codes
 RED='\033[0;31m'
@@ -46,6 +50,49 @@ log_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_header() { echo -e "${BOLD}${CYAN}$1${NC}"; }
 
+pause() {
+    read -rp "Press Enter to continue..." _
+}
+
+require_command() {
+    local command_name=$1
+    local hint=${2:-}
+
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        log_error "Required command not found: $command_name"
+        [[ -n "$hint" ]] && echo -e "${YELLOW}${hint}${NC}"
+        exit 1
+    fi
+}
+
+ensure_dependencies() {
+    require_command curl "Install curl to allow endpoint checks."
+    require_command jq "Install jq (e.g. 'sudo apt install jq') for JSON parsing."
+}
+
+show_help() {
+    cat <<EOF
+PTUI - Provider TUI v$VERSION
+AI Backend Unified Command Center
+
+Usage:
+  $INVOCATION_NAME              Interactive TUI mode
+  $INVOCATION_NAME status       Show service status
+  $INVOCATION_NAME models       List all models
+  $INVOCATION_NAME health       Run health check
+  $INVOCATION_NAME vllm <cmd>   vLLM management (status|qwen|dolphin|stop)
+  $INVOCATION_NAME test         Test endpoints interactively
+  $INVOCATION_NAME help         Show this help message
+  $INVOCATION_NAME version      Show current version
+
+Interactive mode provides the full menu-driven interface described in docs/ptui-user-guide.md.
+EOF
+}
+
+show_version() {
+    echo "PTUI v$VERSION"
+}
+
 # Clear screen and show header
 show_header() {
     clear 2>/dev/null || true
@@ -66,8 +113,9 @@ check_service_health() {
     local name=$1
     local url=$2
     local endpoint=${3:-"/health"}
+    local timeout=${4:-$DEFAULT_HTTP_TIMEOUT}
 
-    if curl -s -f -m 2 "$url$endpoint" > /dev/null 2>&1; then
+    if curl -s -f --max-time "$timeout" "$url$endpoint" > /dev/null 2>&1; then
         echo -e "${GREEN}${ICON_RUNNING}${NC} ${BOLD}$name${NC} ${GRAY}($url)${NC}"
         return 0
     else
@@ -94,20 +142,32 @@ show_status() {
     echo
 
     # LiteLLM Gateway
-    check_service_health "LiteLLM Gateway" "$LITELLM_URL" "/health"
-    litellm_status=$?
+    if check_service_health "LiteLLM Gateway" "$LITELLM_URL" "/health"; then
+        litellm_status=0
+    else
+        litellm_status=1
+    fi
 
     # Ollama
-    check_service_health "Ollama" "$OLLAMA_URL" "/api/tags"
-    ollama_status=$?
+    if check_service_health "Ollama" "$OLLAMA_URL" "/api/tags"; then
+        ollama_status=0
+    else
+        ollama_status=1
+    fi
 
     # llama.cpp Python
-    check_service_health "llama.cpp (Python)" "$LLAMACPP_PYTHON_URL" "/v1/models"
-    llamacpp_py_status=$?
+    if check_service_health "llama.cpp (Python)" "$LLAMACPP_PYTHON_URL" "/v1/models"; then
+        llamacpp_py_status=0
+    else
+        llamacpp_py_status=1
+    fi
 
     # llama.cpp Native
-    check_service_health "llama.cpp (Native)" "$LLAMACPP_NATIVE_URL" "/v1/models"
-    llamacpp_native_status=$?
+    if check_service_health "llama.cpp (Native)" "$LLAMACPP_NATIVE_URL" "/v1/models"; then
+        llamacpp_native_status=0
+    else
+        llamacpp_native_status=1
+    fi
 
     # vLLM
     if check_service_health "vLLM" "$VLLM_URL" "/v1/models"; then
@@ -139,6 +199,7 @@ show_status() {
     fi
 
     echo
+    return 0
 }
 
 # List all available models
@@ -168,6 +229,8 @@ list_models() {
         echo -e "  ${GREEN}•${NC} $vllm_model"
         echo
     fi
+
+    return 0
 }
 
 # Health check with details
@@ -223,6 +286,7 @@ health_check() {
         echo -e "${YELLOW}${ICON_WARNING} System Status: DEGRADED${NC}"
     fi
     echo
+    return 0
 }
 
 # vLLM model management
@@ -243,26 +307,26 @@ vllm_menu() {
         echo "5. View vLLM logs"
         echo "b. Back to main menu"
         echo
-        read -p "Select option: " choice
+        read -rp "Select option: " choice
 
         case $choice in
             1)
                 log_info "Switching to Qwen Coder..."
                 "$SCRIPT_DIR/vllm-model-switch.sh" qwen
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             2)
                 log_info "Switching to Dolphin..."
                 "$SCRIPT_DIR/vllm-model-switch.sh" dolphin
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             3)
                 "$SCRIPT_DIR/vllm-model-switch.sh" status
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             4)
                 "$SCRIPT_DIR/vllm-model-switch.sh" stop
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             5)
                 echo
@@ -275,7 +339,7 @@ vllm_menu() {
                 else
                     echo "No logs found"
                 fi
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             b|B)
                 break
@@ -300,7 +364,7 @@ view_config() {
     echo "4. vLLM Model Info"
     echo "b. Back"
     echo
-    read -p "Select config to view: " choice
+    read -rp "Select config to view: " choice
 
     case $choice in
         1)
@@ -333,7 +397,7 @@ view_config() {
             else
                 echo "vLLM is not running"
             fi
-            read -p "Press Enter to continue..."
+            pause
             ;;
         b|B)
             return
@@ -352,7 +416,7 @@ view_logs() {
     echo "3. System logs (dmesg)"
     echo "b. Back"
     echo
-    read -p "Select logs to view: " choice
+    read -rp "Select logs to view: " choice
 
     case $choice in
         1)
@@ -360,7 +424,7 @@ view_logs() {
             log_info "Last 100 lines of LiteLLM service:"
             echo
             journalctl --user -u litellm.service -n 100 --no-pager
-            read -p "Press Enter to continue..."
+            pause
             ;;
         2)
             echo
@@ -373,11 +437,11 @@ view_logs() {
             else
                 echo "No vLLM logs found"
             fi
-            read -p "Press Enter to continue..."
+            pause
             ;;
         3)
             dmesg | tail -50
-            read -p "Press Enter to continue..."
+            pause
             ;;
         b|B)
             return
@@ -397,7 +461,7 @@ test_endpoints() {
     echo "4. Test all endpoints"
     echo "b. Back"
     echo
-    read -p "Select test: " choice
+    read -rp "Select test: " choice
 
     case $choice in
         1)
@@ -407,23 +471,23 @@ test_endpoints() {
                 -H "Content-Type: application/json" \
                 -d '{"model": "llama3.1:latest", "messages": [{"role": "user", "content": "Say hello"}], "max_tokens": 20}' \
                 | jq
-            read -p "Press Enter to continue..."
+            pause
             ;;
         2)
             echo
             log_info "Testing Ollama..."
             curl -s "$OLLAMA_URL/api/tags" | jq
-            read -p "Press Enter to continue..."
+            pause
             ;;
         3)
             echo
             log_info "Testing vLLM..."
             curl -s "$VLLM_URL/v1/models" | jq
-            read -p "Press Enter to continue..."
+            pause
             ;;
         4)
             health_check
-            read -p "Press Enter to continue..."
+            pause
             ;;
         b|B)
             return
@@ -444,7 +508,7 @@ quick_actions() {
     echo "5. Kill all vLLM processes"
     echo "b. Back"
     echo
-    read -p "Select action: " choice
+    read -rp "Select action: " choice
 
     case $choice in
         1)
@@ -452,7 +516,7 @@ quick_actions() {
             systemctl --user restart litellm.service
             sleep 2
             systemctl --user status litellm.service --no-pager
-            read -p "Press Enter to continue..."
+            pause
             ;;
         2)
             if [[ -f "$PROJECT_ROOT/scripts/validate-unified-backend.sh" ]]; then
@@ -460,23 +524,23 @@ quick_actions() {
             else
                 log_error "Validation script not found"
             fi
-            read -p "Press Enter to continue..."
+            pause
             ;;
         3)
             nvidia-smi 2>/dev/null || log_warning "nvidia-smi not available"
-            read -p "Press Enter to continue..."
+            pause
             ;;
         4)
             echo
             log_info "Port usage:"
             echo
             lsof -i :4000 -i :8001 -i :11434 -i :8000 -i :8080 2>/dev/null || echo "No processes found"
-            read -p "Press Enter to continue..."
+            pause
             ;;
         5)
             log_warning "Killing all vLLM processes..."
             pkill -f "vllm serve" && log_success "vLLM processes killed" || log_info "No vLLM processes found"
-            read -p "Press Enter to continue..."
+            pause
             ;;
         b|B)
             return
@@ -504,36 +568,36 @@ provider_management() {
         echo "  ${CYAN}5${NC}. Apply changes (restart LiteLLM)"
         echo "  ${CYAN}b${NC}. Back to main menu"
         echo
-        read -p "Select option: " choice
+        read -rp "Select option: " choice
 
         case $choice in
             1)
                 echo
-                read -p "Enter model name to enable: " model_name
+                read -rp "Enter model name to enable: " model_name
                 python3 "$SCRIPT_DIR/manage-providers.py" enable "$model_name"
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             2)
                 echo
-                read -p "Enter model name to disable: " model_name
+                read -rp "Enter model name to disable: " model_name
                 python3 "$SCRIPT_DIR/manage-providers.py" disable "$model_name"
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             3)
                 echo
                 python3 "$SCRIPT_DIR/manage-providers.py" providers
                 echo
-                read -p "Enter provider name: " provider_name
+                read -rp "Enter provider name: " provider_name
                 python3 "$SCRIPT_DIR/manage-providers.py" enable-provider "$provider_name"
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             4)
                 echo
                 python3 "$SCRIPT_DIR/manage-providers.py" providers
                 echo
-                read -p "Enter provider name: " provider_name
+                read -rp "Enter provider name: " provider_name
                 python3 "$SCRIPT_DIR/manage-providers.py" disable-provider "$provider_name"
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             5)
                 echo
@@ -550,7 +614,7 @@ provider_management() {
                 else
                     log_error "Failed to restart LiteLLM service"
                 fi
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             b|B)
                 return
@@ -581,20 +645,20 @@ main_menu() {
         echo "  ${CYAN}9${NC}. 🔌 Provider management (enable/disable)"
         echo "  ${CYAN}q${NC}. Quit"
         echo
-        read -p "Select option: " choice
+        read -rp "Select option: " choice
 
         case $choice in
             1)
                 show_status
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             2)
                 list_models
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             3)
                 health_check
-                read -p "Press Enter to continue..."
+                pause
                 ;;
             4)
                 vllm_menu
@@ -629,16 +693,36 @@ main_menu() {
 }
 
 # Command-line interface (non-interactive mode)
+needs_dependencies=true
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        help|--help|-h|version|--version|-V)
+            needs_dependencies=false
+            ;;
+    esac
+fi
+
+if [[ $# -eq 0 ]]; then
+    needs_dependencies=false
+fi
+
+if [[ "$needs_dependencies" == "true" ]]; then
+    ensure_dependencies
+fi
+
 if [[ $# -gt 0 ]]; then
     case "$1" in
         status|s)
             show_status
+            exit $?
             ;;
         models|m)
             list_models
+            exit $?
             ;;
         health|h)
             health_check
+            exit $?
             ;;
         vllm|v)
             shift
@@ -646,38 +730,38 @@ if [[ $# -gt 0 ]]; then
                 "$SCRIPT_DIR/vllm-model-switch.sh" "$@"
             else
                 log_error "vLLM management script not found"
+                exit 1
             fi
+            exit $?
             ;;
         test|t)
             test_endpoints
+            exit $?
             ;;
         help|--help|-h)
-            cat << EOF
-PTUI - Provider TUI v$VERSION
-AI Backend Unified Command Center
-
-Usage:
-  ptui              Interactive TUI mode
-  ptui status       Show service status
-  ptui models       List all models
-  ptui health       Run health check
-  ptui vllm <cmd>   vLLM management (status|qwen|dolphin|stop)
-  ptui test         Test endpoints
-  ptui help         Show this help
-
-Interactive mode provides full menu-driven interface.
-EOF
+            show_help
+            exit 0
             ;;
-        version|--version|-v)
-            echo "PTUI v$VERSION"
+        version|--version|-v|-V)
+            show_version
+            exit 0
             ;;
         *)
             log_error "Unknown command: $1"
-            echo "Run 'ptui help' for usage information"
+            echo "Run '$INVOCATION_NAME help' for usage information"
             exit 1
             ;;
     esac
 else
-    # No arguments - run interactive TUI
-    main_menu
+    PTUI_HTTP_TIMEOUT="$DEFAULT_HTTP_TIMEOUT" \
+        PTUI_REFRESH_SECONDS="$AUTO_REFRESH_SECONDS" \
+        PTUI_VERSION="$VERSION" \
+        "$PYTHON_BIN" "$SCRIPT_DIR/ptui_dashboard.py"
+    python_exit=$?
+    if [[ $python_exit -ne 0 ]]; then
+        echo "⚠️  Falling back to legacy PTUI menu..."
+        ensure_dependencies
+        main_menu
+    fi
+    exit 0
 fi

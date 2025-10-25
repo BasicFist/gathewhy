@@ -24,19 +24,22 @@ Key Bindings:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import re
 import subprocess
+import sys
 import time
 import warnings
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
 import psutil
 import requests  # type: ignore[import-untyped]
+import yaml  # type: ignore[import-untyped]
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -48,7 +51,17 @@ from textual.widgets import Button, DataTable, Footer, Header, Label, Log, Stati
 
 # Configuration and logging setup
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+_log_formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+_handler = logging.StreamHandler()
+_handler.setFormatter(_log_formatter)
+logger.addHandler(_handler)
+logger.setLevel(logging.DEBUG)
+
+# Constants for state persistence
+STATE_DIR = Path.home() / ".cache" / "ai-dashboard"
+STATE_FILE = STATE_DIR / "dashboard_state.json"
 
 # ===== SECURITY: Service name allowlist (prevent command injection) =====
 ALLOWED_SERVICES: dict[str, str] = {
@@ -80,6 +93,7 @@ def _load_config() -> tuple[float, int, int]:
         if not 0.5 <= http_timeout <= 30:
             raise ValueError(f"HTTP_TIMEOUT must be 0.5-30 seconds, got {http_timeout}")
     except ValueError as e:
+        logger.error(f"Invalid AI_DASH_HTTP_TIMEOUT: {e}")
         raise ValueError(f"Invalid AI_DASH_HTTP_TIMEOUT: {e}") from None
 
     try:
@@ -87,6 +101,7 @@ def _load_config() -> tuple[float, int, int]:
         if not 1 <= refresh_interval <= 60:
             raise ValueError(f"REFRESH_INTERVAL must be 1-60 seconds, got {refresh_interval}")
     except ValueError as e:
+        logger.error(f"Invalid AI_DASH_REFRESH_INTERVAL: {e}")
         raise ValueError(f"Invalid AI_DASH_REFRESH_INTERVAL: {e}") from None
 
     try:
@@ -94,11 +109,35 @@ def _load_config() -> tuple[float, int, int]:
         if not 5 <= log_height <= 50:
             raise ValueError(f"LOG_HEIGHT must be 5-50 lines, got {log_height}")
     except ValueError as e:
+        logger.error(f"Invalid AI_DASH_LOG_HEIGHT: {e}")
         raise ValueError(f"Invalid AI_DASH_LOG_HEIGHT: {e}") from None
 
     return http_timeout, refresh_interval, log_height
 
+
+def _load_providers_config() -> dict | None:
+    """Load provider configuration from YAML if available.
+
+    Returns:
+        Provider configuration dict or None if file not found
+    """
+    config_path = Path(__file__).parent.parent / "config" / "providers.yaml"
+    if not config_path.exists():
+        logger.debug(f"Provider config not found at {config_path}")
+        return None
+
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            logger.info(f"Loaded provider config from {config_path}")
+            return config
+    except Exception as e:
+        logger.warning(f"Failed to load provider config: {type(e).__name__}: {e}")
+        return None
+
+
 DEFAULT_HTTP_TIMEOUT, DEFAULT_REFRESH_INTERVAL, DEFAULT_LOG_HEIGHT = _load_config()
+PROVIDER_CONFIG = _load_providers_config()
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -121,7 +160,36 @@ class ServiceMetrics:
     vram_percent: float
     response_ms: float
     pid: int | None
-    notes: list[str]
+    notes: list[str] = field(default_factory=list)
+    timestamp: float = field(default_factory=time.time)
+
+    def to_json(self) -> dict:
+        """Convert to JSON-serializable dictionary."""
+        data = asdict(self)
+        data["notes"] = self.notes or []
+        return data
+
+    @classmethod
+    def from_json(cls, data: dict) -> "ServiceMetrics":
+        """Create instance from JSON-serializable dictionary."""
+        # Handle defaults for optional fields
+        return cls(
+            key=data["key"],
+            display=data["display"],
+            required=data["required"],
+            status=data["status"],
+            port=data.get("port"),
+            models=data.get("models"),
+            cpu_percent=data.get("cpu_percent", 0.0),
+            memory_mb=data.get("memory_mb", 0.0),
+            memory_percent=data.get("memory_percent", 0.0),
+            vram_mb=data.get("vram_mb", 0.0),
+            vram_percent=data.get("vram_percent", 0.0),
+            response_ms=data.get("response_ms", 0.0),
+            pid=data.get("pid"),
+            notes=data.get("notes", []),
+            timestamp=data.get("timestamp", time.time()),
+        )
 
 
 @dataclass
@@ -133,6 +201,57 @@ class GPUOverview:
     total_used_mb: float
     total_capacity_mb: float
     peak_util_percent: float
+
+
+# ---------------------------------------------------------------------------
+# State persistence functions
+
+
+def save_dashboard_state(metrics: list[ServiceMetrics], selected_key: str | None) -> bool:
+    """Save dashboard state for recovery.
+
+    Args:
+        metrics: List of ServiceMetrics to save
+        selected_key: Currently selected provider key
+
+    Returns:
+        True if save succeeded, False otherwise
+    """
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        state = {
+            "timestamp": time.time(),
+            "selected_key": selected_key,
+            "metrics": [m.to_json() for m in metrics],
+        }
+        with open(STATE_FILE, "w") as f:
+            json.dump(state, f, indent=2)
+        logger.debug(f"Saved dashboard state to {STATE_FILE}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to save dashboard state: {type(e).__name__}: {e}")
+        return False
+
+
+def load_dashboard_state() -> tuple[list[ServiceMetrics], str | None] | None:
+    """Load dashboard state from previous session.
+
+    Returns:
+        Tuple of (metrics list, selected_key) or None if load failed
+    """
+    if not STATE_FILE.exists():
+        return None
+
+    try:
+        with open(STATE_FILE, "r") as f:
+            state = json.load(f)
+        metrics = [ServiceMetrics.from_json(m) for m in state.get("metrics", [])]
+        selected_key = state.get("selected_key")
+        logger.debug(f"Loaded dashboard state from {STATE_FILE}")
+        return metrics, selected_key
+    except Exception as e:
+        logger.warning(f"Failed to load dashboard state: {type(e).__name__}: {e}")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -407,11 +526,23 @@ class ProviderMonitor:
     # ----------------------------- public API ----------------------------------
 
     def collect_snapshot(self) -> tuple[list[ServiceMetrics], GPUOverview]:
-        gpu_info = self.gpu_monitor.get_gpu_info()
-        per_pid_vram = self.gpu_monitor.get_process_vram()
-        system_memory_total = psutil.virtual_memory().total / 1024**2
+        """Collect health and resource metrics for all providers.
+
+        Returns:
+            Tuple of (metrics list, gpu_overview)
+        """
+        try:
+            gpu_info = self.gpu_monitor.get_gpu_info()
+            per_pid_vram = self.gpu_monitor.get_process_vram()
+            system_memory_total = psutil.virtual_memory().total / 1024**2
+        except Exception as e:
+            logger.error(f"Error collecting system metrics: {type(e).__name__}: {e}")
+            gpu_info = []
+            per_pid_vram = {}
+            system_memory_total = 1.0
 
         metrics: list[ServiceMetrics] = []
+        elapsed_ms = 0.0
 
         for key, cfg in self.PROVIDERS.items():
             notes: list[str] = []
@@ -432,27 +563,37 @@ class ProviderMonitor:
                         payload = response.json()
                         status = "active"
                         models = self._parse_models(key, payload)
+                        logger.debug(f"{key}: ✓ Active with {models} models ({elapsed_ms:.0f}ms)")
                     except ValueError as e:
-                        logger.debug(f"{key}: Invalid JSON response: {e}")
+                        logger.error(f"{key}: Invalid JSON response: {e}")
                         notes.append("Invalid JSON payload")
                         status = "degraded" if required else "inactive"
                 else:
-                    notes.append(f"HTTP {response.status_code} {response.reason}")
+                    reason = f"HTTP {response.status_code}"
+                    if response.reason:
+                        reason += f" ({response.reason})"
+                    logger.warning(f"{key}: Provider responded with {reason}")
+                    notes.append(reason)
                     status = "degraded" if required else "inactive"
             except requests.exceptions.Timeout:
                 elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.debug(f"{key}: Request timeout after {elapsed_ms:.0f}ms")
-                notes.append("Timed out")
+                logger.warning(f"{key}: Request timeout after {elapsed_ms:.0f}ms")
+                notes.append(f"Timeout ({elapsed_ms:.0f}ms)")
                 status = "degraded" if required else "inactive"
             except requests.exceptions.ConnectionError as e:
                 elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.debug(f"{key}: Connection error: {e}")
-                notes.append("Connection error")
+                logger.warning(f"{key}: Connection error: {str(e)[:50]}")
+                notes.append("Connection refused")
                 status = "degraded" if required else "inactive"
             except requests.exceptions.RequestException as e:
                 elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.debug(f"{key}: Request failed: {type(e).__name__}: {e}")
-                notes.append(f"Request error: {type(e).__name__}")
+                logger.warning(f"{key}: Request failed ({type(e).__name__}): {str(e)[:50]}")
+                notes.append(f"{type(e).__name__}")
+                status = "degraded" if required else "inactive"
+            except Exception as e:  # pragma: no cover - unexpected errors
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                logger.error(f"{key}: Unexpected error: {type(e).__name__}: {e}")
+                notes.append(f"Unexpected error: {type(e).__name__}")
                 status = "degraded" if required else "inactive"
 
             pid, cpu_percent, memory_mb = self._collect_process_metrics(key)
@@ -880,6 +1021,13 @@ class DashboardApp(App[None]):
         self.metrics: list[ServiceMetrics] = []
         self.gpu_overview = GPUOverview(False, [], 0.0, 0.0, 0.0)
         self.selected_key: str | None = None
+        self.refresh_timer = None
+
+        # Try to load previous state
+        loaded_state = load_dashboard_state()
+        if loaded_state:
+            self.metrics, self.selected_key = loaded_state
+            logger.info(f"Restored dashboard state with {len(self.metrics)} providers")
 
     # ------------------------------ layout ---------------------------------
 
@@ -902,10 +1050,18 @@ class DashboardApp(App[None]):
 
         Sets up auto-refresh timer and performs initial data collection.
         """
+        logger.info("Dashboard mounted - starting initial metrics collection")
         self._refresh_table()
         self.refresh_timer = self.set_interval(
             DEFAULT_REFRESH_INTERVAL, self._refresh_table, pause=not self.auto_refresh
         )
+        self.log_event(f"[green]✓ Dashboard initialized[/] (refresh: {DEFAULT_REFRESH_INTERVAL}s)")
+
+    def action_quit(self) -> None:
+        """Quit the application and save state."""
+        logger.info("Dashboard shutting down - saving state")
+        save_dashboard_state(self.metrics, self.selected_key)
+        super().action_quit()
 
     def action_toggle_auto(self) -> None:
         """Toggle auto-refresh on/off (binding: 'a')."""
@@ -935,9 +1091,12 @@ class DashboardApp(App[None]):
         """Refresh all dashboard displays with latest provider metrics."""
         try:
             self.metrics, self.gpu_overview = self.monitor.collect_snapshot()
+            active_count = sum(1 for m in self.metrics if m.status == "active")
+            logger.debug(f"Snapshot collected: {active_count}/{len(self.metrics)} active")
         except Exception as e:
-            logger.warning(f"Error collecting provider snapshot: {type(e).__name__}: {e}")
-            self.log_event(f"[red]Snapshot failed:[/] {type(e).__name__}")
+            error_msg = f"{type(e).__name__}"
+            logger.error(f"Error collecting provider snapshot: {error_msg}: {e}")
+            self.log_event(f"[red]✗ Snapshot failed:[/] {error_msg}")
             return
 
         try:
@@ -950,7 +1109,9 @@ class DashboardApp(App[None]):
             detail = self.query_one(DetailPanel)
             detail.update_details(self._find_metric(self.selected_key))
         except Exception as e:
-            logger.warning(f"Error updating dashboard displays: {type(e).__name__}: {e}")
+            error_msg = f"{type(e).__name__}"
+            logger.error(f"Error updating dashboard displays: {error_msg}: {e}")
+            self.log_event(f"[red]✗ Display update failed:[/] {error_msg}")
 
     def _find_metric(self, key: str | None) -> ServiceMetrics | None:
         """Find ServiceMetrics by provider key.
@@ -1006,13 +1167,18 @@ class DashboardApp(App[None]):
         Args:
             event: ServiceAction event with action and service key
         """
+        logger.info(f"Service action requested: {event.action} on {event.service_key}")
         success = self.monitor.systemctl(event.service_key, event.action)
         if success:
-            self.log_event(f"{event.action.title()} command sent to {event.service_key}.")
+            msg = f"[green]✓[/] {event.action.title()} sent to {event.service_key}"
+            self.log_event(msg)
+            logger.info(f"Service action succeeded: {event.action} on {event.service_key}")
             # Refresh immediately to reflect new status
-            self._refresh_table()
+            self.set_timer(1.0, self._refresh_table)
         else:
-            self.log_event(f"[red]Failed[/] to {event.action} {event.service_key}.")
+            msg = f"[red]✗ Failed[/] to {event.action} {event.service_key}"
+            self.log_event(msg)
+            logger.warning(f"Service action failed: {event.action} on {event.service_key}")
 
 
 if __name__ == "__main__":

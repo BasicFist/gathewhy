@@ -291,6 +291,28 @@ Explicit port registry and automated conflict detection:
 
 ## Health Monitoring
 
+### Dashboard (Recommended)
+
+Launch the interactive TUI dashboard for real-time monitoring:
+
+```bash
+# Start the AI Dashboard
+python3 scripts/ai-dashboard
+
+# Or with custom settings
+AI_DASH_REFRESH_INTERVAL=3 python3 scripts/ai-dashboard
+```
+
+**Dashboard Features**:
+- Real-time provider status (active/degraded/inactive)
+- CPU, memory, and GPU utilization
+- Service control (start/stop/restart/enable/disable)
+- Event logging and alerts
+
+See **[AI Dashboard Documentation](docs/ai-dashboard.md)** for complete guide.
+
+### Command-Line Health Checks
+
 ```bash
 # Check all providers
 curl http://localhost:4000/health

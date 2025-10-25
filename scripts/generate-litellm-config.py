@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LiteLLM Configuration Generator
+LiteLLM Configuration Generator.
 
 Generates litellm-unified.yaml from source configurations:
 - providers.yaml: Provider registry (source of truth for models)
@@ -12,11 +12,25 @@ Features:
 - Automatic backup before generation
 - Post-generation validation
 - Preserves manual security settings
+- Structured logging for comprehensive audit trail
 
 Usage:
     python3 scripts/generate-litellm-config.py
     python3 scripts/generate-litellm-config.py --validate-only
     python3 scripts/generate-litellm-config.py --rollback <version>
+
+Examples:
+    Generate fresh configuration:
+        $ python3 scripts/generate-litellm-config.py
+        [INFO    ] Configuration generated successfully
+
+    Validate without generating:
+        $ python3 scripts/generate-litellm-config.py --validate-only
+        [INFO    ] Validation passed: 15 providers, 47 models
+
+    Rollback to previous version:
+        $ python3 scripts/generate-litellm-config.py --rollback v1.2.3
+        [SUCCESS ] Rolled back to version v1.2.3
 """
 
 import argparse
@@ -24,8 +38,10 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
+from loguru import logger
 
 # Configuration paths
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -35,32 +51,121 @@ OUTPUT_FILE = PROJECT_ROOT / "config" / "litellm-unified.yaml"
 BACKUP_DIR = PROJECT_ROOT / "config" / "backups"
 VERSION_FILE = PROJECT_ROOT / "config" / ".litellm-version"
 
+# Configure structured logging
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="<level>[{level: <8}]</level> {message}",
+    level="INFO",
+    colorize=True,
+)
+
 
 class ConfigGenerator:
-    """Generate LiteLLM configuration from source files"""
+    """
+    Generate LiteLLM unified configuration from source files.
 
-    def __init__(self):
-        self.providers: dict = {}
-        self.mappings: dict = {}
+    This class orchestrates the generation of litellm-unified.yaml by:
+    1. Loading provider registry and model mappings
+    2. Building model list with provider-specific configurations
+    3. Configuring router settings and fallback chains
+    4. Generating router configuration for LiteLLM
+    5. Creating a backup before writing output
+    6. Validating the generated configuration
+
+    Attributes:
+        providers (dict): Parsed providers.yaml configuration
+        mappings (dict): Parsed model-mappings.yaml configuration
+        version (str): Generated version string (git hash or timestamp)
+        timestamp (str): ISO format timestamp of generation
+    """
+
+    def __init__(self) -> None:
+        """Initialize configuration generator with empty state."""
+        self.providers: dict[str, Any] = {}
+        self.mappings: dict[str, Any] = {}
         self.version: str = ""
         self.timestamp: str = datetime.now().isoformat()
 
-    def load_sources(self):
-        """Load source configuration files"""
-        print("📖 Loading source configurations...")
+    def load_sources(self) -> None:
+        """
+        Load source configuration files with error handling.
 
-        with open(PROVIDERS_FILE) as f:
-            self.providers = yaml.safe_load(f)
+        Loads providers.yaml and model-mappings.yaml using safe YAML parsing.
+        Logs detailed information about loaded configuration for audit purposes.
 
-        with open(MAPPINGS_FILE) as f:
-            self.mappings = yaml.safe_load(f)
+        Raises:
+            FileNotFoundError: If source files don't exist
+            yaml.YAMLError: If YAML syntax is invalid
+        """
+        logger.info("Loading source configurations...")
 
-        print(f"  ✓ Loaded {len(self.providers.get('providers', {}))} providers")
-        print(f"  ✓ Loaded {len(self.mappings.get('exact_matches', {}))} exact mappings")
-        print(f"  ✓ Loaded {len(self.mappings.get('fallback_chains', {}))} fallback chains")
+        try:
+            with open(PROVIDERS_FILE) as f:
+                self.providers = yaml.safe_load(f)
+            logger.debug(
+                "Loaded providers.yaml",
+                file_path=str(PROVIDERS_FILE),
+                size_bytes=PROVIDERS_FILE.stat().st_size,
+            )
+        except FileNotFoundError as e:
+            logger.error(f"Providers file not found: {PROVIDERS_FILE}", error=str(e))
+            raise
+        except yaml.YAMLError as e:
+            logger.error(
+                f"Invalid YAML in providers.yaml: {e}",
+                file_path=str(PROVIDERS_FILE),
+                error=str(e),
+            )
+            raise
+
+        try:
+            with open(MAPPINGS_FILE) as f:
+                self.mappings = yaml.safe_load(f)
+            logger.debug(
+                "Loaded model-mappings.yaml",
+                file_path=str(MAPPINGS_FILE),
+                size_bytes=MAPPINGS_FILE.stat().st_size,
+            )
+        except FileNotFoundError as e:
+            logger.error(f"Mappings file not found: {MAPPINGS_FILE}", error=str(e))
+            raise
+        except yaml.YAMLError as e:
+            logger.error(
+                f"Invalid YAML in model-mappings.yaml: {e}",
+                file_path=str(MAPPINGS_FILE),
+                error=str(e),
+            )
+            raise
+
+        # Log summary statistics
+        provider_count = len(self.providers.get("providers", {}))
+        exact_matches = len(self.mappings.get("exact_matches", {}))
+        fallback_chains = len(self.mappings.get("fallback_chains", {}))
+
+        logger.info(
+            "Configuration sources loaded successfully",
+            providers=provider_count,
+            exact_matches=exact_matches,
+            fallback_chains=fallback_chains,
+        )
 
     def generate_version(self) -> str:
-        """Generate version string based on git or timestamp"""
+        """
+        Generate version string based on git commit hash or timestamp.
+
+        Attempts to generate version from current git commit hash for reproducibility.
+        Falls back to ISO8601 timestamp if git is not available or repository
+        context is not present.
+
+        Returns:
+            str: Version string in format "git-<hash>" or "YYYYMMDD-HHMMSS"
+
+        Example:
+            >>> gen = ConfigGenerator()
+            >>> version = gen.generate_version()
+            >>> print(version)  # "git-a1b2c3d" or "20251025-142530"
+        """
         try:
             import subprocess
 
@@ -73,72 +178,176 @@ class ConfigGenerator:
                 .decode()
                 .strip()
             )
+            logger.debug("Generated version from git", version=f"git-{git_hash}")
             return f"git-{git_hash}"
-        except (subprocess.SubprocessError, OSError, FileNotFoundError):
+        except (subprocess.SubprocessError, OSError, FileNotFoundError) as e:
             # Fallback to timestamp if git not available
-            return datetime.now().strftime("%Y%m%d-%H%M%S")
+            timestamp_version = datetime.now().strftime("%Y%m%d-%H%M%S")
+            logger.debug(
+                "Git not available, using timestamp for version",
+                version=timestamp_version,
+                reason=type(e).__name__,
+            )
+            return timestamp_version
 
-    def build_model_list(self) -> list[dict]:
-        """Build model_list from providers and mappings"""
-        print("\n🔨 Building model list...")
+    def build_model_list(self) -> list[dict[str, Any]]:
+        """
+        Build LiteLLM model list from providers and model mappings.
 
-        model_list = []
+        Constructs the model_list configuration section by:
+        1. Iterating through all active providers
+        2. For each provider model, building provider-specific LiteLLM parameters
+        3. Extracting tags, context lengths, and descriptions from model metadata
+        4. Creating standardized model entries for LiteLLM
+
+        Returns:
+            list[dict[str, Any]]: List of model entries with structure:
+                {
+                    "model_name": str,
+                    "litellm_params": dict,  # Provider-specific parameters
+                    "model_info": {
+                        "provider": str,
+                        "tags": list[str],
+                        "context_length": int (optional),
+                        "notes": str (optional),
+                    }
+                }
+
+        Example:
+            >>> gen = ConfigGenerator()
+            >>> gen.load_sources()
+            >>> models = gen.build_model_list()
+            >>> print(f"Built {len(models)} model entries")
+            Built 47 model entries
+        """
+        logger.info("Building model list from active providers...")
+
+        model_list: list[dict[str, Any]] = []
         providers_config = self.providers.get("providers", {})
 
         # Process each active provider
         for provider_name, provider_config in providers_config.items():
             if provider_config.get("status") != "active":
+                logger.debug(
+                    "Skipping inactive provider",
+                    provider=provider_name,
+                    status=provider_config.get("status"),
+                )
                 continue
 
             provider_type = provider_config.get("type")
             base_url = provider_config.get("base_url")
             models = provider_config.get("models", [])
 
-            print(f"  Processing {provider_name} ({len(models)} models)...")
+            logger.debug(
+                "Processing provider",
+                provider=provider_name,
+                type=provider_type,
+                model_count=len(models),
+            )
 
             for model in models:
-                model_name = model.get("name")
+                model_name = model.get("name") if isinstance(model, dict) else model
                 if not model_name:
+                    logger.warning(
+                        "Skipping model with no name",
+                        provider=provider_name,
+                        model_data=str(model),
+                    )
                     continue
 
                 # Build litellm_params based on provider type
                 litellm_params = self._build_litellm_params(
-                    provider_type, provider_name, model_name, base_url
+                    provider_type, provider_name, model_name, base_url, model
                 )
 
                 # Build model_info
                 model_info = {"tags": self._build_tags(model), "provider": provider_name}
 
                 # Add context_length if available
-                if "context_length" in model:
+                if isinstance(model, dict) and "context_length" in model:
                     model_info["context_length"] = model["context_length"]
 
                 # Add notes if description available
-                if "description" in model:
+                if isinstance(model, dict) and "description" in model:
                     model_info["notes"] = model["description"]
 
                 # Create model entry
-                model_entry = {
+                model_entry: dict[str, Any] = {
                     "model_name": self._get_display_name(provider_name, model_name),
                     "litellm_params": litellm_params,
                     "model_info": model_info,
                 }
 
                 model_list.append(model_entry)
+                logger.debug(
+                    "Added model to list",
+                    model_name=model_entry["model_name"],
+                    provider=provider_name,
+                )
 
-        print(f"  ✓ Generated {len(model_list)} model entries")
+        logger.info(
+            "Model list generation complete",
+            total_models=len(model_list),
+            providers_processed=len(
+                [p for p in providers_config.values() if p.get("status") == "active"]
+            ),
+        )
         return model_list
 
     def _build_litellm_params(
-        self, provider_type: str, provider_name: str, model_name: str, base_url: str
-    ) -> dict:
-        """Build litellm_params based on provider type"""
+        self,
+        provider_type: str,
+        provider_name: str,
+        model_name: str,
+        base_url: str,
+        raw_model: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Build provider-specific LiteLLM parameters.
+
+        Constructs the litellm_params dictionary with parameters specific to each
+        provider type. This handles differences in API conventions and authentication.
+
+        Args:
+            provider_type (str): Type of provider (ollama, vllm, llama_cpp, etc.)
+            provider_name (str): Name/identifier of the provider instance
+            model_name (str): Model name in provider's format
+            base_url (str): Base URL for provider API
+            raw_model (dict): Raw model configuration from providers.yaml
+
+        Returns:
+            dict[str, Any]: LiteLLM compatible parameters including model, api_base,
+                and provider-specific configuration
+
+        Example:
+            >>> params = gen._build_litellm_params(
+            ...     "vllm", "vllm_local", "Qwen2.5-Coder", "http://localhost:8001", {}
+            ... )
+            >>> print(params["api_base"])
+            http://localhost:8001/v1
+        """
         if provider_type == "ollama":
-            return {"model": f"ollama/{model_name}", "api_base": base_url}
+            params: dict = {"model": f"ollama/{model_name}", "api_base": base_url}
+            options = raw_model.get("options")
+            if options:
+                params["extra_body"] = {"options": options}
+            return params
         if provider_type == "llama_cpp":
             return {"model": "openai/local-model", "api_base": base_url, "stream": True}
         if provider_type == "vllm":
-            return {"model": f"vllm/{model_name}", "api_base": base_url, "stream": True}
+            api_base = base_url.rstrip("/")
+            if not api_base.endswith("/v1"):
+                api_base = f"{api_base}/v1"
+            params = {
+                "model": model_name,
+                "api_base": api_base,
+                "custom_llm_provider": "openai",
+                "stream": True,
+            }
+            if not params.get("api_key"):
+                params["api_key"] = "not-needed"  # pragma: allowlist secret
+            return params
         if provider_type == "openai":
             return {"model": model_name, "api_key": "${OPENAI_API_KEY}"}
         if provider_type == "anthropic":
@@ -148,8 +357,31 @@ class ConfigGenerator:
         # Generic fallback
         return {"model": model_name, "api_base": base_url}
 
-    def _build_tags(self, model: dict) -> list[str]:
-        """Build tags from model metadata"""
+    def _build_tags(self, model: dict[str, Any] | str) -> list[str]:
+        """
+        Build tag list from model metadata for categorization.
+
+        Extracts and normalizes tags from model configuration including specialty,
+        use case, size, and quantization. Useful for model discovery and filtering.
+
+        Args:
+            model (dict | str): Model configuration or simple model name string
+
+        Returns:
+            list[str]: List of normalized tags (lowercased). Defaults to ["general"]
+                if no metadata tags are found.
+
+        Example:
+            >>> tags = gen._build_tags({
+            ...     "name": "Qwen2.5-Coder",
+            ...     "specialty": "code",
+            ...     "quantization": "AWQ"
+            ... })
+            >>> print(tags)
+            ['code', 'awq']
+        """
+        if not isinstance(model, dict):
+            return ["general"]
         tags = []
 
         # Add specialty
@@ -175,11 +407,34 @@ class ConfigGenerator:
         return tags
 
     def _get_display_name(self, provider_name: str, model_name: str) -> str:
-        """Get display name for model in LiteLLM"""
+        """
+        Resolve display name for model in LiteLLM format.
+
+        Checks mappings for explicit aliases, handles special cases for llama.cpp,
+        and falls back to model name. Display name is used as the key for model
+        requests through LiteLLM gateway.
+
+        Args:
+            provider_name (str): Name of the provider
+            model_name (str): Original model name in provider format
+
+        Returns:
+            str: Display name to use in LiteLLM model list
+
+        Example:
+            >>> display_name = gen._get_display_name("llama_cpp_python", "mistral-7b")
+            >>> print(display_name)
+            "llama-cpp-python"  # or mapped alias
+        """
         # Check mappings for explicit display name
         exact_matches = self.mappings.get("exact_matches", {})
         if model_name in exact_matches:
             return model_name
+
+        # Look for alias where backend_model matches this provider model
+        for alias, config in exact_matches.items():
+            if config.get("backend_model") == model_name:
+                return alias
 
         # For llama.cpp, use descriptive names
         if "llama_cpp" in provider_name:
@@ -208,17 +463,41 @@ class ConfigGenerator:
             "fallbacks": [],
         }
 
-        # Build model_group_alias from capability routing
-        capabilities = self.mappings.get("capability_routing", {})
+        # Build model_group_alias from capabilities
+        capabilities = self.mappings.get("capabilities", {})
         for capability, config in capabilities.items():
-            if "models" in config:
-                router_settings["model_group_alias"][capability] = config["models"]
+            models = config.get("preferred_models") or config.get("models") or []
+            if models:
+                router_settings["model_group_alias"][capability] = models
 
         # Build fallback chains
         fallback_chains = self.mappings.get("fallback_chains", {})
+        known_models: set[str] = set(self.mappings.get("exact_matches", {}).keys())
+
+        providers_config = self.providers.get("providers", {})
+        for provider_name, provider_config in providers_config.items():
+            if provider_config.get("status") != "active":
+                continue
+
+            for model in provider_config.get("models", []):
+                model_name = model.get("name") if isinstance(model, dict) else model
+                if model_name:
+                    known_models.add(self._get_display_name(provider_name, model_name))
+
         for primary_model, chain in fallback_chains.items():
-            fallback_entry = {"model": primary_model, "fallback_models": chain.get("chain", [])}
-            router_settings["fallbacks"].append(fallback_entry)
+            candidates: list[str] = []
+            for fallback_model in chain.get("chain", []):
+                if fallback_model == primary_model:
+                    continue
+                if fallback_model not in known_models:
+                    continue
+                if fallback_model in candidates:
+                    continue
+                candidates.append(fallback_model)
+
+            if candidates:
+                fallback_entry = {primary_model: candidates}
+                router_settings["fallbacks"].append(fallback_entry)
 
         print(f"  ✓ Created {len(router_settings['model_group_alias'])} capability groups")
         print(f"  ✓ Created {len(router_settings['fallbacks'])} fallback chains")
@@ -423,9 +702,15 @@ class ConfigGenerator:
         print("\n✅ Validating generated configuration...")
 
         try:
-            # Import validation script
-            sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-            from validate_config_schema import validate_all_configs
+            import runpy
+
+            validation_module = runpy.run_path(
+                str(PROJECT_ROOT / "scripts" / "validate-config-schema.py")
+            )
+            validate_all_configs = validation_module.get("validate_all_configs")
+
+            if validate_all_configs is None:
+                raise ImportError("validate_all_configs not found in validate-config-schema.py")
 
             validate_all_configs(PROVIDERS_FILE, MAPPINGS_FILE, OUTPUT_FILE)
 

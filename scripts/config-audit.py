@@ -24,11 +24,9 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import yaml
 from loguru import logger
-
 
 # ============================================================================
 # AUDIT CATEGORIES
@@ -180,7 +178,7 @@ class SecurityAudit(AuditCategory):
             import sys
 
             sys.path.insert(0, str(self.config_dir.parent / "scripts"))
-            from validate_config_schema import ProvidersYAML, ModelMappingsYAML
+            from validate_config_schema import ProvidersYAML
 
             providers_file = self.config_dir / "providers.yaml"
             with open(providers_file) as f:
@@ -524,7 +522,7 @@ class AuditReport:
         status_symbol = "✅" if overall_score >= 80 else "⚠️" if overall_score >= 60 else "❌"
 
         print(f"\n{'=' * 70}")
-        print(f"Configuration Audit Report")
+        print("Configuration Audit Report")
         print(f"Generated: {datetime.now().isoformat()}")
         print(f"{'=' * 70}\n")
 
@@ -544,7 +542,7 @@ class AuditReport:
                 print(f"   🔵 Low: {summary['low']}")
 
             if audit.findings:
-                print(f"\n   Findings:")
+                print("\n   Findings:")
                 for finding in audit.findings[:5]:  # Show first 5
                     severity_symbol = {
                         "critical": "🔴",

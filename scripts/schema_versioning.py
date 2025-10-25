@@ -28,7 +28,6 @@ from typing import Any
 import yaml
 from loguru import logger
 
-
 # ============================================================================
 # SCHEMA DEFINITIONS BY VERSION
 # ============================================================================
@@ -464,7 +463,7 @@ class ConfigHealthChecker:
     def print_health_report(self):
         """Print formatted health check report"""
         print(f"\n{'=' * 70}")
-        print(f"Configuration Health Check Report")
+        print("Configuration Health Check Report")
         print(f"{'=' * 70}\n")
 
         status_symbol = "✅" if self.health_status.get("overall_healthy") else "❌"

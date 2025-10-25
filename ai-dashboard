@@ -1,14 +1,25 @@
 #!/bin/bash
 # Launcher script for AI Backend Consolidated Dashboard
+#
+# Automatically detects the Python interpreter from the current virtual environment
+# or system Python. Works correctly on any system without hardcoded paths.
 
-# Use the Python environment where dependencies are installed
-PYTHON_PATH="/home/miko/LAB/academic/KANNA/tools/third_party/zotero-mcp/.venv/bin/python3"
 SCRIPT_PATH="$(dirname "$(readlink -f "$0")")/scripts/ai-dashboard"
 
-# Check if the Python path exists
-if [ -x "$PYTHON_PATH" ]; then
-    exec "$PYTHON_PATH" "$SCRIPT_PATH" "$@"
+# Priority 1: Use Python from current virtual environment
+if [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/bin/python3" ]; then
+    PYTHON_PATH="$VIRTUAL_ENV/bin/python3"
+# Priority 2: Use Python from PATH
+elif PYTHON_PATH="$(command -v python3)"; then
+    :  # PYTHON_PATH already set
+# Priority 3: Fallback to python (less common)
+elif PYTHON_PATH="$(command -v python)"; then
+    :  # PYTHON_PATH already set
 else
-    # Fallback to system Python (might not work if dependencies aren't installed)
-    exec python3 "$SCRIPT_PATH" "$@"
+    echo "Error: Python 3 not found. Please ensure Python is installed and in PATH." >&2
+    echo "Alternatively, activate a virtual environment with Python 3 installed." >&2
+    exit 1
 fi
+
+# Execute the dashboard script with the detected Python interpreter
+exec "$PYTHON_PATH" "$SCRIPT_PATH" "$@"

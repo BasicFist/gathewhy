@@ -1,14 +1,38 @@
 #!/usr/bin/env python3
-"""Interactive AI backend command center built with Textual."""
+"""Interactive AI backend command center built with Textual.
+
+This module provides a comprehensive terminal-based dashboard for monitoring
+and managing AI backend LLM provider services including Ollama, vLLM, and
+llama.cpp. It displays real-time metrics, GPU usage, and system resources,
+plus controls to start/stop/restart services.
+
+Example:
+    Run the dashboard interactively::
+
+        python3 scripts/ai-dashboard
+
+    Or from project root::
+
+        ./ai-dashboard
+
+Key Bindings:
+    - 'r': Manual refresh
+    - 'q': Quit
+    - 'a': Toggle auto-refresh
+    - 'ctrl+l': Clear event log
+"""
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import subprocess
 import time
 import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import urlparse
 
 import psutil
@@ -21,6 +45,60 @@ from textual.coordinate import Coordinate
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widgets import Button, DataTable, Footer, Header, Label, Log, Static
+
+# Configuration and logging setup
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
+
+# ===== SECURITY: Service name allowlist (prevent command injection) =====
+ALLOWED_SERVICES: dict[str, str] = {
+    "ollama": "ollama.service",
+    "vllm": "vllm.service",
+    "llama_cpp_python": "llamacpp-python.service",
+    "llama_cpp_native": "llama-cpp-native.service",
+    "litellm_gateway": "litellm.service",
+}
+
+ALLOWED_ACTIONS: set[Literal["start", "stop", "restart", "enable", "disable"]] = {
+    "start", "stop", "restart", "enable", "disable"
+}
+
+# ===== Configuration constants (environment overridable) =====
+def _load_config() -> tuple[float, int, int]:
+    """Load and validate configuration from environment variables.
+
+    Security: Validates all inputs to prevent injection attacks.
+
+    Returns:
+        Tuple of (http_timeout, refresh_interval, log_height)
+
+    Raises:
+        ValueError: If any configuration value is invalid
+    """
+    try:
+        http_timeout = float(os.getenv("AI_DASH_HTTP_TIMEOUT", "3.0"))
+        if not 0.5 <= http_timeout <= 30:
+            raise ValueError(f"HTTP_TIMEOUT must be 0.5-30 seconds, got {http_timeout}")
+    except ValueError as e:
+        raise ValueError(f"Invalid AI_DASH_HTTP_TIMEOUT: {e}") from None
+
+    try:
+        refresh_interval = int(os.getenv("AI_DASH_REFRESH_INTERVAL", "5"))
+        if not 1 <= refresh_interval <= 60:
+            raise ValueError(f"REFRESH_INTERVAL must be 1-60 seconds, got {refresh_interval}")
+    except ValueError as e:
+        raise ValueError(f"Invalid AI_DASH_REFRESH_INTERVAL: {e}") from None
+
+    try:
+        log_height = int(os.getenv("AI_DASH_LOG_HEIGHT", "12"))
+        if not 5 <= log_height <= 50:
+            raise ValueError(f"LOG_HEIGHT must be 5-50 lines, got {log_height}")
+    except ValueError as e:
+        raise ValueError(f"Invalid AI_DASH_LOG_HEIGHT: {e}") from None
+
+    return http_timeout, refresh_interval, log_height
+
+DEFAULT_HTTP_TIMEOUT, DEFAULT_REFRESH_INTERVAL, DEFAULT_LOG_HEIGHT = _load_config()
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -62,10 +140,18 @@ class GPUOverview:
 
 
 class GPUMonitor:
-    """Utility helpers around NVIDIA's NVML for VRAM insight."""
+    """Utility helpers around NVIDIA's NVML for VRAM insight.
+
+    Provides methods to query GPU information and per-process VRAM usage.
+    Gracefully handles systems without NVIDIA GPUs or CUDA drivers installed.
+    """
 
     def __init__(self) -> None:
+        """Initialize GPU monitor with NVML."""
         self.initialized = False
+        self.device_count = 0
+        self._pynvml = None
+
         try:
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -79,16 +165,27 @@ class GPUMonitor:
             self._pynvml = pynvml
             self.initialized = True
             self.device_count = pynvml.nvmlDeviceGetCount()
-        except Exception:  # pragma: no cover - driver availability
+            logger.debug(f"GPU monitoring initialized: {self.device_count} device(s) detected")
+        except ImportError as e:
+            logger.debug(f"NVIDIA GPU driver not available: {e}")
             self.initialized = False
-            self.device_count = 0
-            self._pynvml = None
+        except (OSError, RuntimeError) as e:
+            logger.debug(f"NVIDIA NVML initialization failed: {e}")
+            self.initialized = False
+        except Exception as e:  # pragma: no cover - unexpected errors
+            logger.warning(f"Unexpected error initializing GPU monitor: {type(e).__name__}: {e}")
+            self.initialized = False
 
     def get_gpu_info(self) -> list[dict[str, float]]:
-        if not self.initialized:
+        """Query all GPU information and memory stats.
+
+        Returns:
+            List of GPU info dicts with memory and utilization metrics.
+            Empty list if GPU monitoring not available.
+        """
+        if not self.initialized or self._pynvml is None:
             return []
 
-        assert self._pynvml is not None
         pynvml = self._pynvml
         info: list[dict[str, float]] = []
 
@@ -98,7 +195,11 @@ class GPUMonitor:
                 name = pynvml.nvmlDeviceGetName(handle).decode("utf-8")
                 memory = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            except Exception:
+            except (OSError, AttributeError, UnicodeDecodeError) as e:
+                logger.debug(f"Error querying GPU {index}: {type(e).__name__}: {e}")
+                continue
+            except Exception as e:  # pragma: no cover - unexpected errors
+                logger.warning(f"Unexpected error querying GPU {index}: {type(e).__name__}: {e}")
                 continue
 
             total_mb = memory.total / 1024**2
@@ -118,12 +219,15 @@ class GPUMonitor:
         return info
 
     def get_process_vram(self) -> dict[int, tuple[float, float]]:
-        """Return VRAM usage per PID as (used_mb, percentage of associated GPUs)."""
+        """Return VRAM usage per PID as (used_mb, percentage of associated GPUs).
 
-        if not self.initialized:
+        Returns:
+            Dict mapping process PIDs to (vram_mb, vram_percent) tuples.
+            Empty dict if GPU monitoring not available.
+        """
+        if not self.initialized or self._pynvml is None:
             return {}
 
-        assert self._pynvml is not None
         pynvml = self._pynvml
         usage: dict[int, dict[str, float]] = {}
 
@@ -133,7 +237,11 @@ class GPUMonitor:
                 memory = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 total_mb = memory.total / 1024**2 if memory.total else 0.0
                 processes = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
-            except Exception:
+            except (OSError, AttributeError) as e:
+                logger.debug(f"Error querying GPU {index} processes: {type(e).__name__}: {e}")
+                continue
+            except Exception as e:  # pragma: no cover - unexpected errors
+                logger.warning(f"Unexpected error querying GPU {index} processes: {type(e).__name__}: {e}")
                 continue
 
             for record in processes or []:
@@ -158,7 +266,20 @@ class GPUMonitor:
 
 
 class ProviderMonitor:
-    """Collects live diagnostics for each backend provider."""
+    """Collects live diagnostics for each backend LLM provider.
+
+    Monitors provider health through HTTP endpoint checks, collects system
+    resource usage (CPU, memory, VRAM), and provides service control via
+    systemctl. Supports Ollama, vLLM, and llama.cpp providers.
+
+    Attributes:
+        gpu_monitor: GPUMonitor instance for NVIDIA GPU metrics
+        PROVIDERS: Registry of provider configurations (endpoint, service, etc.)
+    """
+
+    # SECURITY: Allowed endpoint hosts (localhost only, prevent SSRF)
+    ALLOWED_HOSTS: set[str] = {"127.0.0.1", "localhost"}
+    ALLOWED_PORTS: set[int] = {11434, 8000, 8001, 8080, 4000}
 
     PROVIDERS: dict[str, dict[str, object]] = {
         "ollama": {
@@ -199,7 +320,36 @@ class ProviderMonitor:
     }
 
     def __init__(self) -> None:
+        """Initialize provider monitor with validation."""
         self.gpu_monitor = GPUMonitor()
+        # SECURITY: Validate all endpoints at init time
+        self._validate_endpoints()
+
+    def _validate_endpoints(self) -> None:
+        """SECURITY: Validate all provider endpoints against allowlists.
+
+        Prevents SSRF attacks by ensuring all endpoints are localhost only.
+
+        Raises:
+            ValueError: If any endpoint fails validation
+        """
+        for key, cfg in self.PROVIDERS.items():
+            endpoint = str(cfg.get("endpoint", ""))
+            parsed = urlparse(endpoint)
+
+            # Validate scheme
+            if parsed.scheme not in ("http", "https"):
+                raise ValueError(f"Invalid endpoint scheme for {key}: {parsed.scheme}")
+
+            # SECURITY: Validate host (localhost only)
+            if parsed.hostname not in self.ALLOWED_HOSTS:
+                raise ValueError(f"Invalid endpoint host for {key}: {parsed.hostname}")
+
+            # SECURITY: Validate port
+            if parsed.port and parsed.port not in self.ALLOWED_PORTS:
+                raise ValueError(f"Invalid endpoint port for {key}: {parsed.port}")
+
+            logger.debug(f"✓ Validated endpoint for {key}: {endpoint}")
 
     # --------------------------- system helpers ---------------------------------
 
@@ -274,27 +424,35 @@ class ProviderMonitor:
             models = 0
 
             try:
-                response = requests.get(endpoint, timeout=float(os.getenv("AI_DASH_HTTP_TIMEOUT", "3")))
+                response = requests.get(endpoint, timeout=DEFAULT_HTTP_TIMEOUT)
                 elapsed_ms = (time.perf_counter() - start) * 1000
 
                 if response.ok:
-                    payload = response.json()
-                    status = "active"
-                    models = self._parse_models(key, payload)
+                    try:
+                        payload = response.json()
+                        status = "active"
+                        models = self._parse_models(key, payload)
+                    except ValueError as e:
+                        logger.debug(f"{key}: Invalid JSON response: {e}")
+                        notes.append("Invalid JSON payload")
+                        status = "degraded" if required else "inactive"
                 else:
                     notes.append(f"HTTP {response.status_code} {response.reason}")
                     status = "degraded" if required else "inactive"
             except requests.exceptions.Timeout:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                logger.debug(f"{key}: Request timeout after {elapsed_ms:.0f}ms")
                 notes.append("Timed out")
-                elapsed_ms = (time.perf_counter() - start) * 1000
                 status = "degraded" if required else "inactive"
-            except requests.exceptions.ConnectionError:
+            except requests.exceptions.ConnectionError as e:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                logger.debug(f"{key}: Connection error: {e}")
                 notes.append("Connection error")
-                elapsed_ms = (time.perf_counter() - start) * 1000
                 status = "degraded" if required else "inactive"
-            except ValueError:
-                notes.append("Invalid JSON payload")
+            except requests.exceptions.RequestException as e:
                 elapsed_ms = (time.perf_counter() - start) * 1000
+                logger.debug(f"{key}: Request failed: {type(e).__name__}: {e}")
+                notes.append(f"Request error: {type(e).__name__}")
                 status = "degraded" if required else "inactive"
 
             pid, cpu_percent, memory_mb = self._collect_process_metrics(key)
@@ -338,6 +496,28 @@ class ProviderMonitor:
         return metrics, overview
 
     def systemctl(self, key: str, action: str) -> bool:
+        """Execute systemctl command with security validation.
+
+        SECURITY: Validates service name and action against allowlists to prevent
+        command injection attacks. Only allows whitelisted services and actions.
+
+        Args:
+            key: Provider key (must be in ALLOWED_SERVICES)
+            action: Action to execute (must be in ALLOWED_ACTIONS)
+
+        Returns:
+            True if command succeeded, False otherwise
+        """
+        # SECURITY: Validate service key
+        if key not in ALLOWED_SERVICES:
+            logger.warning(f"Rejected invalid service key: {key}")
+            return False
+
+        # SECURITY: Validate action
+        if action not in ALLOWED_ACTIONS:
+            logger.warning(f"Rejected invalid action: {action}")
+            return False
+
         service = self._service_name(key)
         if not service:
             return False
@@ -349,8 +529,11 @@ class ProviderMonitor:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=8,
+                # SECURITY: Minimal environment to prevent injection
+                env={"PATH": "/usr/bin:/bin"},
             )
-        except subprocess.SubprocessError:
+        except subprocess.SubprocessError as e:
+            logger.debug(f"systemctl {action} {key} failed: {type(e).__name__}")
             return False
 
         return True
@@ -361,9 +544,18 @@ class ProviderMonitor:
 
 
 class OverviewPanel(Static):
-    """Condensed service summary."""
+    """Displays condensed summary of all services.
+
+    Shows count of active/inactive services, average CPU/memory usage,
+    and lists any services requiring attention (degraded or inactive).
+    """
 
     def update_overview(self, metrics: Iterable[ServiceMetrics]) -> None:
+        """Update overview with current metrics.
+
+        Args:
+            metrics: Iterable of ServiceMetrics to summarize
+        """
         metrics = list(metrics)
         total = len(metrics)
         active = sum(1 for m in metrics if m.status == "active")
@@ -381,9 +573,14 @@ class OverviewPanel(Static):
 
 
 class ServiceTable(DataTable):
-    """Tabular view of all providers."""
+    """Tabular view displaying all provider services.
+
+    Shows provider name, status, CPU/memory usage, response time, and model count.
+    Supports row selection for viewing detailed metrics in the detail panel.
+    """
 
     def __init__(self) -> None:
+        """Initialize service table with columns."""
         super().__init__(zebra_stripes=True)
         self.cursor_type = "row"
         self.show_header = True
@@ -398,6 +595,12 @@ class ServiceTable(DataTable):
         )
 
     def populate(self, metrics: Iterable[ServiceMetrics], selected: str | None) -> None:
+        """Populate table with service metrics and restore selection.
+
+        Args:
+            metrics: Iterable of ServiceMetrics to display
+            selected: Provider key to select, if available
+        """
         self.clear()
         metrics = list(metrics)
         selected_index: int | None = None
@@ -435,9 +638,18 @@ class ServiceTable(DataTable):
 
 
 class GPUCard(Static):
-    """Summarises GPU utilisation."""
+    """Displays GPU utilization summary.
+
+    Shows total VRAM usage, peak utilization percentage, and per-GPU breakdown.
+    Gracefully handles systems without NVIDIA GPUs.
+    """
 
     def update_overview(self, overview: GPUOverview) -> None:
+        """Update GPU card with latest GPU metrics.
+
+        Args:
+            overview: GPUOverview with aggregated GPU statistics
+        """
         if not overview.detected:
             self.update("No NVIDIA GPU detected or NVML unavailable.")
             return
@@ -458,9 +670,21 @@ class GPUCard(Static):
 
 
 class DetailPanel(Vertical):
-    """Shows focused service details and exposes control buttons."""
+    """Shows focused service details and exposes control buttons.
+
+    Displays comprehensive metrics for selected service including status,
+    CPU/memory/VRAM usage, port, model count, and PID. Provides buttons
+    to start/stop/restart/enable/disable the service.
+    """
 
     class ServiceAction(Message):
+        """Message posted when user clicks a service control button.
+
+        Attributes:
+            action: Control action (start, stop, restart, enable, disable)
+            service_key: Provider key targeted by the action
+        """
+
         def __init__(self, action: str, service_key: str) -> None:
             super().__init__()
             self.action = action
@@ -484,53 +708,69 @@ class DetailPanel(Vertical):
         yield Log(id="detail-notes", highlight=True)
 
     def update_details(self, metrics: ServiceMetrics | None) -> None:
-        self._current = metrics
-        title = self.query_one("#detail-title", Label)
-        status_label = self.query_one("#detail-status", Label)
-        resources_label = self.query_one("#detail-resources", Label)
-        metadata_label = self.query_one("#detail-metadata", Label)
-        notes_log = self.query_one(Log)
+        """Update detail panel with metrics for selected service.
 
-        if not metrics:
-            title.update("Select a provider to inspect")
-            status_label.update("")
-            resources_label.update("")
-            metadata_label.update("")
-            notes_log.clear()
+        Args:
+            metrics: ServiceMetrics for the selected provider, or None to clear.
+        """
+        self._current = metrics
+
+        try:
+            title = self.query_one("#detail-title", Label)
+            status_label = self.query_one("#detail-status", Label)
+            resources_label = self.query_one("#detail-resources", Label)
+            metadata_label = self.query_one("#detail-metadata", Label)
+            notes_log = self.query_one(Log)
+        except Exception as e:
+            logger.warning(f"Failed to query detail panel widgets: {type(e).__name__}: {e}")
             return
 
-        status_colour = {
-            "active": "green",
-            "degraded": "yellow",
-            "inactive": "red",
-        }.get(metrics.status, "white")
+        if not metrics:
+            try:
+                title.update("Select a provider to inspect")
+                status_label.update("")
+                resources_label.update("")
+                metadata_label.update("")
+                notes_log.clear()
+            except Exception as e:
+                logger.debug(f"Error clearing detail panel: {e}")
+            return
 
-        title.update(f"[b]{metrics.display}[/b] ({'required' if metrics.required else 'optional'})")
-        status_label.update(
-            f"Status: [{status_colour}]{metrics.status.upper()}[/]  |  Response: {metrics.response_ms:.0f} ms"
-        )
-        resources_label.update(
-            "CPU: {:.1f}%   MEM: {:.1f} MB ({:.1f}%)   VRAM: {}".format(
-                metrics.cpu_percent,
-                metrics.memory_mb,
-                metrics.memory_percent,
-                "-" if not metrics.vram_mb else f"{metrics.vram_mb:.1f} MB ({metrics.vram_percent:.1f}%)",
-            )
-        )
-        metadata_label.update(
-            "Port: {}   Models: {}   PID: {}".format(
-                metrics.port or "n/a",
-                metrics.models,
-                metrics.pid or "n/a",
-            )
-        )
+        try:
+            status_colour = {
+                "active": "green",
+                "degraded": "yellow",
+                "inactive": "red",
+            }.get(metrics.status, "white")
 
-        notes_log.clear()
-        if metrics.notes:
-            for line in metrics.notes:
-                notes_log.write(line)
-        else:
-            notes_log.write("No warnings recorded.")
+            title.update(f"[b]{metrics.display}[/b] ({'required' if metrics.required else 'optional'})")
+            status_label.update(
+                f"Status: [{status_colour}]{metrics.status.upper()}[/]  |  Response: {metrics.response_ms:.0f} ms"
+            )
+            resources_label.update(
+                "CPU: {:.1f}%   MEM: {:.1f} MB ({:.1f}%)   VRAM: {}".format(
+                    metrics.cpu_percent,
+                    metrics.memory_mb,
+                    metrics.memory_percent,
+                    "-" if not metrics.vram_mb else f"{metrics.vram_mb:.1f} MB ({metrics.vram_percent:.1f}%)",
+                )
+            )
+            metadata_label.update(
+                "Port: {}   Models: {}   PID: {}".format(
+                    metrics.port or "n/a",
+                    metrics.models,
+                    metrics.pid or "n/a",
+                )
+            )
+
+            notes_log.clear()
+            if metrics.notes:
+                for line in metrics.notes:
+                    notes_log.write(line)
+            else:
+                notes_log.write("No warnings recorded.")
+        except Exception as e:
+            logger.warning(f"Error updating detail panel: {type(e).__name__}: {e}")
 
     @on(Button.Pressed)
     def handle_button(self, event: Button.Pressed) -> None:
@@ -547,7 +787,18 @@ class DetailPanel(Vertical):
 
 
 class DashboardApp(App[None]):
-    """Interactive command center for the AI backend."""
+    """Interactive command center for the AI backend.
+
+    Provides real-time monitoring and management of LLM provider services
+    including Ollama, vLLM, and llama.cpp. Displays system metrics, GPU
+    usage, and provider status with controls for service lifecycle management.
+
+    Attributes:
+        monitor: ProviderMonitor instance for collecting diagnostics
+        metrics: Current service metrics snapshot
+        gpu_overview: Current GPU utilization snapshot
+        selected_key: Currently selected provider for detailed view
+    """
 
     CSS = """
     Screen {
@@ -647,40 +898,69 @@ class DashboardApp(App[None]):
     # ----------------------------- lifecycle --------------------------------
 
     def on_mount(self) -> None:
+        """Initialize dashboard on app mount.
+
+        Sets up auto-refresh timer and performs initial data collection.
+        """
         self._refresh_table()
-        self.refresh_timer = self.set_interval(5, self._refresh_table, pause=not self.auto_refresh)
+        self.refresh_timer = self.set_interval(
+            DEFAULT_REFRESH_INTERVAL, self._refresh_table, pause=not self.auto_refresh
+        )
 
     def action_toggle_auto(self) -> None:
+        """Toggle auto-refresh on/off (binding: 'a')."""
         self.auto_refresh = not self.auto_refresh
         if self.auto_refresh:
             self.refresh_timer.resume()
-            self.log_event("Auto-refresh enabled (5s cadence).")
+            self.log_event(f"Auto-refresh enabled ({DEFAULT_REFRESH_INTERVAL}s cadence).")
         else:
             self.refresh_timer.pause()
             self.log_event("Auto-refresh paused.")
 
     def action_refresh(self) -> None:
+        """Manually refresh all metrics (binding: 'r')."""
         self._refresh_table()
         self.log_event("Manual refresh completed.")
 
     def action_clear_log(self) -> None:
-        self.query_one("#event-log", Log).clear()
+        """Clear event log (binding: 'ctrl+l')."""
+        try:
+            self.query_one("#event-log", Log).clear()
+        except Exception as e:
+            logger.debug(f"Error clearing log: {e}")
 
     # ---------------------------- refresh engine ----------------------------
 
     def _refresh_table(self) -> None:
-        self.metrics, self.gpu_overview = self.monitor.collect_snapshot()
+        """Refresh all dashboard displays with latest provider metrics."""
+        try:
+            self.metrics, self.gpu_overview = self.monitor.collect_snapshot()
+        except Exception as e:
+            logger.warning(f"Error collecting provider snapshot: {type(e).__name__}: {e}")
+            self.log_event(f"[red]Snapshot failed:[/] {type(e).__name__}")
+            return
 
-        table = self.query_one(ServiceTable)
-        table.populate(self.metrics, self.selected_key)
+        try:
+            table = self.query_one(ServiceTable)
+            table.populate(self.metrics, self.selected_key)
 
-        self.query_one(OverviewPanel).update_overview(self.metrics)
-        self.query_one(GPUCard).update_overview(self.gpu_overview)
+            self.query_one(OverviewPanel).update_overview(self.metrics)
+            self.query_one(GPUCard).update_overview(self.gpu_overview)
 
-        detail = self.query_one(DetailPanel)
-        detail.update_details(self._find_metric(self.selected_key))
+            detail = self.query_one(DetailPanel)
+            detail.update_details(self._find_metric(self.selected_key))
+        except Exception as e:
+            logger.warning(f"Error updating dashboard displays: {type(e).__name__}: {e}")
 
     def _find_metric(self, key: str | None) -> ServiceMetrics | None:
+        """Find ServiceMetrics by provider key.
+
+        Args:
+            key: Provider key to search for
+
+        Returns:
+            ServiceMetrics if found, None otherwise
+        """
         if not key:
             return None
         for metric in self.metrics:
@@ -691,12 +971,27 @@ class DashboardApp(App[None]):
     # ------------------------------- helpers --------------------------------
 
     def log_event(self, message: str) -> None:
-        self.query_one("#event-log", Log).write(message)
+        """Log an event message to the event log widget.
+
+        Args:
+            message: Message to display (supports Rich markup)
+        """
+        try:
+            self.query_one("#event-log", Log).write(message)
+        except Exception as e:
+            logger.debug(f"Error logging event: {e}")
 
     # --------------------------- event handlers -----------------------------
 
     @on(DataTable.RowSelected)
     def handle_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Handle service table row selection.
+
+        Updates detail panel to show metrics for selected provider.
+
+        Args:
+            event: DataTable row selection event
+        """
         row_key = getattr(event.row_key, "value", event.row_key)
         key = str(row_key)
         self.selected_key = key
@@ -704,6 +999,13 @@ class DashboardApp(App[None]):
 
     @on(DetailPanel.ServiceAction)
     def handle_service_action(self, event: DetailPanel.ServiceAction) -> None:
+        """Handle service control action (start/stop/restart/enable/disable).
+
+        Executes the requested systemctl action and refreshes metrics.
+
+        Args:
+            event: ServiceAction event with action and service key
+        """
         success = self.monitor.systemctl(event.service_key, event.action)
         if success:
             self.log_event(f"{event.action.title()} command sent to {event.service_key}.")

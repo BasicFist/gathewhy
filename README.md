@@ -131,6 +131,7 @@ ai-backend-unified/
 This coordination project references:
 - **OpenWebUI**: `/home/miko/LAB/dev/openwebui/` - Gateway + Ollama + llama.cpp
 - **CrushVLLM**: `/home/miko/LAB/dev/CRUSHVLLM/` - vLLM inference engine
+- **Model switch script**: `scripts/vllm-model-switch.sh` (binds vLLM to localhost with doc-tuned batching limits)
 
 ## Key Concepts
 

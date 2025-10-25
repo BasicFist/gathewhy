@@ -55,9 +55,9 @@ class TestPatternMatching:
 
     def test_pattern_syntax_valid(self, mappings_config):
         """Verify all routing patterns are valid regex"""
-        pattern_matches = mappings_config.get("pattern_matches", [])
+        patterns = mappings_config.get("patterns", [])
 
-        for entry in pattern_matches:
+        for entry in patterns:
             pattern = entry.get("pattern")
             assert pattern is not None, "Pattern entry missing pattern field"
 
@@ -69,14 +69,17 @@ class TestPatternMatching:
 
     def test_patterns_match_expected_models(self, mappings_config):
         """Verify patterns match their intended model names"""
-        pattern_matches = mappings_config.get("pattern_matches", [])
+        patterns = mappings_config.get("patterns", [])
 
         test_cases = {
-            "meta-llama/.*": ["meta-llama/Llama-2-13b-chat-hf", "meta-llama/Llama-3-8b"],
-            "ollama/.*": ["ollama/llama3.1:8b", "ollama/qwen2.5-coder:7b"],
+            "^Qwen/Qwen2\\.5-Coder.*": ["Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"],
+            "^solidrust/dolphin.*AWQ$": ["solidrust/dolphin-2.8-mistral-7b-v02-AWQ"],
+            "^meta-llama/.*": ["meta-llama/Llama-2-13b-chat-hf", "meta-llama/Llama-3-8b"],
+            ".*:\\d+[bB]$": ["demo:7b", "another:13B"],
+            ".*\\.gguf$": ["model.gguf"],
         }
 
-        for entry in pattern_matches:
+        for entry in patterns:
             pattern = entry.get("pattern")
             regex = re.compile(pattern)
 
@@ -89,9 +92,9 @@ class TestPatternMatching:
 
     def test_patterns_have_providers(self, mappings_config):
         """Verify all patterns have valid provider assignments"""
-        pattern_matches = mappings_config.get("pattern_matches", [])
+        patterns = mappings_config.get("patterns", [])
 
-        for entry in pattern_matches:
+        for entry in patterns:
             provider = entry.get("provider")
             assert provider is not None, f"Pattern '{entry.get('pattern')}' missing provider"
             assert isinstance(provider, str), f"Provider must be string, got {type(provider)}"
@@ -104,8 +107,23 @@ class TestCapabilityRouting:
     def test_capabilities_have_models(self, capability_routing):
         """Verify each capability has at least one model"""
         for capability, config in capability_routing.items():
-            models = config.get("models", [])
-            assert len(models) > 0, f"Capability '{capability}' has no models defined"
+            models = config.get("preferred_models") or config.get("models") or []
+            providers = config.get("providers") or (
+                [config.get("provider")] if config.get("provider") else []
+            )
+            has_additional_constraints = bool(
+                config.get("min_model_size") or config.get("min_context")
+            )
+
+            assert (
+                models or providers or has_additional_constraints
+            ), f"Capability '{capability}' lacks routing targets"
+
+            if providers:
+                for provider_name in providers:
+                    assert (
+                        isinstance(provider_name, str) and provider_name
+                    ), f"Capability '{capability}' has invalid provider reference"
 
     def test_capability_strategies_valid(self, capability_routing):
         """Verify routing strategies are valid"""
@@ -115,10 +133,15 @@ class TestCapabilityRouting:
             "least_latency",
             "priority_based",
             "random",
+            "load_balance",
+            "direct",
+            "usage_based",
+            "fastest_response",
+            "most_capacity",
         ]
 
         for capability, config in capability_routing.items():
-            strategy = config.get("strategy")
+            strategy = config.get("routing_strategy") or config.get("strategy")
             if strategy:  # Optional field
                 assert (
                     strategy in valid_strategies
@@ -137,7 +160,7 @@ class TestCapabilityRouting:
 
         # Check each capability
         for capability, config in capability_routing.items():
-            models = config.get("models", [])
+            models = config.get("preferred_models") or config.get("models") or []
             for model_name in models:
                 # Allow some flexibility for pattern-based names
                 # Just verify it's a non-empty string
@@ -178,6 +201,20 @@ class TestFallbackChains:
         for model_name, config in fallback_chains.items():
             chain = config.get("chain", [])
             assert len(chain) > 0, f"Model '{model_name}' has empty fallback chain"
+
+    def test_fallback_chains_no_self_reference(self, fallback_chains):
+        """Fallback chains must not reference the primary model"""
+        for model_name, config in fallback_chains.items():
+            chain = config.get("chain", [])
+            assert model_name not in chain, f"Model '{model_name}' fallback chain references itself"
+
+    def test_fallback_chains_no_duplicate_entries(self, fallback_chains):
+        """Fallback chains must not contain duplicate models"""
+        for model_name, config in fallback_chains.items():
+            chain = config.get("chain", [])
+            assert len(chain) == len(
+                set(chain)
+            ), f"Model '{model_name}' fallback chain has duplicates"
 
     def test_fallback_strategies_valid(self, fallback_chains):
         """Verify fallback strategies are valid"""
@@ -271,10 +308,10 @@ class TestProviderReferences:
 
     def test_pattern_matches_reference_active_providers(self, mappings_config, active_providers):
         """Verify pattern matches reference active providers"""
-        pattern_matches = mappings_config.get("pattern_matches", [])
+        patterns = mappings_config.get("patterns", [])
         active_provider_names = set(active_providers.keys())
 
-        for entry in pattern_matches:
+        for entry in patterns:
             provider = entry.get("provider")
             if provider:
                 assert (

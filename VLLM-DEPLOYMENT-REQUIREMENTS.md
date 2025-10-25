@@ -16,6 +16,32 @@
 - **KV Cache Available**: 7.36GB
 - **Concurrency**: 33.63x for 4096-token requests
 
+**Runtime Control Script**: `scripts/vllm-model-switch.sh`
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VLLM_HOST` | `127.0.0.1` | Bind address for the OpenAI-compatible server. Keep loopback to follow vLLM security guidance. |
+| `VLLM_PORT` | `8001` | Listening port exposed to LiteLLM (`config/providers.yaml`). |
+| `VLLM_GMEM_UTIL` | `0.85` | Fraction of GPU memory vLLM may consume (`--gpu-memory-utilization`). Matches docs recommendation to stay below 90%. |
+| `VLLM_MAX_MODEL_LEN` | `32768` | Maximum context window accepted (`--max-model-len`). |
+| `VLLM_MAX_NUM_SEQS` | `16` | Maximum concurrent sequences per batch. Sizing from vLLM batching guidance for 16 GB VRAM. |
+| `VLLM_MAX_NUM_BATCHED_TOKENS` | `8192` | Upper bound on total tokens per batch to guard VRAM spikes. |
+| `VLLM_SERVED_NAME` | `workspace-coder` | Model alias presented via OpenAI API (`--served-model-name`). Keeps LiteLLM routing stable. |
+| `VLLM_LOG_DIR` | `/tmp` | Directory for nohup logs when switching models. |
+| `VLLM_LOG_STATS` | unset | When set (any value), appends `--log-stats` to produce periodic usage stats, per vLLM optimization docs. |
+
+**Default Engine Flags (doc references)**
+- `--enable-prefix-caching` (Optimization & Tuning §Prefix caching)
+- `--enforce-eager` (Engine arguments §Execution mode)
+- `--trust-remote-code` for AWQ models (required by Qwen instructions)
+- `--enable-auto-tool-choice --tool-call-parser hermes` (tool calling guide)
+
+All defaults are overridable via environment variables before invoking the script—either exported in a shell profile or prefixed per command:
+
+```bash
+VLLM_MAX_NUM_SEQS=8 VLLM_MAX_NUM_BATCHED_TOKENS=4096 ./scripts/vllm-model-switch.sh qwen
+```
+
 **Status**: Ready for Phase 3 Integration Testing
 
 ---

@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: 'AI Backend'
+    orgId: 1
+    folder: 'AI Backend Unified'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /home/miko/LAB/ai/backend/ai-backend-unified/monitoring/grafana
+      foldersFromFilesStructure: true

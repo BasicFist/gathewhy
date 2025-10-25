@@ -12,15 +12,13 @@ server:
   log_level: info
 
 positions:
-  filename: /tmp/positions.yaml
+  filename: /home/miko/LAB/ai/backend/ai-backend-unified/monitoring/loki/data/positions.yaml
 
 clients:
   - url: http://localhost:3100/loki/api/v1/push
 
 scrape_configs:
-  # ==========================================================================
   # LiteLLM Service Logs
-  # ==========================================================================
   - job_name: litellm
     journal:
       max_age: 12h
@@ -28,10 +26,8 @@ scrape_configs:
         job: litellm
         service: litellm-gateway
         component: api
-      matches: _SYSTEMD_UNIT=litellm.service
-
+      matches: "_SYSTEMD_UNIT=litellm.service"
     pipeline_stages:
-      # Parse JSON logs if present
       - json:
           expressions:
             level: level
@@ -39,25 +35,21 @@ scrape_configs:
             model: model
             latency: latency_ms
             status: status_code
-
-      # Extract log level
       - labels:
           level:
           model:
-
-      # Add timestamp
       - timestamp:
           source: timestamp
           format: RFC3339
+    relabel_configs:
+      - source_labels: [__journal__systemd_unit]
+        target_label: unit
+      - source_labels: [__journal__hostname]
+        target_label: hostname
+      - source_labels: [__journal_priority_keyword]
+        target_label: level
 
-      # Drop noisy debug logs in production
-      - match:
-          selector: '{level="debug"}'
-          action: drop
-
-  # ==========================================================================
   # Ollama Service Logs
-  # ==========================================================================
   - job_name: ollama
     journal:
       max_age: 12h
@@ -66,71 +58,31 @@ scrape_configs:
         service: ollama
         provider: ollama
         component: inference
-      matches: _SYSTEMD_UNIT=ollama.service
-
+      matches: "_SYSTEMD_UNIT=ollama.service"
     pipeline_stages:
       - regex:
           expression: '(?P<level>INFO|WARN|ERROR|DEBUG)'
       - labels:
           level:
+    relabel_configs:
+      - source_labels: [__journal__systemd_unit]
+        target_label: unit
+      - source_labels: [__journal__hostname]
+        target_label: hostname
+      - source_labels: [__journal_priority_keyword]
+        target_label: level
 
-  # ==========================================================================
-  # llama.cpp Service Logs (if using systemd)
-  # ==========================================================================
-  - job_name: llama-cpp
-    journal:
-      max_age: 12h
-      labels:
-        job: llama-cpp
-        service: llama-cpp
-        component: inference
-      matches: _SYSTEMD_UNIT=llama-cpp.service
-
-  # ==========================================================================
   # System Logs (filtered)
-  # ==========================================================================
   - job_name: system
     journal:
       max_age: 6h
       labels:
         job: system
         component: system
-      matches: |
-        _SYSTEMD_UNIT=
-        PRIORITY<=3
-
-    pipeline_stages:
-      # Only keep critical system messages
-      - match:
-          selector: '{job="system"}'
-          stages:
-            - drop:
-                expression: ".*audit.*"  # Drop audit logs
-                drop_counter_reason: "audit_logs"
-
-  # ==========================================================================
-  # Redis Logs (if available)
-  # ==========================================================================
-  - job_name: redis
-    journal:
-      max_age: 6h
-      labels:
-        job: redis
-        service: redis
-        component: cache
-      matches: _SYSTEMD_UNIT=redis.service
-
-    pipeline_stages:
-      - regex:
-          expression: '(?P<level>notice|warning|error)'
-      - labels:
-          level:
-
-# Relabeling for better organization
-relabel_configs:
-  - source_labels: [__journal__systemd_unit]
-    target_label: unit
-  - source_labels: [__journal__hostname]
-    target_label: hostname
-  - source_labels: [__journal_priority_keyword]
-    target_label: level
+    relabel_configs:
+      - source_labels: [__journal__systemd_unit]
+        target_label: unit
+      - source_labels: [__journal__hostname]
+        target_label: hostname
+      - source_labels: [__journal_priority_keyword]
+        target_label: level

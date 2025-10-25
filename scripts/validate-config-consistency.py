@@ -153,8 +153,12 @@ class ConfigValidator:
 
         # Exact matches
         exact_matches = self.mappings_config.get("exact_matches", {})
-        for model_name in exact_matches:
+        for model_name, config in exact_matches.items():
             self.mapping_models.add(model_name)
+
+            backend_model = config.get("backend_model")
+            if backend_model:
+                self.mapping_models.add(backend_model)
 
         # Load balancing configs
         load_balancing = self.mappings_config.get("load_balancing", {})
@@ -273,6 +277,8 @@ class ConfigValidator:
                 and not extracted_model.startswith("meta-llama/")
                 and not extracted_model.startswith("mistralai/")
                 and not extracted_model.startswith("Qwen/")
+                and not extracted_model.startswith("Qwen")
+                and not extracted_model.startswith("dolphin")
             ):
                 self.log_warning(
                     f"LiteLLM model '{model_name}' references '{extracted_model}' "
@@ -338,6 +344,60 @@ class ConfigValidator:
         if not self.warnings[-1:] or "backend_model" not in self.warnings[-1]:
             self.log_success("All backend_model references are valid")
 
+    def validate_fallback_chain_integrity(self):
+        """Validate fallback chains for duplicates, self references, and cycles"""
+        self.log_info("Validating fallback chain integrity...")
+
+        fallback_chains = self.mappings_config.get("fallback_chains", {})
+        errors_found = False
+
+        for model_name, config in fallback_chains.items():
+            chain = config.get("chain", [])
+
+            if not chain:
+                self.log_warning(f"Fallback chain for '{model_name}' is empty")
+                continue
+
+            seen: set[str] = set()
+
+            for fallback in chain:
+                if fallback == model_name:
+                    self.log_error(f"Fallback chain for '{model_name}' references itself")
+                    errors_found = True
+                    continue
+
+                if fallback in seen:
+                    self.log_error(
+                        f"Fallback chain for '{model_name}' has duplicate entry '{fallback}'"
+                    )
+                    errors_found = True
+                    continue
+
+                seen.add(fallback)
+
+        # Detect cycles using DFS
+        def has_cycle(node: str, stack: set[str]) -> bool:
+            if node in stack:
+                return True
+
+            if node not in fallback_chains:
+                return False
+
+            stack.add(node)
+            for neighbor in fallback_chains[node].get("chain", []):
+                if has_cycle(neighbor, stack.copy()):
+                    return True
+            stack.remove(node)
+            return False
+
+        for model_name in fallback_chains:
+            if has_cycle(model_name, set()):
+                self.log_error(f"Circular fallback chain detected starting at '{model_name}'")
+                errors_found = True
+
+        if not errors_found:
+            self.log_success("Fallback chains are well-formed")
+
     def run_validation(self) -> bool:
         """Run all validation checks"""
         print(f"\n{Colors.BLUE}{'=' * 70}{Colors.NC}")
@@ -361,6 +421,7 @@ class ConfigValidator:
         self.validate_provider_to_mapping_consistency()
         self.validate_mapping_to_provider_consistency()
         self.validate_backend_model_references()
+        self.validate_fallback_chain_integrity()
         self.validate_litellm_consistency()
         self.validate_naming_conventions()
 

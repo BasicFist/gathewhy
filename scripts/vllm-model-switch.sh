@@ -7,9 +7,26 @@
 
 set -e
 
-VLLM_BIN="/home/miko/venvs/vllm/bin/vllm"
-VLLM_PORT=8001
-LOG_DIR="/tmp"
+DEFAULT_VLLM_BIN="/home/miko/venvs/vllm/bin/vllm"
+: "${VLLM_BIN:=$DEFAULT_VLLM_BIN}"
+
+if [[ ! -x "$VLLM_BIN" ]]; then
+    if command -v vllm >/dev/null 2>&1; then
+        VLLM_BIN="$(command -v vllm)"
+    else
+        echo "[✗] Unable to locate vllm executable. Set VLLM_BIN before running." >&2
+        exit 1
+    fi
+fi
+
+# Tunable defaults informed by https://docs.vllm.ai/en/stable/configuration/
+: "${VLLM_PORT:=8001}"
+: "${VLLM_MAX_NUM_SEQS:=16}"
+: "${VLLM_MAX_BATCHED_TOKENS:=8192}"
+: "${VLLM_MAX_MODEL_LEN:=32768}"
+: "${VLLM_GMEM_UTIL:=0.85}"
+: "${VLLM_SERVED_NAME:=workspace-coder}"
+LOG_DIR="${VLLM_LOG_DIR:-/tmp}"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -69,17 +86,34 @@ stop_vllm() {
     fi
 }
 
+# Compose common vLLM arguments (overridable via env)
+build_common_args() {
+    COMMON_ARGS=(
+        --host "${VLLM_HOST:-127.0.0.1}"
+        --port "$VLLM_PORT"
+        --gpu-memory-utilization "$VLLM_GMEM_UTIL"
+        --dtype auto
+        --enforce-eager
+        --trust-remote-code
+        --enable-prefix-caching
+        --max-model-len "$VLLM_MAX_MODEL_LEN"
+        --max-num-seqs "$VLLM_MAX_NUM_SEQS"
+        --max-num-batched-tokens "$VLLM_MAX_BATCHED_TOKENS"
+        --served-model-name "$VLLM_SERVED_NAME"
+    )
+
+    if [[ -n "${VLLM_LOG_STATS:-}" ]]; then
+        COMMON_ARGS+=(--log-stats)
+    fi
+}
+
 # Start Qwen Coder model
 start_qwen() {
     log_info "Starting Qwen2.5-Coder-7B-Instruct-AWQ..."
+    build_common_args
 
     nohup "$VLLM_BIN" serve Qwen/Qwen2.5-Coder-7B-Instruct-AWQ \
-        --host 0.0.0.0 \
-        --port "$VLLM_PORT" \
-        --gpu-memory-utilization 0.85 \
-        --dtype auto \
-        --enforce-eager \
-        --trust-remote-code \
+        "${COMMON_ARGS[@]}" \
         --enable-auto-tool-choice \
         --tool-call-parser hermes \
         > "$LOG_DIR/vllm-qwen-coder.log" 2>&1 &
@@ -106,14 +140,11 @@ start_qwen() {
 start_dolphin() {
     log_info "Starting Dolphin-2.8-Mistral-7B-v02-AWQ..."
 
+    build_common_args
+
     nohup "$VLLM_BIN" serve solidrust/dolphin-2.8-mistral-7b-v02-AWQ \
-        --host 0.0.0.0 \
-        --port "$VLLM_PORT" \
+        "${COMMON_ARGS[@]}" \
         --quantization awq \
-        --gpu-memory-utilization 0.8 \
-        --dtype auto \
-        --trust-remote-code \
-        --max-model-len 8192 \
         --enable-auto-tool-choice \
         --tool-call-parser hermes \
         > "$LOG_DIR/vllm-dolphin.log" 2>&1 &

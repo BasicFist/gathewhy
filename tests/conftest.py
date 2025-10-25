@@ -74,7 +74,7 @@ def fallback_chains(mappings_config: dict) -> dict[str, dict]:
 @pytest.fixture(scope="session")
 def capability_routing(mappings_config: dict) -> dict[str, dict]:
     """Get capability-based routing from mappings"""
-    return mappings_config.get("capability_routing", {})
+    return mappings_config.get("capabilities", {})
 
 
 @pytest.fixture(scope="session")
@@ -137,13 +137,18 @@ def mock_mappings():
                 "description": "Test vLLM model",
             },
         },
-        "pattern_matches": [
-            {"pattern": "test-.*", "provider": "test_ollama", "priority": "secondary"}
+        "patterns": [
+            {
+                "pattern": "test-.*",
+                "provider": "test_ollama",
+                "fallback": "test_vllm",
+                "description": "Mock pattern",
+            }
         ],
-        "capability_routing": {
+        "capabilities": {
             "test_capability": {
-                "models": ["test-model:7b", "test-vllm-model"],
-                "strategy": "round_robin",
+                "preferred_models": ["test-model:7b", "test-vllm-model"],
+                "routing_strategy": "round_robin",
             }
         },
         "fallback_chains": {

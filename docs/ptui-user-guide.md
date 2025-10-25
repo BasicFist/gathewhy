@@ -1,7 +1,7 @@
 # PTUI - Provider TUI User Guide
 
 **Version**: 2.0.0
-**Command**: `ptui` or `providers`
+**Command**: `ptui`, `pui`, or `providers`
 
 ## Overview
 
@@ -11,7 +11,7 @@ PTUI (Provider TUI) is a comprehensive command center for managing the AI Backen
 
 ```bash
 # Interactive mode (full TUI)
-ptui
+ptui        # or: pui
 
 # Command-line mode (quick checks)
 ptui status        # Show service status
@@ -19,6 +19,41 @@ ptui models        # List all models
 ptui health        # Run health check
 ptui vllm status   # Check vLLM status
 ptui help          # Show help
+```
+
+## Installation (Optional)
+
+You can run PTUI directly from the repository (`./scripts/ptui`). For convenience, either add the `scripts/` directory to your `PATH`, or create symlinks so `ptui`, `pui`, and `providers` are available globally.
+
+### Option A: Add to PATH (recommended for dev)
+
+```bash
+# From the repo root
+echo "export PATH=\"$PATH:$(pwd)/scripts\"" >> ~/.bashrc   # or ~/.zshrc
+source ~/.bashrc  # reload shell config
+
+# Verify
+ptui help
+providers help
+```
+
+### Option B: Create symlinks (system-wide)
+
+```bash
+sudo ln -sf "$(pwd)/scripts/ptui" /usr/local/bin/ptui
+sudo ln -sf "$(pwd)/scripts/pui" /usr/local/bin/pui
+sudo ln -sf "$(pwd)/scripts/providers" /usr/local/bin/providers
+
+# Verify
+ptui help
+providers help
+```
+
+Set timeouts via environment variables (optional):
+
+```bash
+export PTUI_HTTP_TIMEOUT=3        # seconds (default 5)
+export PTUI_REFRESH_SECONDS=5     # dashboard auto-refresh interval
 ```
 
 ## Features
@@ -64,98 +99,50 @@ Launch the full TUI with:
 ptui
 ```
 
-### Main Menu
+### Dashboard Layout
+
+The curses dashboard now provides a two-pane command center with arrow-key navigation:
 
 ```
-╔═══════════════════════════════════════════════════════════════╗
-║                  AI Backend Unified - PTUI                    ║
-║              Provider Command & Control Center                ║
-╚═══════════════════════════════════════════════════════════════╝
-
-━━━ Service Status ━━━
-
-✅ LiteLLM Gateway (http://localhost:4000)
-✅ Ollama (http://localhost:11434)
-✅ llama.cpp (Python) (http://localhost:8000)
-✅ llama.cpp (Native) (http://localhost:8080)
-✅ vLLM (http://localhost:8001)
-  └─ Model: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ
-
-━━━ Quick Stats ━━━
-
-🖥️  Services Running: 5/5
-🤖 Models Available: 4
-
-━━━ Main Menu ━━━
-
-  1. 📊 Show detailed status
-  2. 🤖 List all models
-  3. 💚 Run health check
-  4. ⚙️  vLLM model management
-  5. ℹ️  View configuration
-  6. 🖥️  View service logs
-  7. 🚀 Test endpoints
-  8. ⚙️  Quick actions
-  q. Quit
+Sections                        Service Overview
+➤ Service Overview              Service Health
+  Model Catalog                 Required services: 2/2 healthy
+  Operations                    Optional services: 3/3 online
+                                ONLINE  LiteLLM Gateway
+                                Latency: 87ms   URL: http://localhost:4000
+                                ...
 ```
 
-### Menu Options Explained
+### Navigation Keys
 
-#### 1. Show Detailed Status
-Displays comprehensive status of all services with:
-- Service health (running/stopped)
-- Port availability
-- Model counts
-- Current vLLM model
+- **↑ / ↓** – Move through the left-hand section list or quick actions.
+- **→ / Tab** – Focus the actions list when "Operations" is selected.
+- **← / Shift+Tab** – Return focus to the section list.
+- **Enter** – Run the highlighted action (when the actions pane has focus).
+- **r** – Manually refresh service and model data.
+- **q** – Exit the dashboard (legacy menu appears only if curses cannot initialize).
 
-#### 2. List All Models
-Shows models from all providers:
-- **LiteLLM**: All routable models
-- **Ollama**: Downloaded models with sizes
-- **vLLM**: Currently loaded model
+### Sections
 
-#### 3. Run Health Check
-Comprehensive health testing:
-- Endpoint availability
-- Completion test (actual inference)
-- Response time measurement
-- Overall system health score
+#### Service Overview
+- Live health for required and optional services.
+- Per-service latency and endpoint status.
+- Inline error details when a service is offline or degraded.
+- Auto-refresh every 5 seconds (configurable via `PTUI_REFRESH_SECONDS`).
 
-#### 4. vLLM Model Management
-Submenu for vLLM operations:
-- Switch to Qwen Coder
-- Switch to Dolphin
-- Check vLLM status
-- Stop vLLM
-- View vLLM logs
+#### Model Catalog
+- Lists every LiteLLM model currently routable.
+- Displays the time to fetch the model list.
+- Indicates if the gateway is unreachable or the listing fails.
 
-#### 5. View Configuration
-Browse configuration files:
-- LiteLLM unified config
-- Model mappings
-- Provider registry
-- vLLM model information
+#### Operations
+- Focus with **Tab** to highlight the actions list, then **Enter** to invoke:
+  - **Refresh State** – Pulls fresh health/model data (same as pressing `r`).
+  - **Health Probe** – Rechecks required services and reports failures.
+  - **Run Validation** – Executes `scripts/validate-unified-backend.sh` and reports success/fail.
+- The footer displays progress messages while actions run and reports results once complete.
 
-#### 6. View Service Logs
-Access logs from:
-- LiteLLM (via journalctl)
-- vLLM (log files)
-- System logs (dmesg)
-
-#### 7. Test Endpoints
-Interactive endpoint testing:
-- Test LiteLLM completion
-- Test Ollama API
-- Test vLLM API
-- Test all endpoints
-
-#### 8. Quick Actions
-Fast operations:
-- Restart LiteLLM service
-- Run validation script
-- Check GPU status
-- Check port usage
-- Kill all vLLM processes
+> Tip: Advanced utilities (provider management, log viewers, endpoint tests, etc.) remain accessible through the command-line mode (`ptui status`, `ptui test`, `ptui vllm …`) or the legacy Bash menu that appears automatically if the curses dashboard cannot start.
 
 ---
 
@@ -437,22 +424,59 @@ export TERM=xterm-256color
 
 ### ptui command not found
 
-The alias should be set. Check:
+Ensure the PTUI scripts are discoverable:
 
 ```bash
 type ptui
+type pui
 ```
 
-Should show:
+Both should resolve to the repo scripts, for example:
+
 ```
-ptui is an alias for /home/miko/LAB/ai/backend/ai-backend-unified/scripts/ptui
+ptui is /home/miko/LAB/ai/backend/ai-backend-unified/scripts/ptui
+pui is /home/miko/LAB/ai/backend/ai-backend-unified/scripts/pui
 ```
 
-If not, add to your shell config:
+If they do not, either invoke them directly (`./scripts/ptui`, `./scripts/pui`) or add the directory to your PATH:
+
+```bash
+export PATH="/home/miko/LAB/ai/backend/ai-backend-unified/scripts:$PATH"
+```
+
+Alternatively, add shell aliases pointing at the scripts:
 
 ```bash
 # ~/.bashrc or ~/.zshrc
 alias ptui='/home/miko/LAB/ai/backend/ai-backend-unified/scripts/ptui'
+alias pui='/home/miko/LAB/ai/backend/ai-backend-unified/scripts/pui'
+```
+
+After updating your shell, reload it so the commands are immediately available:
+
+```bash
+source ~/.zshrc   # or ~/.bashrc
+```
+
+Once wired up, both `ptui` and `pui` launch the dashboard. If the curses UI cannot initialize (e.g. missing kitty terminfo), the tool automatically falls back to the legacy Bash menu, so the command still succeeds.
+
+> ℹ️ The latest PTUI build also attempts to auto-install the kitty terminfo entry by running `tic` against the bundled `kitty.terminfo` file. If you still see a failure message after the automatic retry, double-check that `tic` is available (part of the `ncurses-bin` package) or compile the terminfo manually.
+
+### Refreshing the Current Session
+
+If you just added the alias (or switched branches), reload your current shell so the command becomes available without opening a new terminal:
+
+```bash
+source ~/.zshrc   # zsh
+# or
+source ~/.bashrc  # bash
+```
+
+You can confirm everything is wired up with:
+
+```bash
+type ptui
+type pui
 ```
 
 ### Services show as stopped but are running

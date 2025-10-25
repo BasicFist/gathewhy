@@ -300,17 +300,32 @@ def validate_all_configs(providers_path: Path, mappings_path: Path, litellm_path
                     f"Model '{model_name}' references inactive provider '{config.provider}'"
                 )
 
-        # Check fallback chains reference active providers
+        # Pre-compute known model identifiers for fallback validation
+        known_model_names = {m.model_name for m in litellm.model_list} | set(
+            mappings.exact_matches.keys()
+        )
+
+        # Check fallback chains reference active providers or known models
         for chain_name, chain in mappings.fallback_chains.items():
             for step in chain.chain:
-                # Handle both string and dictionary formats
                 if isinstance(step, str):
-                    provider = step
+                    references = [step]
                 else:
-                    provider = step.get("primary") or step.get("secondary") or step.get("tertiary")
-                if provider and provider not in active_providers:
+                    references = [
+                        ref
+                        for ref in (
+                            step.get("primary"),
+                            step.get("secondary"),
+                            step.get("tertiary"),
+                        )
+                        if ref
+                    ]
+
+                for reference in references:
+                    if reference in active_providers or reference in known_model_names:
+                        continue
                     errors.append(
-                        f"Fallback chain '{chain_name}' references inactive provider '{provider}'"
+                        f"Fallback chain '{chain_name}' references unknown provider/model '{reference}'"
                     )
 
         # Check litellm fallbacks reference existing models

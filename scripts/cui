@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Wrapper so operators can launch the AI dashboard using `cui`
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+
+exec "$SCRIPT_DIR/ai-dashboard" "$@"

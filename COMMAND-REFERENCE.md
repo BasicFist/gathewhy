@@ -47,13 +47,27 @@ All monitoring operations through a single command:
 
 Comprehensive command center for managing all AI backend services.
 
-**Version**: 2.0.0 | **Command**: `ptui` or `providers`
+**Version**: 2.0.0 | **Command**: `ptui`, `pui`, or `providers`
+
+### Installation (Optional)
+
+Make PTUI available globally by adding the repo `scripts/` folder to your `PATH` or symlinking the commands:
+
+```bash
+# Add to PATH (recommended for development)
+echo "export PATH=\"$PATH:$(pwd)/scripts\"" >> ~/.bashrc && source ~/.bashrc
+
+# Or symlink (system-wide)
+sudo ln -sf "$(pwd)/scripts/ptui" /usr/local/bin/ptui
+sudo ln -sf "$(pwd)/scripts/pui" /usr/local/bin/pui
+sudo ln -sf "$(pwd)/scripts/providers" /usr/local/bin/providers
+```
 
 ### Quick Start
 
 ```bash
 # Interactive mode (full TUI)
-ptui
+ptui        # or: pui, providers
 
 # Command-line mode (quick checks)
 ptui status        # Show service status

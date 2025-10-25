@@ -18,10 +18,14 @@ exact_matches:
     priority: primary
     fallback: null
     description: "Code generation specialist"
-
+  "mythomax-l2-13b-q5_k_m":
+    provider: ollama
+    priority: primary
+    fallback: llama_cpp_python
+    description: "Creative writing and roleplay tuned MythoMax L2"
   # vLLM models (AWQ quantized)
   "qwen-coder-vllm":
-    provider: vllm
+    provider: vllm-qwen
     priority: primary
     fallback: ollama
     description: "AWQ-quantized 7B code generation model via vLLM"
@@ -29,7 +33,7 @@ exact_matches:
 
   # Dolphin Uncensored (Mistral-based)
   "dolphin-uncensored-vllm":
-    provider: vllm
+    provider: vllm-dolphin
     priority: primary
     fallback: ollama
     description: "7B uncensored Mistral-based model via vLLM (AWQ quantized)"
@@ -49,22 +53,22 @@ exact_matches:
 patterns:
   # HuggingFace model paths → vLLM
   - pattern: "^Qwen/Qwen2\\.5-Coder.*"
-    provider: vllm
+    provider: vllm-qwen
     fallback: ollama
     description: "Qwen Coder models via vLLM (AWQ quantized)"
 
   - pattern: "^solidrust/dolphin.*AWQ$"
-    provider: vllm
+    provider: vllm-dolphin
     fallback: ollama
     description: "Dolphin uncensored models via vLLM (AWQ quantized)"
 
   - pattern: "^meta-llama/.*"
-    provider: vllm
+    provider: vllm-qwen
     fallback: ollama
     description: "HuggingFace Llama models prefer vLLM for performance"
 
   - pattern: "^mistralai/.*"
-    provider: vllm
+    provider: vllm-dolphin
     fallback: ollama
     description: "Mistral models via vLLM"
 
@@ -92,11 +96,35 @@ capabilities:
     provider: ollama
     routing_strategy: load_balance
 
+  analysis:
+    description: "Models tuned for structured analysis and planning"
+    preferred_models:
+      - qwen2.5-coder:7b
+      - llama3.1:latest
+    provider: ollama
+    routing_strategy: usage_based
+
+  reasoning:
+    description: "Models optimized for multi-step reasoning and problem solving"
+    preferred_models:
+      - llama3.1:latest
+      - qwen-coder-vllm
+    provider: ollama
+    routing_strategy: direct
+
+  creative_writing:
+    description: "Storytelling and roleplay optimized models"
+    preferred_models:
+      - mythomax-l2-13b-q5_k_m
+      - llama3.1:latest
+    provider: ollama
+    routing_strategy: usage_based
+
   uncensored:
     description: "Uncensored models without content filters"
     preferred_models:
       - dolphin-uncensored-vllm
-    provider: vllm
+    provider: vllm-dolphin
     routing_strategy: direct
 
   conversational:
@@ -104,12 +132,13 @@ capabilities:
     preferred_models:
       - dolphin-uncensored-vllm
       - llama3.1:latest
+      - mythomax-l2-13b-q5_k_m
     routing_strategy: usage_based
 
   high_throughput:
     description: "When you need to handle many concurrent requests"
     min_model_size: "13B"
-    provider: vllm
+    provider: vllm-qwen
     routing_strategy: least_loaded
 
   low_latency:
@@ -122,7 +151,7 @@ capabilities:
     description: "General conversational AI"
     preferred_models:
       - llama3.1:latest
-      - llama2-13b-vllm
+      - mythomax-l2-13b-q5_k_m
     routing_strategy: usage_based
 
   large_context:
@@ -152,7 +181,7 @@ load_balancing:
     providers:
       - provider: ollama
         weight: 0.6
-      - provider: vllm
+      - provider: vllm-qwen
         weight: 0.4
     strategy: least_loaded
     description: "Load balance general chat across multiple providers"
@@ -163,39 +192,36 @@ load_balancing:
 # Defines fallback order when primary provider fails
 
 fallback_chains:
-  "llama2-13b-vllm":
-    # vLLM model with Ollama fallback
-    chain:
-      - vllm
-      - ollama
-      - llama_cpp_python
-
   "llama3.1:latest":
-    # Ollama with llama.cpp fallbacks
+    # Prefer other capable models if llama3.1 is unavailable
     chain:
-      - ollama
-      - llama_cpp_python
-      - llama_cpp_native
+      - qwen2.5-coder:7b
+      - qwen-coder-vllm
+      - dolphin-uncensored-vllm
+
+  "qwen2.5-coder:7b":
+    # Ollama code model can fall back to higher throughput or creative options
+    chain:
+      - qwen-coder-vllm
+      - dolphin-uncensored-vllm
+
+  "mythomax-l2-13b-q5_k_m":
+    chain:
+      - llama3.1:latest
+      - qwen-coder-vllm
+      - dolphin-uncensored-vllm
 
   "qwen-coder-vllm":
     chain:
-      - vllm
-      - ollama
-      - llama_cpp_python
-
-  "qwen2.5-coder:7b":
-    # Code generation with fallbacks
-    chain:
-      - ollama
-      - llama_cpp_python
+      - dolphin-uncensored-vllm
 
   default:
     # Default fallback chain for all models
     chain:
-      - ollama
-      - llama_cpp_python
-      - llama_cpp_native
-      - vllm
+      - llama3.1:latest
+      - qwen2.5-coder:7b
+      - qwen-coder-vllm
+      - dolphin-uncensored-vllm
 
 # ============================================================================
 # ROUTING RULES
@@ -214,11 +240,11 @@ routing_rules:
   request_metadata_routing:
     # Route based on request headers/metadata
     high_priority_requests:
-      provider: vllm
+      provider: vllm-qwen
       condition: header.x-priority == "high"
 
     batch_requests:
-      provider: vllm
+      provider: vllm-qwen
       condition: batch_size > 1
 
     streaming_requests:
@@ -237,7 +263,7 @@ routing_rules:
       reason: "Medium models, Ollama preferred"
 
     - size: "> 13B"
-      provider: vllm
+      provider: vllm-qwen
       fallback: ollama
       reason: "Large models benefit from vLLM batching"
 

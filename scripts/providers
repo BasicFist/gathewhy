@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Lightweight wrapper so operators can launch PTUI using `providers`
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+
+export PTUI_CLI_NAME="providers"
+exec "$SCRIPT_DIR/ptui" "$@"

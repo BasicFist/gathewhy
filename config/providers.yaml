@@ -21,11 +21,19 @@ providers:
         size: "8B"
         quantization: Q4_K_M
         pulled_at: "2025-10-19"
+        specialty: general_chat
       - name: qwen2.5-coder:7b
         size: "7.6B"
         quantization: Q4_K_M
         pulled_at: "2025-10-19"
         specialty: code_generation
+      - name: mythomax-l2-13b-q5_k_m
+        size: "13B"
+        quantization: Q5_K_M
+        pulled_at: "2025-10-24"
+        specialty: creative_writing
+        options:
+          num_gpu_layers: -1
     health_endpoint: /api/tags
     docs: https://ollama.ai/docs
     location: ../openwebui (integrated)
@@ -62,11 +70,11 @@ providers:
     health_endpoint: /v1/models
     location: ../openwebui/backends/llama.cpp
 
-  vllm:
+  vllm-qwen:
     type: vllm
     base_url: http://127.0.0.1:8001
     status: active
-    description: vLLM high-throughput inference with AWQ quantization
+    description: vLLM high-throughput inference with AWQ quantization (Qwen model)
     features:
       - Continuous batching
       - PagedAttention for KV cache
@@ -83,7 +91,34 @@ providers:
         kv_cache_available_gb: 7.36
     health_endpoint: /v1/models
     api_format: openai_compatible
-    gpu_memory_utilization: 0.9
+    gpu_memory_utilization: 0.45
+    max_model_len: 4096
+    location: ~/venvs/vllm
+    hardware_requirements:
+      gpu_vram_gb: 16
+      gpu_model: "Quadro RTX 5000"
+      compute_capability: "7.5"
+
+  vllm-dolphin:
+    type: vllm
+    base_url: http://127.0.0.1:8002
+    status: active
+    description: vLLM high-throughput inference with AWQ quantization (Dolphin model)
+    features:
+      - Continuous batching
+      - PagedAttention for KV cache
+      - AWQ quantization (4-bit)
+      - Optimized for conversational responses
+      - Low memory footprint
+    models:
+      - name: solidrust/dolphin-2.8-mistral-7b-v02-AWQ
+        size: "7B"
+        quantization: AWQ
+        context_length: 4096
+        specialty: conversational
+    health_endpoint: /v1/models
+    api_format: openai_compatible
+    gpu_memory_utilization: 0.45
     max_model_len: 4096
     location: ~/venvs/vllm
     hardware_requirements:
@@ -143,7 +178,7 @@ metadata:
   version: "1.2"
   last_updated: "2025-10-23"
   total_providers: 4  # ollama, llama_cpp_python, llama_cpp_native, vllm
-  total_models_available: 4  # 2 Ollama + 1 vLLM + 1 llama.cpp
+  total_models_available: 5  # 3 Ollama + 1 vLLM + 1 llama.cpp
 
   provider_types:
     - ollama: Simple local server
@@ -182,4 +217,5 @@ health_checks:
     ollama: http://127.0.0.1:11434/api/tags
     llama_cpp_python: http://127.0.0.1:8000/v1/models
     llama_cpp_native: http://127.0.0.1:8080/v1/models
-    vllm: http://127.0.0.1:8001/v1/models
+    vllm-qwen: http://127.0.0.1:8001/v1/models
+    vllm-dolphin: http://127.0.0.1:8002/v1/models

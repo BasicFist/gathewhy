@@ -39,7 +39,10 @@ ai-monitor-lite
 - `Q` - Quit application
 - `Ctrl+D` - Toggle dark mode
 - `F1` - Show help
-- Click provider buttons to control services
+- Click provider buttons to control services:
+  - Start/Stop: Start or stop the service
+  - Restart: Restart the service
+  - Enable/Disable: Enable or disable autostart
 
 ### Lite Dashboard
 - `R` - Refresh all data
@@ -53,6 +56,8 @@ Each provider in the enhanced dashboard has individual controls:
 - **Start**: Launch the provider service
 - **Stop**: Shutdown the provider service
 - **Restart**: Restart the provider service
+- **Enable**: Enable autostart for the provider service
+- **Disable**: Disable autostart for the provider service
 
 ## VRAM Monitoring
 

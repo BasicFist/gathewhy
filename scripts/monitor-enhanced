@@ -152,12 +152,25 @@ class ProviderMonitor:
     def systemctl_command(self, command: str, service_name: str) -> bool:
         """Execute a systemctl command."""
         try:
+            # Special handling for enable/disable commands which might need different approach
+            if command in ["enable", "disable"]:
+                # For enable/disable, we might want to check if the service exists first
+                check_result = subprocess.run(
+                    ["systemctl", "--user", "list-unit-files", service_name],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if service_name not in check_result.stdout:
+                    # Service doesn't exist, return False
+                    return False
+
             result = subprocess.run(
                 ["systemctl", "--user", command, service_name],
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=5
+                timeout=10  # Longer timeout for enable/disable
             )
             return result.returncode == 0
         except subprocess.TimeoutExpired:
@@ -300,6 +313,8 @@ class ProviderCard(Vertical):
             yield Button("Start", id=f"start_{self.provider_name}", variant="success", classes="action-btn")
             yield Button("Stop", id=f"stop_{self.provider_name}", variant="error", classes="action-btn")
             yield Button("Restart", id=f"restart_{self.provider_name}", variant="warning", classes="action-btn")
+            yield Button("Enable", id=f"enable_{self.provider_name}", variant="primary", classes="action-btn")
+            yield Button("Disable", id=f"disable_{self.provider_name}", variant="error", classes="action-btn")
 
     def update_status(self, status: ProviderStatus):
         """Update the provider card with new status."""
@@ -565,10 +580,17 @@ class AIEnhancedDashboard(App):
         align: center middle;
     }
 
+    .actions-section {
+        height: auto;
+        align: center middle;
+        overflow-x: auto;
+    }
+
     .action-btn {
-        width: 10;
+        width: 8;
         height: 1;
         margin: 0 1;
+        min-width: 8;
     }
 
     .gpu-info {
@@ -731,6 +753,44 @@ class AIEnhancedDashboard(App):
                 else:
                     self.notify(f"Failed to restart {provider}!", severity="error")
 
+        elif button_id.startswith("enable_"):
+            provider = button_id.replace("enable_", "")
+            service_map = {
+                "ollama": "ollama.service",
+                "vllm-qwen": "vllm.service",
+                "vllm-dolphin": "vllm-dolphin.service",
+                "llama_cpp_python": "llamacpp-python.service",
+                "llama_cpp_native": "llama-cpp-native.service"
+            }
+
+            service_name = service_map.get(provider)
+            if service_name:
+                self.notify(f"Enabling {provider}...")
+                success = self.provider_monitor.systemctl_command("enable", service_name)
+                if success:
+                    self.notify(f"{provider} enabled successfully!")
+                else:
+                    self.notify(f"Failed to enable {provider}!", severity="error")
+
+        elif button_id.startswith("disable_"):
+            provider = button_id.replace("disable_", "")
+            service_map = {
+                "ollama": "ollama.service",
+                "vllm-qwen": "vllm.service",
+                "vllm-dolphin": "vllm-dolphin.service",
+                "llama_cpp_python": "llamacpp-python.service",
+                "llama_cpp_native": "llama-cpp-native.service"
+            }
+
+            service_name = service_map.get(provider)
+            if service_name:
+                self.notify(f"Disabling {provider}...")
+                success = self.provider_monitor.systemctl_command("disable", service_name)
+                if success:
+                    self.notify(f"{provider} disabled successfully!")
+                else:
+                    self.notify(f"Failed to disable {provider}!", severity="error")
+
     def action_refresh(self) -> None:
         """Refresh all data."""
         self.refresh_data()
@@ -743,7 +803,10 @@ class AIEnhancedDashboard(App):
                    "Q - Quit application\n"
                    "Ctrl+D - Toggle dark mode\n"
                    "F1 - Show this help\n\n"
-                   "Click provider buttons to control services\n"
+                   "Click provider buttons to control services:\n"
+                   "- Start/Stop: Start or stop the service\n"
+                   "- Restart: Restart the service\n"
+                   "- Enable/Disable: Enable or disable autostart\n\n"
                    "Dashboard shows real-time provider status and VRAM usage")
 
 

@@ -1,0 +1,14 @@
+#!/bin/bash
+# Launcher script for AI Backend Lite Dashboard
+
+# Use the Python environment where dependencies are installed
+PYTHON_PATH="/home/miko/LAB/academic/KANNA/tools/third_party/zotero-mcp/.venv/bin/python3"
+SCRIPT_PATH="$(dirname "$(readlink -f "$0")")/scripts/monitor-lite"
+
+# Check if the Python path exists
+if [ -x "$PYTHON_PATH" ]; then
+    exec "$PYTHON_PATH" "$SCRIPT_PATH" "$@"
+else
+    # Fallback to system Python (might not work if dependencies aren't installed)
+    exec python3 "$SCRIPT_PATH" "$@"
+fi

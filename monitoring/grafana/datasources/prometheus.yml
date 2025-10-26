@@ -7,3 +7,20 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    profiles:
+      - enterprise
+
+  # Alternative datasource for free mode - uses mock data
+  - name: LiteLLM-Logs
+    type: grafana-simple-json-datasource
+    access: proxy
+    url: http://localhost:4222
+    database: logs
+    jsonData:
+      timestampField: timestamp
+      timeInterval: "1s"
+    isDefault: false
+    editable: true
+    basicAuth: false
+    profiles:
+      - grafana

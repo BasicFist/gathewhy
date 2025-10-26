@@ -1,0 +1,12 @@
+#!/bin/bash
+# DACO - Dashboard A Comprehensive Output
+# Simple alias to call the dashboard from any shell
+
+SCRIPT_PATH="/home/miko/LAB/ai/backend/ai-backend-unified/scripts/ptui_dashboard.py"
+
+if [[ -f "$SCRIPT_PATH" ]]; then
+    python3 "$SCRIPT_PATH" "$@"
+else
+    echo "❌ Error: Dashboard script not found at $SCRIPT_PATH"
+    exit 1
+fi

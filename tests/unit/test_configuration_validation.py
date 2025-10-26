@@ -86,7 +86,7 @@ class TestProviderSchemaValidation:
             if "models" in config:
                 models = config["models"]
                 assert isinstance(
-                    models, (list, type(None))
+                    models, list | type(None)
                 ), f"Provider {provider_name} 'models' must be list, got {type(models)}"
 
 
@@ -220,7 +220,7 @@ class TestCrossConfigurationConsistency:
         """Verify no duplicate model names in exact matches."""
         seen = set()
 
-        for model_name in exact_matches.keys():
+        for model_name in exact_matches:
             assert model_name not in seen, f"Duplicate model name in exact_matches: {model_name}"
             seen.add(model_name)
 
@@ -231,7 +231,7 @@ class TestCrossConfigurationConsistency:
         # 'default' is a special catch-all fallback chain, not an exact match model
         special_chains = {"default", "*"}
 
-        for primary_model in fallback_chains.keys():
+        for primary_model in fallback_chains:
             # Skip special fallback chains
             if primary_model in special_chains:
                 continue
@@ -244,7 +244,7 @@ class TestCrossConfigurationConsistency:
         self, exact_matches: dict, fallback_chains: dict
     ) -> None:
         """Verify model names are strings."""
-        for model_name in exact_matches.keys():
+        for model_name in exact_matches:
             assert isinstance(
                 model_name, str
             ), f"Model name is not string: {model_name} ({type(model_name)})"

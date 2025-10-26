@@ -149,12 +149,30 @@ Standard OpenAI API format works across all providers.
 
 ## Documentation
 
+### Core Documentation
 - **Quick Start**: `docs/quick-start.md` - Get started in under 5 minutes
 - **Model Selection**: `docs/model-selection-guide.md` - Choose the right model for your use case
 - **Architecture**: `docs/architecture.md` - Complete system design
 - **Adding Providers**: `docs/adding-providers.md` - Integration guide
 - **API Usage**: `docs/consuming-api.md` - How to use from LAB projects
 - **Troubleshooting**: `docs/troubleshooting.md` - Common issues
+- **Observability**: `docs/observability.md` - Monitoring, debugging, profiling
+- **AI Dashboard**: `docs/ai-dashboard.md` - TUI monitoring interface
+
+### Reference Documentation
+- **Command Reference**: `docs/COMMAND-REFERENCE.md` - All available commands and scripts
+- **Configuration Schema**: `CONFIG-SCHEMA.md` - Configuration file formats
+- **Deployment Guide**: `DEPLOYMENT.md` - Production deployment procedures
+- **Development History**: `docs/DEVELOPMENT-HISTORY.md` - Project timeline and milestones
+- **VLLM Deployment**: `docs/VLLM-DEPLOYMENT-REQUIREMENTS.md` - vLLM-specific requirements
+- **Agent System**: `docs/AGENTS.md` - Agent architecture documentation
+
+### Model-Specific Guides
+- **Qwen Models**: `docs/models/qwen.md` - Qwen2.5-Coder configuration and usage
+
+### Project Status
+- **Current Status**: `STATUS-CURRENT.md` - Real-time project status and active work
+- **Historical Archives**: `archive/` - Historical status reports, phase completions, and session notes
 
 ## Serena Integration
 

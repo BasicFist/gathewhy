@@ -1,8 +1,0 @@
-#!/bin/bash
-# Wrapper script to run the AI backend provider dashboard
-
-# Get the directory of this script
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-
-# Run the monitor script
-exec "$SCRIPT_DIR/scripts/monitor" "$@"

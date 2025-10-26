@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Simple HTTP server that always returns mock Prometheus metrics
+COPY mock-prometheus.py /app/mock-prometheus.py
+
+EXPOSE 4222
+
+CMD ["python3", "-c", "import http.server; http.server.HTTPServer(('', 4222).serve_forever()"]

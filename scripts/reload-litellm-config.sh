@@ -214,14 +214,14 @@ rotate_backups() {
             should_keep=true
             kept_count=$((kept_count + 1))
         # Rule 2: Keep one backup per day for last 7 days
-        elif [[ -z "${daily_backups[$date_part]}" ]]; then
+        elif [[ -z "${daily_backups[$date_part]-}" ]]; then
             local days_ago=$(( ($(date +%s) - $(date -d "${date_part:0:4}-${date_part:4:2}-${date_part:6:2}" +%s)) / 86400 ))
             if [[ $days_ago -le 7 ]]; then
                 daily_backups[$date_part]="$backup"
                 should_keep=true
             fi
         # Rule 3: Keep one backup per week for last 4 weeks
-        elif [[ -z "${weekly_backups[$week_number]}" ]]; then
+        elif [[ -z "${weekly_backups[$week_number]-}" ]]; then
             local weeks_ago=$(( ($(date +%s) - $(date -d "${date_part:0:4}-${date_part:4:2}-${date_part:6:2}" +%s)) / 604800 ))
             if [[ $weeks_ago -le 4 ]]; then
                 weekly_backups[$week_number]="$backup"

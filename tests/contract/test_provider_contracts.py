@@ -261,9 +261,10 @@ class TestRoutingConfigurationContract:
         self, fallback_chains: dict[str, list], active_providers: dict[str, dict]
     ) -> None:
         """Verify fallback chains reference valid providers."""
-        active_names = set(active_providers.keys())
+        # Note: active_providers validation could be enhanced in future
+        _ = active_providers  # Mark as intentionally unused for now
 
-        for primary_model, chain in fallback_chains.items():
+        for _primary_model, chain in fallback_chains.items():
             for fallback_model in chain:
                 # Find provider for this fallback
                 # This is a basic check - implementation may vary

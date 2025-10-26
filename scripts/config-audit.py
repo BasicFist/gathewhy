@@ -103,23 +103,25 @@ class SecurityAudit(AuditCategory):
                     content = f.read()
 
                 # Check for common credential patterns
-                if any(
-                    keyword in content.lower()
-                    for keyword in [
-                        "password:",
-                        "api_key:",
-                        "secret:",
-                        "token:",
-                        "apikey:",
-                    ]
-                ):
-                    if "base_url" not in content:  # URLs OK, but not credentials
-                        self.add_finding(
-                            "critical",
-                            "Potential exposed credentials",
-                            f"File {config_file.name} may contain credentials",
-                            "Move sensitive data to environment variables or .env file",
-                        )
+                if (
+                    any(
+                        keyword in content.lower()
+                        for keyword in [
+                            "password:",
+                            "api_key:",
+                            "secret:",
+                            "token:",
+                            "apikey:",
+                        ]
+                    )
+                    and "base_url" not in content
+                ):  # URLs OK, but not credentials
+                    self.add_finding(
+                        "critical",
+                        "Potential exposed credentials",
+                        f"File {config_file.name} may contain credentials",
+                        "Move sensitive data to environment variables or .env file",
+                    )
         except Exception as e:
             logger.error(f"Error in credential check: {e}")
 
@@ -186,7 +188,12 @@ class SecurityAudit(AuditCategory):
 
             try:
                 ProvidersYAML(**config)
-                self.add_finding("info", "Schema validation enabled", "Configuration uses Pydantic validation", "")
+                self.add_finding(
+                    "info",
+                    "Schema validation enabled",
+                    "Configuration uses Pydantic validation",
+                    "",
+                )
             except Exception:
                 pass
 
@@ -346,7 +353,9 @@ class PerformanceAudit(AuditCategory):
 
     def check_concurrency(self):
         """Check concurrency limits"""
-        self.add_finding("info", "Concurrency limits", "Configure max_concurrent_requests based on hardware", "")
+        self.add_finding(
+            "info", "Concurrency limits", "Configure max_concurrent_requests based on hardware", ""
+        )
 
     def check_load_balancing(self):
         """Check load balancing configuration"""
@@ -358,7 +367,10 @@ class PerformanceAudit(AuditCategory):
             load_balancing = config.get("load_balancing", {})
             if load_balancing:
                 self.add_finding(
-                    "info", "Load balancing configured", f"{len(load_balancing)} load balanced models", ""
+                    "info",
+                    "Load balancing configured",
+                    f"{len(load_balancing)} load balanced models",
+                    "",
                 )
             else:
                 self.add_finding(
@@ -393,7 +405,10 @@ class CompletenessAudit(AuditCategory):
 
         if missing:
             self.add_finding(
-                "critical", "Missing configuration files", f"Missing: {', '.join(missing)}", "Create missing files"
+                "critical",
+                "Missing configuration files",
+                f"Missing: {', '.join(missing)}",
+                "Create missing files",
             )
         else:
             self.add_finding("info", "All required files present", "", "")
@@ -421,7 +436,9 @@ class CompletenessAudit(AuditCategory):
                     )
 
                 if not provider_config.get("description"):
-                    self.add_finding("low", f"No description for {provider_name}", "", "Add description field")
+                    self.add_finding(
+                        "low", f"No description for {provider_name}", "", "Add description field"
+                    )
         except Exception as e:
             logger.error(f"Error in provider details check: {e}")
 
@@ -586,7 +603,9 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Configuration audit tool")
-    parser.add_argument("--quick", action="store_true", help="Quick audit (security and compliance only)")
+    parser.add_argument(
+        "--quick", action="store_true", help="Quick audit (security and compliance only)"
+    )
     parser.add_argument(
         "--format",
         choices=["text", "json"],

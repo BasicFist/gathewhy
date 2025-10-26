@@ -43,6 +43,15 @@ from typing import Any
 import yaml
 from loguru import logger
 
+
+# Custom YAML dumper for proper indentation (yamllint compliance)
+class IndentedDumper(yaml.Dumper):
+    """Custom YAML dumper with proper sequence indentation for yamllint compliance."""
+
+    def increase_indent(self, flow=False, indentless=False):
+        return super().increase_indent(flow, False)
+
+
 # Configuration paths
 PROJECT_ROOT = Path(__file__).parent.parent
 PROVIDERS_FILE = PROJECT_ROOT / "config" / "providers.yaml"
@@ -678,7 +687,15 @@ class ConfigGenerator:
 
             # Write YAML content (excluding comment keys)
             clean_config = {k: v for k, v in config.items() if not k.startswith("#")}
-            yaml.dump(clean_config, f, default_flow_style=False, sort_keys=False, width=120)
+            yaml.dump(
+                clean_config,
+                f,
+                Dumper=IndentedDumper,  # Fix: Use custom dumper for yamllint compliance
+                default_flow_style=False,
+                sort_keys=False,
+                indent=2,
+                width=120,
+            )
 
         print("  ✓ Configuration written successfully")
 
@@ -693,7 +710,7 @@ class ConfigGenerator:
         }
 
         with open(VERSION_FILE, "w") as f:
-            yaml.dump(version_info, f)
+            yaml.dump(version_info, f, indent=2, default_flow_style=False)
 
         print(f"\n📌 Version saved: {self.version}")
 

@@ -44,7 +44,10 @@ class SchemaVersions:
             "date": "2024-10-20",
             "config_files": {
                 "providers.yaml": {"required": True, "key_fields": ["providers"]},
-                "model-mappings.yaml": {"required": True, "key_fields": ["exact_matches", "patterns"]},
+                "model-mappings.yaml": {
+                    "required": True,
+                    "key_fields": ["exact_matches", "patterns"],
+                },
                 "litellm-unified.yaml": {"required": True, "key_fields": ["model_list"]},
             },
             "breaking_changes": [],
@@ -467,7 +470,9 @@ class ConfigHealthChecker:
         print(f"{'=' * 70}\n")
 
         status_symbol = "✅" if self.health_status.get("overall_healthy") else "❌"
-        print(f"{status_symbol} Overall Status: {'HEALTHY' if self.health_status.get('overall_healthy') else 'ISSUES FOUND'}\n")
+        print(
+            f"{status_symbol} Overall Status: {'HEALTHY' if self.health_status.get('overall_healthy') else 'ISSUES FOUND'}\n"
+        )
 
         print(f"Files Exist: {'✅' if self.health_status.get('files_exist') else '❌'}")
         if self.health_status.get("missing_files"):
@@ -496,7 +501,9 @@ def main():
     """Main entry point"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Configuration schema versioning and migration support")
+    parser = argparse.ArgumentParser(
+        description="Configuration schema versioning and migration support"
+    )
 
     parser.add_argument("--check-version", action="store_true", help="Check current schema version")
     parser.add_argument(
@@ -510,7 +517,9 @@ def main():
         action="store_true",
         help="Validate configuration readiness for migration",
     )
-    parser.add_argument("--health-check", action="store_true", help="Run configuration health check")
+    parser.add_argument(
+        "--health-check", action="store_true", help="Run configuration health check"
+    )
     parser.add_argument("--history", action="store_true", help="Show migration history")
 
     args = parser.parse_args()
@@ -538,15 +547,14 @@ def main():
 
     elif args.validate_migration:
         planner = SchemaMigrationPlanner(config_dir)
-        all_valid = True
 
         for file_path in [
             config_dir / "providers.yaml",
             config_dir / "model-mappings.yaml",
             config_dir / "litellm-unified.yaml",
         ]:
-            if not planner.validate_config_for_migration(file_path):
-                all_valid = False
+            # Validation results tracked in planner.issues
+            planner.validate_config_for_migration(file_path)
 
         if planner.issues:
             logger.error("Migration validation failed:")

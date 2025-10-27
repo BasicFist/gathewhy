@@ -337,7 +337,10 @@ class ConfigGenerator:
             http://localhost:8001/v1
         """
         if provider_type == "ollama":
-            params: dict = {"model": f"ollama/{model_name}", "api_base": base_url}
+            # Use ollama_chat/ for cloud provider (better chat responses)
+            # Use ollama/ for local provider (compatibility)
+            prefix = "ollama_chat" if provider_name == "ollama_cloud" else "ollama"
+            params: dict = {"model": f"{prefix}/{model_name}", "api_base": base_url}
             options = raw_model.get("options")
             if options:
                 params["extra_body"] = {"options": options}
@@ -460,7 +463,7 @@ class ConfigGenerator:
         print("\n🔀 Building router settings...")
 
         router_settings = {
-            "routing_strategy": "usage-based-routing-v2",
+            "routing_strategy": "simple-shuffle",  # Changed from usage-based-routing-v2 (not recommended for production)
             "model_group_alias": {},
             "allowed_fails": 3,
             "num_retries": 2,
@@ -576,13 +579,14 @@ class ConfigGenerator:
             "model_list": self.build_model_list(),
             "litellm_settings": {
                 "request_timeout": 60,
-                "stream_timeout": 0,
+                "stream_timeout": 120,  # Changed from 0 (infinite) - set reasonable timeout
                 "num_retries": 3,
                 "timeout": 300,
                 "cache": True,
                 "cache_params": {"type": "redis", "host": "127.0.0.1", "port": 6379, "ttl": 3600},
-                "set_verbose": False,
+                "set_verbose": True,  # Changed from False - enable verbose logging for debugging
                 "json_logs": True,
+                "callbacks": ["prometheus"],  # Added: Enable Prometheus metrics endpoint
             },
             "router_settings": self.build_router_settings(),
             "server_settings": {
@@ -597,10 +601,13 @@ class ConfigGenerator:
                     ],
                 },
                 "health_check_endpoint": "/health",
-                "prometheus": {"enabled": True, "port": 9090},
+                # Removed invalid prometheus config - metrics served on port 4000 via callbacks
             },
             "rate_limit_settings": self.build_rate_limit_settings(),
             "general_settings": {
+                "background_health_checks": True,  # Added: Enable background health checks
+                "health_check_interval": 300,  # Added: Check every 5 minutes
+                "health_check_details": False,  # Added: Hide sensitive info in responses
                 "# Master Key Authentication": None,
                 "# Uncomment to enable": None,
                 "# master_key": "${LITELLM_MASTER_KEY}",

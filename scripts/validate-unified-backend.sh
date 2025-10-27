@@ -378,6 +378,53 @@ fi
 echo ""
 
 # ============================================================================
+# PHASE 9.5: CACHE HEALTH CHECK (LiteLLM /cache/ping endpoint)
+# ============================================================================
+
+echo "=== Phase 9.5: Cache Health Check ==="
+echo ""
+
+if curl -s http://localhost:4000/cache/ping > /dev/null 2>&1; then
+    CACHE_STATUS=$(curl -s http://localhost:4000/cache/ping 2>/dev/null | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$CACHE_STATUS" = "healthy" ]; then
+        log_success "Redis cache health check passed"
+
+        # Get additional cache details
+        CACHE_TYPE=$(curl -s http://localhost:4000/cache/ping 2>/dev/null | jq -r '.cache_type // "unknown"' 2>/dev/null || echo "unknown")
+        log_info "Cache type: $CACHE_TYPE"
+    elif [ "$CACHE_STATUS" = "unknown" ]; then
+        log_info "Cache health endpoint returned unexpected response"
+    else
+        log_warning "Redis cache status: $CACHE_STATUS"
+    fi
+else
+    log_info "Cache health endpoint not available (LiteLLM not running or endpoint not configured)"
+fi
+
+echo ""
+
+# ============================================================================
+# PHASE 9.6: PROMETHEUS METRICS CHECK
+# ============================================================================
+
+echo "=== Phase 9.6: Prometheus Metrics Check ==="
+echo ""
+
+if curl -s http://localhost:4000/metrics > /dev/null 2>&1; then
+    METRIC_COUNT=$(curl -s http://localhost:4000/metrics 2>/dev/null | grep -c "^litellm_" 2>/dev/null || echo "0")
+    if [ "$METRIC_COUNT" -gt 0 ]; then
+        log_success "Prometheus metrics endpoint available ($METRIC_COUNT LiteLLM metrics)"
+    else
+        log_warning "Prometheus endpoint available but no LiteLLM metrics found"
+        log_info "Ensure callbacks: ['prometheus'] is set in litellm_settings"
+    fi
+else
+    log_info "Prometheus metrics endpoint not available (LiteLLM not running)"
+fi
+
+echo ""
+
+# ============================================================================
 # PHASE 10: DOCUMENTATION CHECK
 # ============================================================================
 

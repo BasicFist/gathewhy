@@ -35,6 +35,7 @@ class GPUMonitor:
         self._pynvml = None
 
         try:
+            # Suppress deprecation warning about pynvml
             with warnings.catch_warnings():
                 warnings.filterwarnings(
                     "ignore",
@@ -81,7 +82,12 @@ class GPUMonitor:
         for index in range(self.device_count):
             try:
                 handle = pynvml.nvmlDeviceGetHandleByIndex(index)
-                name = pynvml.nvmlDeviceGetName(handle).decode("utf-8")
+                # Handle both old pynvml (bytes) and new pynvml (string)
+                name_result = pynvml.nvmlDeviceGetName(handle)
+                if isinstance(name_result, bytes):
+                    name = name_result.decode("utf-8")
+                else:
+                    name = name_result
                 memory = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 util = pynvml.nvmlDeviceGetUtilizationRates(handle)
             except (OSError, AttributeError, UnicodeDecodeError) as e:

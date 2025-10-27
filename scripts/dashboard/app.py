@@ -399,6 +399,10 @@ class DashboardApp(App[None]):
         """Initialize dashboard on mount."""
         logger.info("Dashboard mounted - starting initial metrics collection")
 
+        # Set logging level to DEBUG for GPU monitoring
+        logging.getLogger("dashboard.monitors.gpu").setLevel(logging.DEBUG)
+        logging.getLogger("dashboard.widgets.gpu_card").setLevel(logging.DEBUG)
+
         # Set border titles
         self.query_one("#left-column").border_title = "📊 Overview & Alerts"
         self.query_one("#center-column").border_title = "🖥️  Providers"
@@ -551,7 +555,16 @@ class DashboardApp(App[None]):
 
             # Update widgets
             self.query_one(OverviewPanel).update_overview(self.metrics)
-            self.query_one(GPUCard).update_overview(self.gpu_overview)
+
+            # Update GPU widget
+            gpu_widget = self.query_one(GPUCard)
+            if gpu_widget:
+                logger.debug(
+                    f"Updating GPU widget with detected={self.gpu_overview.detected}, total_used={self.gpu_overview.total_used_mb}"
+                )
+                gpu_widget.update_overview(self.gpu_overview)
+            else:
+                logger.warning("GPU Card widget not found")
 
             detail = self.query_one(DetailPanel)
             detail.update_details(self._find_metric(self.selected_key))

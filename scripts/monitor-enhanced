@@ -209,13 +209,13 @@ class GPUMonitor:
                 # Try to get temperature
                 try:
                     temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-                except:
+                except (pynvml.NVMLError, AttributeError):
                     temp = 0.0
 
                 # Try to get power draw
                 try:
                     power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0  # Convert mW to W
-                except:
+                except (pynvml.NVMLError, AttributeError):
                     power = 0.0
 
                 gpus.append(GPUInfo(
@@ -404,7 +404,7 @@ class GPUPanel(Vertical):
                 util_widget.add_class("medium")
             else:
                 util_widget.add_class("low")
-        except:
+        except (AttributeError, ValueError):
             pass
 
 
@@ -436,7 +436,7 @@ class SystemMetrics(Static):
                 cpu_widget.add_class("medium")
             else:
                 cpu_widget.add_class("low")
-        except:
+        except (AttributeError, ValueError):
             pass
 
     def watch_memory_percent(self, memory: float):
@@ -453,7 +453,7 @@ class SystemMetrics(Static):
                 mem_widget.add_class("medium")
             else:
                 mem_widget.add_class("low")
-        except:
+        except (AttributeError, ValueError):
             pass
 
     def compose(self) -> ComposeResult:
@@ -685,7 +685,7 @@ class AIEnhancedDashboard(App):
                 if card.provider_name == provider_name:
                     card.update_status(status)
                     break
-        except:
+        except (AttributeError, StopIteration):
             pass
 
     def update_gpu_info(self):

@@ -216,16 +216,20 @@ case "${1:-help}" in
         stop_vllm
         ;;
     restart)
-        if pgrep -f "vllm serve" > /dev/null; then
+        get_current_model() {
             local pid=$(pgrep -f "vllm serve")
             local current_model=$(ps -p "$pid" -o args= | grep -oP "(?<=vllm serve ).+?(?= --)" || echo "unknown")
+            echo "$current_model"
+        }
 
-            log_info "Restarting current model: $current_model"
+        if pgrep -f "vllm serve" > /dev/null; then
+            CURRENT_MODEL=$(get_current_model)
+            log_info "Restarting current model: $CURRENT_MODEL"
             stop_vllm
 
-            if [[ "$current_model" == *"Qwen"* ]]; then
+            if [[ "$CURRENT_MODEL" == *"Qwen"* ]]; then
                 start_qwen
-            elif [[ "$current_model" == *"dolphin"* ]]; then
+            elif [[ "$CURRENT_MODEL" == *"dolphin"* ]]; then
                 start_dolphin
             else
                 log_error "Unknown model type, cannot restart"

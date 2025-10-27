@@ -1,0 +1,202 @@
+/* ============= MODERN DARK THEME ============= */
+
+Screen {
+    background: $surface;
+    layout: vertical;
+}
+
+Header {
+    background: $accent;
+    color: $text;
+    text-style: bold;
+}
+
+#stats-bar {
+    background: #1a1a2e;
+    color: $text;
+    height: 1;
+    padding: 0 2;
+    text-style: bold;
+}
+
+/* ============= SEARCH BAR ============= */
+
+#search-container {
+    height: 3;
+    background: #16213e;
+    padding: 0 2;
+    align: center middle;
+}
+
+#search-icon {
+    width: 3;
+    content-align: center middle;
+    color: $accent;
+    text-style: bold;
+}
+
+#search-input {
+    width: 1fr;
+    background: #0f3460;
+    border: solid $accent;
+}
+
+#search-input:focus {
+    border: solid $success;
+}
+
+/* ============= FILTER BAR ============= */
+
+#filter-container {
+    height: 3;
+    background: #16213e;
+    padding: 0 2;
+    align: center middle;
+}
+
+#filter-label {
+    width: auto;
+    margin-right: 2;
+    color: $accent;
+    text-style: bold;
+}
+
+#filter-container Button {
+    margin-right: 1;
+}
+
+/* ============= MAIN LAYOUT ============= */
+
+#body {
+    layout: grid;
+    grid-size: 3;
+    grid-columns: 2fr 3fr 2fr;
+    height: 1fr;
+    padding: 1 2;
+    background: $surface;
+}
+
+/* ============= LEFT COLUMN ============= */
+
+#left-column {
+    layout: vertical;
+    background: #0f3460;
+    border: thick #00d9ff;
+    border-title-color: #00d9ff;
+    border-title-style: bold;
+}
+
+OverviewPanel {
+    height: auto;
+    background: #16213e;
+    color: $text;
+    padding: 2;
+    margin: 1;
+    border: solid #ff006e;
+}
+
+GPUCard {
+    height: auto;
+    background: #16213e;
+    color: $text;
+    padding: 2;
+    margin: 1;
+    border: solid #8338ec;
+}
+
+#alerts-panel {
+    height: 1fr;
+    background: #16213e;
+    margin: 1;
+    border: solid #fb5607;
+    padding: 1;
+}
+
+#alerts-title {
+    color: #fb5607;
+    text-style: bold;
+    height: auto;
+    margin-bottom: 1;
+}
+
+#alerts-log {
+    height: 1fr;
+    border: none;
+    background: #0f3460;
+}
+
+/* ============= CENTER COLUMN ============= */
+
+#center-column {
+    layout: vertical;
+    border: thick #00ff00;
+    border-title-color: #00ff00;
+    border-title-style: bold;
+}
+
+ServiceTable {
+    height: 1fr;
+    background: #0f3460;
+}
+
+ServiceTable > .datatable--header {
+    background: #16213e;
+    color: #00d9ff;
+    text-style: bold;
+}
+
+ServiceTable > .datatable--cursor {
+    background: #ff006e 50%;
+}
+
+/* ============= RIGHT COLUMN ============= */
+
+#right-column {
+    layout: vertical;
+    border: thick #ff006e;
+    border-title-color: #ff006e;
+    border-title-style: bold;
+}
+
+#detail-panel {
+    height: 1fr;
+    background: #0f3460;
+    padding: 2;
+}
+
+#detail-actions {
+    padding-top: 1;
+}
+
+#detail-actions Button {
+    margin-right: 1;
+}
+
+#event-log {
+    height: 12;
+    background: #16213e;
+    border: solid #8338ec;
+    padding: 1;
+    margin-top: 1;
+}
+
+/* ============= FOOTER ============= */
+
+Footer {
+    background: $accent;
+}
+
+Footer .footer--key {
+    background: $primary;
+    color: $text;
+}
+
+/* ============= COLOR DEFINITIONS ============= */
+
+$surface: #0a0e27;
+$accent: #00d9ff;
+$text: #e9ecef;
+$primary: #0f3460;
+$success: #00ff00;
+$warning: #ffb703;
+$error: #ff006e;

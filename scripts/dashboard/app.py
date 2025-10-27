@@ -12,103 +12,26 @@ from typing import Literal
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.reactive import reactive
-from textual.widgets import (
-    Button,
-    DataTable,
-    Footer,
-    Header,
-    Input,
-    Label,
-    Log,
-    Static,
-)
+from textual.containers import Container, Vertical
+from textual.widgets import Button, DataTable, Footer, Header, Input, Log
 
 from .config import load_env_config
+from .controllers import NavigationController
 from .models import GPUOverview, ServiceMetrics
 from .monitors import ProviderMonitor
 from .state import load_dashboard_state, save_dashboard_state
-from .widgets import DetailPanel, GPUCard, OverviewPanel, ServiceTable
+from .widgets import (
+    AlertsPanel,
+    DetailPanel,
+    FilterBar,
+    GPUCard,
+    OverviewPanel,
+    SearchBar,
+    ServiceTable,
+    StatsBar,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class SearchBar(Static):
-    """Search bar for filtering providers."""
-
-    def compose(self) -> ComposeResult:
-        """Compose search bar widgets."""
-        with Horizontal(id="search-container"):
-            yield Label("🔍", id="search-icon")
-            yield Input(placeholder="Search providers... (Press / to focus)", id="search-input")
-
-
-class AlertsPanel(VerticalScroll):
-    """Panel for displaying system alerts and notifications."""
-
-    def compose(self) -> ComposeResult:
-        """Compose alerts panel."""
-        yield Label("[b]📢 Alerts & Notifications[/b]", id="alerts-title")
-        yield Log(id="alerts-log", highlight=True)
-
-    def add_alert(self, level: Literal["info", "warning", "error"], message: str) -> None:
-        """Add an alert to the panel.
-
-        Args:
-            level: Alert severity level
-            message: Alert message
-        """
-        try:
-            log = self.query_one("#alerts-log", Log)
-            icons = {"info": "ℹ️", "warning": "⚠️", "error": "🚨"}
-            colors = {"info": "cyan", "warning": "yellow", "error": "red"}
-            icon = icons.get(level, "•")
-            color = colors.get(level, "white")
-            log.write(f"[{color}]{icon} {message}[/]")
-        except Exception as e:
-            logger.debug(f"Error adding alert: {e}")
-
-
-class StatsBar(Static):
-    """Compact statistics bar showing key metrics."""
-
-    active_count = reactive(0)
-    total_count = reactive(0)
-    avg_cpu = reactive(0.0)
-    avg_mem = reactive(0.0)
-
-    def render(self) -> str:
-        """Render stats bar content."""
-        return (
-            f"[cyan]●[/] {self.active_count}/{self.total_count} Active  "
-            f"[green]▲[/] CPU: {self.avg_cpu:.1f}%  "
-            f"[magenta]■[/] MEM: {self.avg_mem:.1f}%"
-        )
-
-    def update_stats(self, metrics: list[ServiceMetrics]) -> None:
-        """Update stats with current metrics."""
-        self.total_count = len(metrics)
-        self.active_count = sum(1 for m in metrics if m.status == "active")
-        self.avg_cpu = (
-            sum(m.cpu_percent for m in metrics) / self.total_count if self.total_count else 0.0
-        )
-        self.avg_mem = (
-            sum(m.memory_percent for m in metrics) / self.total_count if self.total_count else 0.0
-        )
-
-
-class FilterBar(Static):
-    """Filter bar for provider status filtering."""
-
-    def compose(self) -> ComposeResult:
-        """Compose filter bar."""
-        with Horizontal(id="filter-container"):
-            yield Label("Filter:", id="filter-label")
-            yield Button("All", id="filter-all", variant="primary")
-            yield Button("Active", id="filter-active", variant="success")
-            yield Button("Degraded", id="filter-degraded", variant="warning")
-            yield Button("Inactive", id="filter-inactive", variant="error")
 
 
 class DashboardApp(App[None]):
@@ -127,210 +50,8 @@ class DashboardApp(App[None]):
         - Status indicators with icons
     """
 
-    CSS = """
-    /* ============= MODERN DARK THEME ============= */
-
-    Screen {
-        background: $surface;
-        layout: vertical;
-    }
-
-    Header {
-        background: $accent;
-        color: $text;
-        text-style: bold;
-    }
-
-    #stats-bar {
-        background: #1a1a2e;
-        color: $text;
-        height: 1;
-        padding: 0 2;
-        text-style: bold;
-    }
-
-    /* ============= SEARCH BAR ============= */
-
-    #search-container {
-        height: 3;
-        background: #16213e;
-        padding: 0 2;
-        align: center middle;
-    }
-
-    #search-icon {
-        width: 3;
-        content-align: center middle;
-        color: $accent;
-        text-style: bold;
-    }
-
-    #search-input {
-        width: 1fr;
-        background: #0f3460;
-        border: solid $accent;
-    }
-
-    #search-input:focus {
-        border: solid $success;
-    }
-
-    /* ============= FILTER BAR ============= */
-
-    #filter-container {
-        height: 3;
-        background: #16213e;
-        padding: 0 2;
-        align: center middle;
-    }
-
-    #filter-label {
-        width: auto;
-        margin-right: 2;
-        color: $accent;
-        text-style: bold;
-    }
-
-    #filter-container Button {
-        margin-right: 1;
-    }
-
-    /* ============= MAIN LAYOUT ============= */
-
-    #body {
-        layout: grid;
-        grid-size: 3;
-        grid-columns: 2fr 3fr 2fr;
-        height: 1fr;
-        padding: 1 2;
-        background: $surface;
-    }
-
-    /* ============= LEFT COLUMN ============= */
-
-    #left-column {
-        layout: vertical;
-        background: #0f3460;
-        border: thick #00d9ff;
-        border-title-color: #00d9ff;
-        border-title-style: bold;
-    }
-
-    OverviewPanel {
-        height: auto;
-        background: #16213e;
-        color: $text;
-        padding: 2;
-        margin: 1;
-        border: solid #ff006e;
-    }
-
-    GPUCard {
-        height: auto;
-        background: #16213e;
-        color: $text;
-        padding: 2;
-        margin: 1;
-        border: solid #8338ec;
-    }
-
-    #alerts-panel {
-        height: 1fr;
-        background: #16213e;
-        margin: 1;
-        border: solid #fb5607;
-        padding: 1;
-    }
-
-    #alerts-title {
-        color: #fb5607;
-        text-style: bold;
-        height: auto;
-        margin-bottom: 1;
-    }
-
-    #alerts-log {
-        height: 1fr;
-        border: none;
-        background: #0f3460;
-    }
-
-    /* ============= CENTER COLUMN ============= */
-
-    #center-column {
-        layout: vertical;
-        border: thick #00ff00;
-        border-title-color: #00ff00;
-        border-title-style: bold;
-    }
-
-    ServiceTable {
-        height: 1fr;
-        background: #0f3460;
-    }
-
-    ServiceTable > .datatable--header {
-        background: #16213e;
-        color: #00d9ff;
-        text-style: bold;
-    }
-
-    ServiceTable > .datatable--cursor {
-        background: #ff006e 50%;
-    }
-
-    /* ============= RIGHT COLUMN ============= */
-
-    #right-column {
-        layout: vertical;
-        border: thick #ff006e;
-        border-title-color: #ff006e;
-        border-title-style: bold;
-    }
-
-    #detail-panel {
-        height: 1fr;
-        background: #0f3460;
-        padding: 2;
-    }
-
-    #detail-actions {
-        padding-top: 1;
-    }
-
-    #detail-actions Button {
-        margin-right: 1;
-    }
-
-    #event-log {
-        height: 12;
-        background: #16213e;
-        border: solid #8338ec;
-        padding: 1;
-        margin-top: 1;
-    }
-
-    /* ============= FOOTER ============= */
-
-    Footer {
-        background: $accent;
-    }
-
-    Footer .footer--key {
-        background: $primary;
-        color: $text;
-    }
-
-    /* ============= COLOR DEFINITIONS ============= */
-
-    $surface: #0a0e27;
-    $accent: #00d9ff;
-    $text: #e9ecef;
-    $primary: #0f3460;
-    $success: #00ff00;
-    $warning: #ffb703;
-    $error: #ff006e;
-    """
+    # Load external CSS file
+    CSS_PATH = "dashboard.tcss"
 
     BINDINGS = [
         Binding("r", "refresh", "Refresh", priority=True),
@@ -408,6 +129,10 @@ class DashboardApp(App[None]):
         self.query_one("#center-column").border_title = "🖥️  Providers"
         self.query_one("#right-column").border_title = "🔍 Details & Logs"
 
+        # Initialize navigation controller
+        table = self.query_one(ServiceTable)
+        self.nav_controller = NavigationController(table)
+
         self._refresh_table()
         self.refresh_timer = self.set_interval(
             self.refresh_interval, self._refresh_table, pause=not self.auto_refresh_enabled
@@ -449,21 +174,11 @@ class DashboardApp(App[None]):
 
     def action_next_row(self) -> None:
         """Move to next row (binding: 'j')."""
-        try:
-            table = self.query_one(ServiceTable)
-            if table.cursor_coordinate.row < table.row_count - 1:
-                table.move_cursor(row=table.cursor_coordinate.row + 1)
-        except Exception as e:
-            logger.debug(f"Error moving to next row: {e}")
+        self.nav_controller.move_next()
 
     def action_prev_row(self) -> None:
         """Move to previous row (binding: 'k')."""
-        try:
-            table = self.query_one(ServiceTable)
-            if table.cursor_coordinate.row > 0:
-                table.move_cursor(row=table.cursor_coordinate.row - 1)
-        except Exception as e:
-            logger.debug(f"Error moving to previous row: {e}")
+        self.nav_controller.move_previous()
 
     # ========================= SEARCH & FILTER =========================
 

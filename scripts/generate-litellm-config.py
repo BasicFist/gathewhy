@@ -586,7 +586,7 @@ class ConfigGenerator:
                 "cache_params": {"type": "redis", "host": "127.0.0.1", "port": 6379, "ttl": 3600},
                 "set_verbose": True,  # Changed from False - enable verbose logging for debugging
                 "json_logs": True,
-                "callbacks": ["prometheus"],  # Added: Enable Prometheus metrics endpoint
+                # Note: Prometheus callbacks are Enterprise-only feature, not available in open source
             },
             "router_settings": self.build_router_settings(),
             "server_settings": {

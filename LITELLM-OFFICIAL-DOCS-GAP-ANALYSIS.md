@@ -30,7 +30,7 @@ After comprehensive review of official LiteLLM documentation, your configuration
 
 ## Detailed Gap Analysis
 
-## 1. Critical: Prometheus Port Conflict ❌
+## 1. Critical: Prometheus Configuration Issues ❌→⚠️
 
 ### Current Configuration
 ```yaml
@@ -38,50 +38,35 @@ After comprehensive review of official LiteLLM documentation, your configuration
 server_settings:
   prometheus:
     enabled: true
-    port: 9090  # ❌ CONFLICT
-```
-
-```yaml
-# monitoring/docker-compose.yml
-prometheus:
-  ports:
-    - "9090:9090"  # ❌ Same port
+    port: 9090  # ❌ INVALID - not a real setting
 ```
 
 ### Problem
-LiteLLM proxy exposes `/metrics` endpoint on its main port (4000), **not** on a separate Prometheus port. The `prometheus.port: 9090` setting is invalid and conflicts with the actual Prometheus container.
+The `prometheus.port: 9090` setting is invalid configuration.
 
-### Official LiteLLM Documentation
-> "LiteLLM Exposes a `/metrics` endpoint for Prometheus to Poll"
->
-> Configuration: `litellm_settings.callbacks: ["prometheus"]`
+### **IMPORTANT DISCOVERY: Prometheus is Enterprise-Only** 🔒
 
-**No separate port is used** - metrics are served on the main API port (4000) at `/metrics`.
+After implementation, discovered that Prometheus metrics are **Enterprise-only feature**:
 
-### Fix Required
+> "Prometheus metrics are only available for premium users. You must be a LiteLLM Enterprise user to use this feature. If you have a license please set `LITELLM_LICENSE` in your env."
+
+**Official docs did NOT clearly state this limitation** in the main Prometheus documentation page.
+
+### Fix Applied
 ```yaml
-# config/litellm-unified.yaml
+# Removed invalid prometheus port config from server_settings
+# Note added: Prometheus callbacks are Enterprise-only feature
+```
+
+### Alternative for Solo Dev (Free Tier)
+**Use verbose logging instead**:
+```yaml
 litellm_settings:
-  callbacks: ["prometheus"]  # Add this
-
-# Remove this entire section (it's invalid)
-# server_settings:
-#   prometheus:
-#     enabled: true
-#     port: 9090
+  set_verbose: true  # ✅ Applied - provides detailed request/response logging
+  json_logs: true    # ✅ Already enabled - structured logging
 ```
 
-Update Prometheus scrape config to use port 4000:
-```yaml
-# monitoring/prometheus/prometheus.yml (ALREADY CORRECT!)
-scrape_configs:
-  - job_name: 'litellm'
-    static_configs:
-      - targets: ['localhost:4000']  # ✅ Already correct
-    metrics_path: '/metrics'
-```
-
-**Impact**: Medium - Prometheus cannot scrape metrics from LiteLLM until this is fixed. Your current Prometheus config already points to port 4000, so you just need to enable the callback.
+**Impact**: Low for solo dev - verbose logging provides sufficient observability without Enterprise license. Prometheus would be nice-to-have but not critical.
 
 ---
 

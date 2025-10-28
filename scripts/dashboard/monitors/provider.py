@@ -25,7 +25,7 @@ ALLOWED_SERVICES: dict[str, str] = {
     "ollama": "ollama.service",
     "vllm": "vllm.service",
     "llama_cpp_python": "llamacpp-python.service",
-    "llama_cpp_native": "llama-cpp-native.service",
+    "llama_cpp_native": "llama-server-native.service",
     "litellm_gateway": "litellm.service",
 }
 
@@ -79,7 +79,7 @@ class ProviderMonitor:
         "llama_cpp_native": {
             "endpoint": "http://127.0.0.1:8080/v1/models",
             "display": "llama.cpp (Native)",
-            "service": "llama-cpp-native.service",
+            "service": "llama-server-native.service",
             "required": False,
             "type": "litellm",
         },

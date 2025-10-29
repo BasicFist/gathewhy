@@ -9,6 +9,7 @@ from .detail import DetailPanel
 from .filter_bar import FilterBar
 from .gpu_card import GPUCard
 from .help import HelpOverlay
+from .layout import DashboardView
 from .overview import OverviewPanel
 from .search_bar import SearchBar
 from .stats_bar import StatsBar
@@ -20,6 +21,7 @@ __all__ = [
     "FilterBar",
     "GPUCard",
     "HelpOverlay",
+    "DashboardView",
     "OverviewPanel",
     "SearchBar",
     "StatsBar",

@@ -12,25 +12,15 @@ from typing import Literal
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Vertical
-from textual.widgets import Button, DataTable, Footer, Header, Input, Log
+from textual.widgets import Button, DataTable, Footer, Header, Input
 
 from .config import load_env_config
 from .controllers import NavigationController
 from .models import GPUOverview, ServiceMetrics
 from .monitors import ProviderMonitor
 from .state import load_dashboard_state, save_dashboard_state
-from .widgets import (
-    AlertsPanel,
-    DetailPanel,
-    FilterBar,
-    GPUCard,
-    HelpOverlay,
-    OverviewPanel,
-    SearchBar,
-    ServiceTable,
-    StatsBar,
-)
+from .widgets.detail import DetailPanel
+from .widgets.layout import DashboardView
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +76,7 @@ class DashboardApp(App[None]):
         self.auto_refresh_enabled = True
         self.current_filter: str = "all"
         self.search_query: str = ""
+        self.dashboard_view: DashboardView | None = None
 
         # Try to load previous state
         loaded_state = load_dashboard_state()
@@ -97,25 +88,10 @@ class DashboardApp(App[None]):
 
     def compose(self) -> ComposeResult:
         """Compose redesigned dashboard UI layout."""
+        self.dashboard_view = DashboardView()
         yield Header(show_clock=True)
-        yield StatsBar(id="stats-bar")
-        yield SearchBar()
-        yield FilterBar()
-        with Container(id="body"):
-            with Vertical(id="left-column"):
-                self.border_title = "📊 Overview & Alerts"
-                yield OverviewPanel(id="overview")
-                yield GPUCard(id="gpu")
-                yield AlertsPanel(id="alerts-panel")
-            with Vertical(id="center-column"):
-                self.border_title = "🖥️  Providers"
-                yield ServiceTable()
-            with Vertical(id="right-column"):
-                self.border_title = "🔍 Details & Logs"
-                yield DetailPanel()
-                yield Log(id="event-log", highlight=True)
+        yield self.dashboard_view
         yield Footer()
-        yield HelpOverlay(id="help-overlay")
 
     # ========================= LIFECYCLE =========================
 
@@ -127,31 +103,14 @@ class DashboardApp(App[None]):
         logging.getLogger("dashboard.monitors.gpu").setLevel(logging.DEBUG)
         logging.getLogger("dashboard.widgets.gpu_card").setLevel(logging.DEBUG)
 
-        # Set border titles
-        self.query_one("#left-column").border_title = "📊 Overview & Alerts"
-        self.query_one("#center-column").border_title = "🖥️  Providers"
-        self.query_one("#right-column").border_title = "🔍 Details & Logs"
+        assert self.dashboard_view is not None
 
         # Initialize navigation controller
-        table = self.query_one(ServiceTable)
-        self.nav_controller = NavigationController(table)
+        self.nav_controller = NavigationController(self.dashboard_view.service_table)
 
         # Apply user preferences for layout elements
-        try:
-            event_log = self.query_one("#event-log", Log)
-            event_log.styles.height = self.log_height
-        except Exception as e:
-            logger.debug(f"Unable to apply log height: {e}")
-
-        try:
-            self.query_one(FilterBar).set_active(self.current_filter)
-        except Exception as e:
-            logger.debug(f"Unable to initialize filter bar state: {e}")
-
-        try:
-            self.query_one(HelpOverlay).hide()
-        except Exception as e:
-            logger.debug(f"Unable to hide help overlay on mount: {e}")
+        self.dashboard_view.configure(self.log_height, self.current_filter)
+        self.dashboard_view.hide_help()
 
         self._refresh_table()
         self.refresh_timer = self.set_interval(
@@ -179,9 +138,10 @@ class DashboardApp(App[None]):
             self.add_alert("warning", "Auto-refresh paused")
 
         try:
-            self.query_one(StatsBar).update_stats(
-                self.metrics, self.auto_refresh_enabled, float(self.refresh_interval)
-            )
+            if self.dashboard_view:
+                self.dashboard_view.update_stats(
+                    self.metrics, self.auto_refresh_enabled, float(self.refresh_interval)
+                )
         except Exception as e:
             logger.debug(f"Unable to update stats bar auto-refresh state: {e}")
 
@@ -192,10 +152,8 @@ class DashboardApp(App[None]):
 
     def action_clear_log(self) -> None:
         """Clear event log (binding: 'ctrl+l')."""
-        try:
-            self.query_one("#event-log", Log).clear()
-        except Exception as e:
-            logger.debug(f"Error clearing log: {e}")
+        if self.dashboard_view:
+            self.dashboard_view.clear_log()
 
     # ========================= VIM NAVIGATION =========================
 
@@ -212,8 +170,8 @@ class DashboardApp(App[None]):
     def action_focus_search(self) -> None:
         """Focus search input (binding: '/')."""
         try:
-            search_input = self.query_one("#search-input", Input)
-            search_input.focus()
+            if self.dashboard_view:
+                self.dashboard_view.focus_search()
         except Exception as e:
             logger.debug(f"Error focusing search: {e}")
 
@@ -231,9 +189,7 @@ class DashboardApp(App[None]):
     def action_toggle_help(self) -> None:
         """Toggle the in-app shortcuts and help overlay."""
         try:
-            overlay = self.query_one(HelpOverlay)
-            overlay.toggle()
-            if overlay.visible:
+            if self.dashboard_view and self.dashboard_view.toggle_help():
                 self.log_event("[cyan]❔[/] Help overlay opened")
             else:
                 self.log_event("[cyan]❔[/] Help overlay closed")
@@ -274,9 +230,9 @@ class DashboardApp(App[None]):
 
         # Update table
         try:
-            table = self.query_one(ServiceTable)
-            table.populate(self.filtered_metrics, self.selected_key)
-            self.query_one(FilterBar).set_active(self.current_filter)
+            if self.dashboard_view:
+                self.dashboard_view.populate_table(self.filtered_metrics, self.selected_key)
+                self.dashboard_view.set_filter(self.current_filter)
         except Exception as e:
             logger.debug(f"Error applying filters: {e}")
 
@@ -306,25 +262,13 @@ class DashboardApp(App[None]):
 
         try:
             # Update stats bar
-            self.query_one(StatsBar).update_stats(
-                self.metrics, self.auto_refresh_enabled, float(self.refresh_interval)
-            )
-
-            # Update widgets
-            self.query_one(OverviewPanel).update_overview(self.metrics)
-
-            # Update GPU widget
-            gpu_widget = self.query_one(GPUCard)
-            if gpu_widget:
-                logger.debug(
-                    f"Updating GPU widget with detected={self.gpu_overview.detected}, total_used={self.gpu_overview.total_used_mb}"
+            if self.dashboard_view:
+                self.dashboard_view.update_stats(
+                    self.metrics, self.auto_refresh_enabled, float(self.refresh_interval)
                 )
-                gpu_widget.update_overview(self.gpu_overview)
-            else:
-                logger.warning("GPU Card widget not found")
-
-            detail = self.query_one(DetailPanel)
-            detail.update_details(self._find_metric(self.selected_key))
+                self.dashboard_view.update_overview(self.metrics)
+                self.dashboard_view.update_gpu(self.gpu_overview)
+                self.dashboard_view.update_detail(self._find_metric(self.selected_key))
         except Exception as e:
             error_msg = f"{type(e).__name__}"
             logger.error(f"Error updating displays: {error_msg}: {e}")
@@ -343,17 +287,13 @@ class DashboardApp(App[None]):
 
     def log_event(self, message: str) -> None:
         """Log event to event log."""
-        try:
-            self.query_one("#event-log", Log).write(message)
-        except Exception as e:
-            logger.debug(f"Error logging event: {e}")
+        if self.dashboard_view:
+            self.dashboard_view.write_log(message)
 
     def add_alert(self, level: Literal["info", "warning", "error"], message: str) -> None:
         """Add alert to alerts panel."""
-        try:
-            self.query_one(AlertsPanel).add_alert(level, message)
-        except Exception as e:
-            logger.debug(f"Error adding alert: {e}")
+        if self.dashboard_view:
+            self.dashboard_view.add_alert(level, message)
 
     # ========================= EVENT HANDLERS =========================
 
@@ -363,7 +303,8 @@ class DashboardApp(App[None]):
         row_key = getattr(event.row_key, "value", event.row_key)
         key = str(row_key)
         self.selected_key = key
-        self.query_one(DetailPanel).update_details(self._find_metric(key))
+        if self.dashboard_view:
+            self.dashboard_view.update_detail(self._find_metric(key))
         self.log_event(
             f"[cyan]👁️[/] Selected: {self._find_metric(key).display if self._find_metric(key) else key}"
         )

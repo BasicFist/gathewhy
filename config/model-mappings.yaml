@@ -61,9 +61,9 @@ exact_matches:
 
   "kimi-k2:1t-cloud":
     provider: ollama_cloud
-    priority: primary
+    priority: secondary
     fallback: null
-    description: "1 trillion parameter model via Ollama Cloud"
+    description: "1 trillion parameter model via Ollama Cloud (requires valid cloud API key; falls back via default chain)"
 
   "gpt-oss:120b-cloud":
     provider: ollama_cloud

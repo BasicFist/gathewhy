@@ -3,18 +3,33 @@
 ## Prerequisites
 
 - LiteLLM unified backend already running (`systemctl --user status litellm.service`)
-- `OLLAMA_API_KEY` from https://ollama.com/settings/keys
+- Access to LAB's secret store (SOPS + age)
+- Two credentials from https://ollama.com/settings/keys:
+  - **Ollama Key** (`OLLAMA_KEY`) – lets the local CLI talk to your account (pull/push)
+  - **API Key** (`OLLAMA_API_KEY`) – authenticates REST/SDK calls (LiteLLM, CrushVLLM, etc.)
 - Python 3.11+ environment for running `generate-litellm-config.py`
 
 ## 1. Configure Environment
 
+> **Default behaviour:** the unified backend ships with `OLLAMA_ENABLE_CLOUD=false` and no keys, so cloud models automatically fall back to local capacity. Provide the keys below only if you intend to call cloud endpoints.
+
+Add the keys to LAB's encrypted secret file and let direnv export them automatically:
+
 ```bash
-export OLLAMA_API_KEY="your-key-here"
-# Persist for future shells
-if ! grep -q OLLAMA_API_KEY ~/.bashrc; then
-  echo 'export OLLAMA_API_KEY="your-key-here"' >> ~/.bashrc
-fi
+cd ~/LAB
+
+# decrypt, edit, re-encrypt (SOPS handles age encryption)
+sops secrets/global.enc.env
+
+# add/update entries inside the file (example)
+# OLLAMA_KEY="acc_..."
+# OLLAMA_API_KEY="api_..."
+# OLLAMA_ENABLE_CLOUD="true"
+
+# save & exit (SOPS re-encrypts automatically)
 ```
+
+On the next `cd ~/LAB`, direnv will load the secrets (see `.envrc`). A trimmed-down env file is also written to `~/.config/lab-secrets/litellm.env` for systemd consumption.
 
 ## 2. Enable Provider in config/providers.yaml
 
@@ -37,6 +52,9 @@ Ensure `config/model-mappings.yaml` contains exact matches and fallback chains f
 cd ~/LAB/ai/backend/ai-backend-unified
 python3 scripts/generate-litellm-config.py
 cp config/litellm-unified.yaml runtime/config/litellm.yaml
+
+# systemd picks up keys from ~/.config/lab-secrets/litellm.env (written by .envrc)
+systemctl --user daemon-reload
 systemctl --user restart litellm.service
 ```
 
@@ -67,7 +85,7 @@ Expected models:
 
 | Symptom | Fix |
 |---------|-----|
-| 401 Unauthorized | `echo $OLLAMA_API_KEY` → ensure service environment inherits it |
+| 401 Unauthorized | `echo $OLLAMA_API_KEY` & `echo $OLLAMA_KEY` → ensure direnv loaded secrets and `litellm.env` exists |
 | Models missing | Rerun generator & restart LiteLLM |
 | High latency | Local GPU saturated → use smaller models or scale down requests |
 | Crush duplicates | Apply `CRUSH-CONFIG-FIX.json` as documented |

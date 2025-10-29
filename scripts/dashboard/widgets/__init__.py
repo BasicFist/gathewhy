@@ -6,24 +6,24 @@ metrics, and service controls.
 
 from .alerts_panel import AlertsPanel
 from .detail import DetailPanel
-from .filter_bar import FilterBar
 from .gpu_card import GPUCard
 from .help import HelpOverlay
 from .layout import DashboardView
 from .overview import OverviewPanel
 from .search_bar import SearchBar
+from .service_controls import ServiceControls
 from .stats_bar import StatsBar
 from .table import ServiceTable
 
 __all__ = [
     "AlertsPanel",
     "DetailPanel",
-    "FilterBar",
     "GPUCard",
     "HelpOverlay",
     "DashboardView",
     "OverviewPanel",
     "SearchBar",
+    "ServiceControls",
     "StatsBar",
     "ServiceTable",
 ]

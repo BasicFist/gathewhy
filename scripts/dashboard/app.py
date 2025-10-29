@@ -12,7 +12,7 @@ from typing import Literal
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Button, DataTable, Footer, Header, Input
+from textual.widgets import DataTable, Footer, Header, Input
 
 from .config import load_env_config
 from .controllers import NavigationController
@@ -21,6 +21,7 @@ from .monitors import ProviderMonitor
 from .state import load_dashboard_state, save_dashboard_state
 from .widgets.detail import DetailPanel
 from .widgets.layout import DashboardView
+from .widgets.service_controls import ServiceControls
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,6 @@ class DashboardApp(App[None]):
         Binding("k", "prev_row", "Previous", show=False),
         Binding("/", "focus_search", "Search", priority=True),
         Binding("escape", "blur_search", "Blur", show=False),
-        Binding("f", "show_filters", "Filter", priority=True),
         Binding("?", "toggle_help", "Help", priority=True),
     ]
 
@@ -74,7 +74,6 @@ class DashboardApp(App[None]):
         self.selected_key: str | None = None
         self.refresh_timer = None
         self.auto_refresh_enabled = True
-        self.current_filter: str = "all"
         self.search_query: str = ""
         self.dashboard_view: DashboardView | None = None
 
@@ -109,7 +108,7 @@ class DashboardApp(App[None]):
         self.nav_controller = NavigationController(self.dashboard_view.service_table)
 
         # Apply user preferences for layout elements
-        self.dashboard_view.configure(self.log_height, self.current_filter)
+        self.dashboard_view.configure(self.log_height)
         self.dashboard_view.hide_help()
 
         self._refresh_table()
@@ -202,21 +201,9 @@ class DashboardApp(App[None]):
         self.search_query = event.value.lower()
         self._apply_filters()
 
-    @on(Button.Pressed, "#filter-all, #filter-active, #filter-degraded, #filter-inactive")
-    def handle_filter(self, event: Button.Pressed) -> None:
-        """Handle filter button presses."""
-        button_id = event.button.id or ""
-        self.current_filter = button_id.replace("filter-", "")
-        self._apply_filters()
-        self.log_event(f"[cyan]🔍[/] Filter: {self.current_filter.title()}")
-
     def _apply_filters(self) -> None:
         """Apply current search and filter to metrics."""
         filtered = self.metrics
-
-        # Apply status filter
-        if self.current_filter != "all":
-            filtered = [m for m in filtered if m.status == self.current_filter]
 
         # Apply search filter
         if self.search_query:
@@ -232,7 +219,6 @@ class DashboardApp(App[None]):
         try:
             if self.dashboard_view:
                 self.dashboard_view.populate_table(self.filtered_metrics, self.selected_key)
-                self.dashboard_view.set_filter(self.current_filter)
         except Exception as e:
             logger.debug(f"Error applying filters: {e}")
 
@@ -312,16 +298,27 @@ class DashboardApp(App[None]):
     @on(DetailPanel.ServiceAction)
     def handle_service_action(self, event: DetailPanel.ServiceAction) -> None:
         """Handle service control actions."""
-        logger.info(f"Service action: {event.action} on {event.service_key}")
-        success = self.monitor.systemctl(event.service_key, event.action)
+        self._execute_service_action(event.action, event.service_key)
 
-        metric = self._find_metric(event.service_key)
-        display_name = metric.display if metric else event.service_key
+    @on(ServiceControls.Request)
+    def handle_control_request(self, event: ServiceControls.Request) -> None:
+        """Handle top-level service control buttons."""
+        if not self.selected_key:
+            self.log_event("[yellow]⚠[/] Select a service before issuing controls")
+            return
+        self._execute_service_action(event.action, self.selected_key)
+
+    def _execute_service_action(self, action: str, service_key: str) -> None:
+        logger.info(f"Service action: {action} on {service_key}")
+        success = self.monitor.systemctl(service_key, action)
+
+        metric = self._find_metric(service_key)
+        display_name = metric.display if metric else service_key
 
         if success:
-            self.log_event(f"[green]✓[/] {event.action.title()} → {display_name}")
-            self.add_alert("info", f"Action '{event.action}' sent to {display_name}")
+            self.log_event(f"[green]✓[/] {action.title()} → {display_name}")
+            self.add_alert("info", f"Action '{action}' sent to {display_name}")
             self.set_timer(1.0, self._refresh_table)
         else:
-            self.log_event(f"[red]✗[/] Failed: {event.action} → {display_name}")
-            self.add_alert("error", f"Failed to {event.action} {display_name}")
+            self.log_event(f"[red]✗[/] Failed: {action} → {display_name}")
+            self.add_alert("error", f"Failed to {action} {display_name}")

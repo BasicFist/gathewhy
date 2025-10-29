@@ -8,11 +8,11 @@ from textual.widgets import Input, Log
 from ..models import GPUOverview, ServiceMetrics
 from .alerts_panel import AlertsPanel
 from .detail import DetailPanel
-from .filter_bar import FilterBar
 from .gpu_card import GPUCard
 from .help import HelpOverlay
 from .overview import OverviewPanel
 from .search_bar import SearchBar
+from .service_controls import ServiceControls
 from .stats_bar import StatsBar
 from .table import ServiceTable
 
@@ -23,7 +23,7 @@ class DashboardView(Vertical):
     def compose(self):
         yield StatsBar(id="stats-bar")
         yield SearchBar()
-        yield FilterBar()
+        yield ServiceControls(id="service-controls-bar")
         with Container(id="body"):
             with Vertical(id="left-column"):
                 yield OverviewPanel(id="overview")
@@ -39,7 +39,7 @@ class DashboardView(Vertical):
     def on_mount(self) -> None:
         self.stats_bar = self.query_one(StatsBar)
         self.search_input = self.query_one("#search-input", Input)
-        self.filter_bar = self.query_one(FilterBar)
+        self.service_controls = self.query_one(ServiceControls)
         self.overview_panel = self.query_one(OverviewPanel)
         self.gpu_card = self.query_one(GPUCard)
         self.alerts_panel = self.query_one(AlertsPanel)
@@ -49,9 +49,8 @@ class DashboardView(Vertical):
         self.help_overlay = self.query_one(HelpOverlay)
 
     # ----- configuration -------------------------------------------------
-    def configure(self, log_height: int, filter_name: str) -> None:
+    def configure(self, log_height: int) -> None:
         self.event_log.styles.height = log_height
-        self.filter_bar.set_active(filter_name)
 
     def hide_help(self) -> None:
         self.help_overlay.hide()
@@ -59,9 +58,6 @@ class DashboardView(Vertical):
     def toggle_help(self) -> bool:
         self.help_overlay.toggle()
         return self.help_overlay.visible
-
-    def set_filter(self, filter_name: str) -> None:
-        self.filter_bar.set_active(filter_name)
 
     def focus_search(self) -> None:
         self.search_input.focus()
@@ -80,6 +76,7 @@ class DashboardView(Vertical):
 
     def update_detail(self, metric: ServiceMetrics | None) -> None:
         self.detail_panel.update_details(metric)
+        self.service_controls.update_state(metric)
 
     def populate_table(self, metrics: list[ServiceMetrics], selected_key: str | None) -> None:
         self.service_table.populate(metrics, selected_key)

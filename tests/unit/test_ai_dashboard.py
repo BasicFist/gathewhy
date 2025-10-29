@@ -228,6 +228,10 @@ class TestDashboardKeyFeatures:
         assert ServiceTable.__name__ == "ServiceTable"
         assert GPUCard.__name__ == "GPUCard"
         assert DetailPanel.__name__ == "DetailPanel"
+        service_controls = importlib.import_module(
+            "dashboard.widgets.service_controls"
+        ).ServiceControls
+        assert service_controls.__name__ == "ServiceControls"
 
 
 class TestDashboardBindings:

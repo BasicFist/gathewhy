@@ -20,8 +20,8 @@ class ServiceControls(Static):
             self.action = action
             super().__init__()
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._buttons: dict[str, Button] = {}
         self._current: ServiceMetrics | None = None
 

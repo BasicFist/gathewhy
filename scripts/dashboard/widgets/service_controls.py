@@ -62,12 +62,16 @@ class ServiceControls(Static):
         if not self._status:
             return
         if not self._current:
-            self._status.update("[dim]Select a service to enable controls[/]")
+            message = "[dim]Select a service to enable controls[/]"
         elif not self._current.controls_enabled:
-            self._status.update(
-                f"[yellow]{self._current.display}[/]\n[dim]Controls unavailable for this service[/]"
-            )
+            message = f"[yellow]{self._current.display}[/] · [dim]Controls unavailable for this service[/]"
         else:
-            self._status.update(
-                f"[green]{self._current.display}[/]\n[dim]{self._current.status.title()} - ready[/]"
+            status_icons = {"active": "●", "degraded": "▲", "inactive": "■"}
+            status_colors = {"active": "green", "degraded": "yellow", "inactive": "red"}
+            icon = status_icons.get(self._current.status, "●")
+            color = status_colors.get(self._current.status, "green")
+            message = (
+                f"[green]{self._current.display}[/] · "
+                f"[{color}]{icon} {self._current.status.title()}[/] · [dim]ready[/]"
             )
+        self._status.update(message)

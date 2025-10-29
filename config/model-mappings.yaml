@@ -46,6 +46,43 @@ exact_matches:
     fallback: llama_cpp_native
     description: "GGUF model via llama.cpp Python bindings"
 
+  # Ollama Cloud models (large models not available locally)
+  "deepseek-v3.1:671b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "671B advanced reasoning model via Ollama Cloud"
+
+  "qwen3-coder:480b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "480B code generation model via Ollama Cloud"
+
+  "kimi-k2:1t-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "1 trillion parameter model via Ollama Cloud"
+
+  "gpt-oss:120b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "120B open-source GPT via Ollama Cloud"
+
+  "gpt-oss:20b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "20B general chat model via Ollama Cloud"
+
+  "glm-4.6:cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "4.6B general chat model via Ollama Cloud"
+
 # ============================================================================
 # PATTERN-BASED ROUTING
 # ============================================================================
@@ -92,7 +129,7 @@ capabilities:
     description: "Models specialized for code"
     preferred_models:
       - qwen2.5-coder:7b
-      - deepseek-coder-v2  # If pulled
+      - qwen3-coder:480b-cloud  # Ollama Cloud
     provider: ollama
     routing_strategy: load_balance
 
@@ -108,6 +145,7 @@ capabilities:
     description: "Models optimized for multi-step reasoning and problem solving"
     preferred_models:
       - llama3.1:latest
+      - deepseek-v3.1:671b-cloud  # Ollama Cloud for advanced reasoning
       - qwen-coder-vllm
     provider: ollama
     routing_strategy: direct
@@ -205,6 +243,32 @@ fallback_chains:
       - qwen-coder-vllm
       - dolphin-uncensored-vllm
 
+  "qwen3-coder:480b-cloud":
+    # Ollama Cloud code model fallback
+    chain:
+      - qwen2.5-coder:7b
+      - qwen-coder-vllm
+
+  "deepseek-v3.1:671b-cloud":
+    # Cloud model fallback to local alternatives
+    chain:
+      - llama3.1:latest
+      - qwen-coder-vllm
+
+  "gpt-oss:120b-cloud":
+    chain:
+      - qwen2.5-coder:7b
+      - qwen-coder-vllm
+
+  "gpt-oss:20b-cloud":
+    chain:
+      - qwen2.5-coder:7b
+      - qwen-coder-vllm
+
+  "glm-4.6:cloud":
+    chain:
+      - llama3.1:latest
+
   "mythomax-l2-13b-q5_k_m":
     chain:
       - llama3.1:latest
@@ -222,6 +286,8 @@ fallback_chains:
       - qwen2.5-coder:7b
       - qwen-coder-vllm
       - dolphin-uncensored-vllm
+      - gpt-oss:120b-cloud  # Ollama Cloud as final fallback
+      - gpt-oss:20b-cloud
 
 # ============================================================================
 # ROUTING RULES
@@ -298,9 +364,9 @@ special_cases:
 # ============================================================================
 
 metadata:
-  version: "1.4"
-  last_updated: "2025-10-23"
-  total_routing_rules: 18+
+  version: "1.6"
+  last_updated: "2025-10-29"
+  total_routing_rules: 24+
   supported_routing_strategies:
     - exact_match
     - pattern_match
@@ -308,11 +374,9 @@ metadata:
     - load_balanced
     - fallback_chain
   changes:
-    - "Replaced DeepSeek-R1 with Dolphin 2.8 Mistral AWQ (uncensored, fits 16GB VRAM)"
-    - "Added solidrust/dolphin-2.8-mistral-7b-v02-AWQ model"
-    - "Updated uncensored and conversational capability routing"
-    - "Added Dolphin AWQ pattern matching"
-    - "Optimized for 16GB VRAM constraint with AWQ quantization"
+    - "Added Ollama Cloud provider with DeepSeek, Qwen3, Kimi K2, GPT-OSS, and GLM models"
+    - "Updated capability routing and fallback chains to leverage cloud capacity"
+    - "Documented local vs cloud routing strategy for CrushVLLM integration"
 
 notes: |
   This configuration is consumed by LiteLLM's router.

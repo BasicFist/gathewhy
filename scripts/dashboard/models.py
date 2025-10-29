@@ -47,6 +47,7 @@ class ServiceMetrics:
     vram_percent: float
     response_ms: float
     pid: int | None
+    controls_enabled: bool = True
     notes: list[str] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
 
@@ -85,6 +86,7 @@ class ServiceMetrics:
             vram_percent=data.get("vram_percent", 0.0),
             response_ms=data.get("response_ms", 0.0),
             pid=data.get("pid"),
+            controls_enabled=data.get("controls_enabled", True),
             notes=data.get("notes", []),
             timestamp=data.get("timestamp", time.time()),
         )

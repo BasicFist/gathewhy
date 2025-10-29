@@ -91,6 +91,11 @@ class DetailPanel(Vertical):
             resources_label = self.query_one("#detail-resources", Label)
             metadata_label = self.query_one("#detail-metadata", Label)
             notes_log = self.query_one(Log)
+            start_btn = self.query_one("#action-start", Button)
+            stop_btn = self.query_one("#action-stop", Button)
+            restart_btn = self.query_one("#action-restart", Button)
+            enable_btn = self.query_one("#action-enable", Button)
+            disable_btn = self.query_one("#action-disable", Button)
         except Exception as e:
             logger.warning(f"Failed to query detail panel widgets: {type(e).__name__}: {e}")
             return
@@ -102,6 +107,9 @@ class DetailPanel(Vertical):
                 resources_label.update("")
                 metadata_label.update("")
                 notes_log.clear()
+                for button in (start_btn, stop_btn, restart_btn, enable_btn, disable_btn):
+                    button.disabled = False
+                    button.tooltip = None
             except Exception as e:
                 logger.debug(f"Error clearing detail panel: {e}")
             return
@@ -168,6 +176,14 @@ class DetailPanel(Vertical):
                 f"PID: [cyan]{metrics.pid or 'n/a'}[/]"
             )
 
+            control_hint = None
+            if not metrics.controls_enabled:
+                control_hint = "Service controls unavailable for this provider"
+
+            for button in (start_btn, stop_btn, restart_btn, enable_btn, disable_btn):
+                button.disabled = not metrics.controls_enabled
+                button.tooltip = control_hint if control_hint else None
+
             notes_log.clear()
             if metrics.notes:
                 notes_log.write("[b yellow]⚠️  Warnings & Errors[/]")
@@ -186,6 +202,9 @@ class DetailPanel(Vertical):
             event: Button press event
         """
         if not self._current:
+            return
+        if not self._current.controls_enabled:
+            event.stop()
             return
         action = event.button.id or ""
         if not action.startswith("action-"):

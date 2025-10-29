@@ -11,11 +11,12 @@ import os
 import subprocess
 import time
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import psutil
 import requests  # type: ignore[import-untyped]
 
+from ..config import load_providers_config
 from ..models import GPUOverview, ServiceMetrics
 from .gpu import GPUMonitor
 
@@ -52,15 +53,24 @@ def _run_systemctl(args: list[str]) -> bool:
         "HOME": os.environ.get("HOME", ""),
     }
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["systemctl", "--user", *args],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            check=False,
+            capture_output=True,
+            text=True,
             timeout=8,
             env=env,
         )
-        return True
+        if result.returncode == 0:
+            return True
+        stderr = (result.stderr or "").strip()
+        logger.warning(
+            "systemctl --user %s failed with exit code %s%s",
+            " ".join(args),
+            result.returncode,
+            f": {stderr}" if stderr else "",
+        )
+        return False
     except subprocess.SubprocessError as exc:  # pragma: no cover - defensive
         logger.debug(f"systemctl {' '.join(args)} failed: {type(exc).__name__}")
         return False
@@ -80,9 +90,9 @@ class ProviderMonitor:
 
     # SECURITY: Allowed endpoint hosts (localhost only, prevent SSRF)
     ALLOWED_HOSTS: set[str] = {"127.0.0.1", "localhost"}
-    ALLOWED_PORTS: set[int] = {11434, 8000, 8001, 8080, 4000}
+    ALLOWED_PORTS: set[int] = {11434, 8000, 8001, 8002, 8080, 4000}
 
-    PROVIDERS: dict[str, dict[str, object]] = {
+    DEFAULT_PROVIDERS: dict[str, dict[str, object]] = {
         "ollama": {
             "endpoint": "http://127.0.0.1:11434/api/tags",
             "display": "Ollama",
@@ -128,9 +138,75 @@ class ProviderMonitor:
         """
         self.gpu_monitor = GPUMonitor()
         self.http_timeout = http_timeout
+        self.providers = self._build_provider_registry()
         self._cooldowns: dict[str, float] = {}
+        self._last_status: dict[str, str] = {}
+        self._last_samples: dict[str, dict[str, float | int]] = {}
         # SECURITY: Validate all endpoints at init time
         self._validate_endpoints()
+
+    def _build_provider_registry(self) -> dict[str, dict[str, object]]:
+        """Build provider registry by merging defaults with config file.
+
+        Only localhost providers marked active (or preview) are kept. Remote
+        endpoints are intentionally excluded to avoid unintended external calls.
+        """
+        registry = {key: value.copy() for key, value in self.DEFAULT_PROVIDERS.items()}
+
+        config = load_providers_config()
+        if not config:
+            return registry
+
+        providers_cfg = config.get("providers", {})
+        for key, meta in providers_cfg.items():
+            status = str(meta.get("status", "active")).lower()
+
+            if status not in {"active", "preview"}:
+                registry.pop(key, None)
+                continue
+
+            base_url = str(meta.get("base_url", "")).strip()
+            health_endpoint = str(meta.get("health_endpoint", "")).strip()
+
+            endpoint = ""
+            if base_url and health_endpoint:
+                endpoint = urljoin(
+                    base_url if base_url.endswith("/") else f"{base_url}/",
+                    health_endpoint.lstrip("/"),
+                )
+            elif base_url:
+                endpoint = base_url
+
+            if not endpoint:
+                logger.debug(f"Skipping provider {key}: missing endpoint metadata")
+                registry.pop(key, None)
+                continue
+
+            parsed = urlparse(endpoint)
+            if parsed.hostname not in self.ALLOWED_HOSTS:
+                logger.debug("Skipping provider %s: host %s not in allowlist", key, parsed.hostname)
+                registry.pop(key, None)
+                continue
+
+            record = registry.get(
+                key,
+                {
+                    "display": key.replace("_", " ").title(),
+                    "required": False,
+                },
+            )
+
+            record["endpoint"] = endpoint
+            record["type"] = meta.get("type", record.get("type", "unknown"))
+
+            if "service" not in record:
+                service_override = ALLOWED_SERVICES.get(key)
+                if service_override:
+                    record["service"] = service_override
+
+            registry[key] = record
+
+        return registry
 
     def _validate_endpoints(self) -> None:
         """SECURITY: Validate all provider endpoints against allowlists.
@@ -140,23 +216,35 @@ class ProviderMonitor:
         Raises:
             ValueError: If any endpoint fails validation
         """
-        for key, cfg in self.PROVIDERS.items():
+        invalid_keys: list[str] = []
+        for key, cfg in self.providers.items():
             endpoint = str(cfg.get("endpoint", ""))
             parsed = urlparse(endpoint)
 
             # Validate scheme
             if parsed.scheme not in ("http", "https"):
-                raise ValueError(f"Invalid endpoint scheme for {key}: {parsed.scheme}")
+                logger.warning("Removing provider %s due to invalid scheme: %s", key, parsed.scheme)
+                invalid_keys.append(key)
+                continue
 
             # SECURITY: Validate host (localhost only)
             if parsed.hostname not in self.ALLOWED_HOSTS:
-                raise ValueError(f"Invalid endpoint host for {key}: {parsed.hostname}")
+                logger.warning(
+                    "Removing provider %s due to disallowed host: %s", key, parsed.hostname
+                )
+                invalid_keys.append(key)
+                continue
 
             # SECURITY: Validate port
             if parsed.port and parsed.port not in self.ALLOWED_PORTS:
-                raise ValueError(f"Invalid endpoint port for {key}: {parsed.port}")
+                logger.warning("Removing provider %s due to disallowed port: %s", key, parsed.port)
+                invalid_keys.append(key)
+                continue
 
             logger.debug(f"✓ Validated endpoint for {key}: {endpoint}")
+
+        for key in invalid_keys:
+            self.providers.pop(key, None)
 
     # --------------------------- System Helpers ---------------------------------
 
@@ -169,8 +257,11 @@ class ProviderMonitor:
         Returns:
             Service name or None if provider not found
         """
-        record = self.PROVIDERS.get(key)
-        return None if record is None else str(record["service"])
+        record = self.providers.get(key)
+        if not record:
+            return None
+        service = record.get("service")
+        return str(service) if service else None
 
     def _get_service_pid(self, key: str) -> int | None:
         """Get process ID for a provider service.
@@ -244,7 +335,7 @@ class ProviderMonitor:
         Returns:
             Number of models available
         """
-        provider_type = str(self.PROVIDERS[key]["type"])
+        provider_type = str(self.providers[key]["type"])
         try:
             if provider_type == "ollama":
                 return len(response_json.get("models", []))
@@ -274,29 +365,35 @@ class ProviderMonitor:
             system_memory_total = 1.0
 
         metrics: list[ServiceMetrics] = []
-        elapsed_ms = 0.0
+        now_monotonic = time.monotonic()
 
-        for key, cfg in self.PROVIDERS.items():
+        for key, cfg in self.providers.items():
             notes: list[str] = []
             endpoint = str(cfg["endpoint"])
             required = bool(cfg["required"])
             display = str(cfg["display"])
-            now = time.monotonic()
             cooldown_until = self._cooldowns.get(key, 0.0)
             pid_hint = self._get_service_pid(key)
-
-            start = time.perf_counter()
-            status = "inactive"
+            elapsed_ms = 0.0
             models = 0
+            status = self._last_status.get(key) or (
+                "active" if pid_hint else ("degraded" if required else "inactive")
+            )
+            controls_enabled = bool(cfg.get("service"))
 
-            skip_probe = pid_hint is None and cooldown_until > now
+            if not controls_enabled:
+                notes.append("Service controls unavailable (no systemd unit)")
+
+            skip_probe = now_monotonic < cooldown_until
 
             if skip_probe:
-                elapsed_ms = 0.0
-                status = "degraded" if required else "inactive"
-                remaining = int(cooldown_until - now)
-                notes.append(f"Probe skipped ({max(remaining, 0)}s cooldown)")
+                remaining = max(int(cooldown_until - now_monotonic), 0)
+                notes.append(f"Probe skipped ({remaining}s cooldown)")
+                last_sample = self._last_samples.get(key, {})
+                models = int(last_sample.get("models", 0))
+                elapsed_ms = float(last_sample.get("response_ms", 0.0))
             else:
+                start = time.perf_counter()
                 try:
                     response = requests.get(endpoint, timeout=self.http_timeout)
                     elapsed_ms = (time.perf_counter() - start) * 1000
@@ -307,6 +404,10 @@ class ProviderMonitor:
                             status = "active"
                             models = self._parse_models(key, payload)
                             self._cooldowns.pop(key, None)
+                            self._last_samples[key] = {
+                                "models": models,
+                                "response_ms": elapsed_ms,
+                            }
                             logger.debug(
                                 f"{key}: ✓ Active with {models} models ({elapsed_ms:.0f}ms)"
                             )
@@ -314,7 +415,7 @@ class ProviderMonitor:
                             logger.error(f"{key}: Invalid JSON response: {e}")
                             notes.append("Invalid JSON payload")
                             status = "degraded" if required else "inactive"
-                            self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                            self._cooldowns[key] = now_monotonic + SOFT_ERROR_BACKOFF_SECONDS
                     else:
                         reason = f"HTTP {response.status_code}"
                         if response.reason:
@@ -322,31 +423,31 @@ class ProviderMonitor:
                         logger.warning(f"{key}: Provider responded with {reason}")
                         notes.append(reason)
                         status = "degraded" if required else "inactive"
-                        self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                        self._cooldowns[key] = now_monotonic + SOFT_ERROR_BACKOFF_SECONDS
                 except requests.exceptions.Timeout:
                     elapsed_ms = (time.perf_counter() - start) * 1000
                     logger.warning(f"{key}: Request timeout after {elapsed_ms:.0f}ms")
                     notes.append(f"Timeout ({elapsed_ms:.0f}ms)")
                     status = "degraded" if required else "inactive"
-                    self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                    self._cooldowns[key] = now_monotonic + SOFT_ERROR_BACKOFF_SECONDS
                 except requests.exceptions.ConnectionError as e:
                     elapsed_ms = (time.perf_counter() - start) * 1000
                     logger.warning(f"{key}: Connection error: {str(e)[:50]}")
                     notes.append("Connection refused")
                     status = "degraded" if required else "inactive"
-                    self._cooldowns[key] = now + ERROR_BACKOFF_SECONDS
+                    self._cooldowns[key] = now_monotonic + ERROR_BACKOFF_SECONDS
                 except requests.exceptions.RequestException as e:
                     elapsed_ms = (time.perf_counter() - start) * 1000
                     logger.warning(f"{key}: Request failed ({type(e).__name__}): {str(e)[:50]}")
                     notes.append(f"{type(e).__name__}")
                     status = "degraded" if required else "inactive"
-                    self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                    self._cooldowns[key] = now_monotonic + SOFT_ERROR_BACKOFF_SECONDS
                 except Exception as e:  # pragma: no cover - unexpected errors
                     elapsed_ms = (time.perf_counter() - start) * 1000
                     logger.error(f"{key}: Unexpected error: {type(e).__name__}: {e}")
                     notes.append(f"Unexpected error: {type(e).__name__}")
                     status = "degraded" if required else "inactive"
-                    self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                    self._cooldowns[key] = now_monotonic + SOFT_ERROR_BACKOFF_SECONDS
 
             pid, cpu_percent, memory_mb = self._collect_process_metrics(key, pid_override=pid_hint)
             memory_percent = (memory_mb / system_memory_total * 100) if system_memory_total else 0.0
@@ -368,9 +469,11 @@ class ProviderMonitor:
                     vram_percent=vram_percent,
                     response_ms=elapsed_ms,
                     pid=pid,
+                    controls_enabled=controls_enabled,
                     notes=notes,
                 )
             )
+            self._last_status[key] = status
 
         if gpu_info:
             total_used = sum(entry["memory_used_mb"] for entry in gpu_info)

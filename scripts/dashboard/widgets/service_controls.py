@@ -1,4 +1,4 @@
-'"""Service control buttons for start/stop/restart actions."""'
+"""Service control buttons for start/stop/restart actions."""
 
 from __future__ import annotations
 
@@ -24,12 +24,14 @@ class ServiceControls(Static):
         super().__init__(**kwargs)
         self._buttons: dict[str, Button] = {}
         self._current: ServiceMetrics | None = None
+        self._status = Static("Select a service to enable controls", id="control-status")
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="service-controls"):
             yield Button("▶ Start", id="control-start", variant="success")
             yield Button("⏹ Stop", id="control-stop", variant="error")
             yield Button("⟳ Restart", id="control-restart", variant="warning")
+            yield self._status
 
     def on_mount(self) -> None:
         self._buttons = {
@@ -57,3 +59,15 @@ class ServiceControls(Static):
         enabled = bool(self._current and self._current.controls_enabled)
         for button in self._buttons.values():
             button.disabled = not enabled
+        if not self._status:
+            return
+        if not self._current:
+            self._status.update("[dim]Select a service to enable controls[/]")
+        elif not self._current.controls_enabled:
+            self._status.update(
+                f"[yellow]{self._current.display}[/]\n[dim]Controls unavailable for this service[/]"
+            )
+        else:
+            self._status.update(
+                f"[green]{self._current.display}[/]\n[dim]{self._current.status.title()} - ready[/]"
+            )

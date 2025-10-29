@@ -30,12 +30,13 @@ class DashboardApp(App[None]):
     """Interactive command center for AI backend - REDESIGNED.
 
     Completely redesigned with modern UI, better colors, improved readability,
-    and enhanced functionality including vim-style navigation, search, filtering,
-    and real-time alerts.
+    and enhanced functionality including vim-style navigation, search,
+    global service controls, and real-time alerts.
 
     New Features:
         - Vim-style navigation (j/k to move, / to search)
-        - Search and filter providers
+        - Instant search across providers
+        - Global Start/Stop/Restart controls for the selected service
         - Real-time alerts panel
         - Better color scheme and readability
         - Keyboard shortcuts for all actions
@@ -180,10 +181,6 @@ class DashboardApp(App[None]):
             self.screen.set_focus(None)
         except Exception as e:
             logger.debug(f"Error blurring search: {e}")
-
-    def action_show_filters(self) -> None:
-        """Show filter options (binding: 'f')."""
-        self.log_event("[cyan]ℹ️[/] Use filter buttons to show: All | Active | Degraded | Inactive")
 
     def action_toggle_help(self) -> None:
         """Toggle the in-app shortcuts and help overlay."""

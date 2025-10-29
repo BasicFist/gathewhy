@@ -23,7 +23,9 @@ class DashboardView(Vertical):
     def compose(self):
         yield StatsBar(id="stats-bar")
         yield SearchBar()
-        yield ServiceControls(id="service-controls-bar")
+        with Container(id="controls-container"):
+            yield ServiceControls()
+
         with Container(id="body"):
             with Vertical(id="left-column"):
                 yield OverviewPanel(id="overview")

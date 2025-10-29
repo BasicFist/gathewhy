@@ -25,7 +25,7 @@ class HelpOverlay(Static):
                         "[green]r[/] → Refresh metrics",
                         "[green]a[/] → Toggle auto-refresh",
                         "[green]/[/] → Focus search",
-                        "[green]f[/] → Filter providers",
+                        "[green]Service controls[/] → Select a service, then use Start/Stop/Restart below search",
                         "[green]j[/]/[green]k[/] → Navigate services",
                         "[green]Ctrl+L[/] → Clear event log",
                         "[green]Ctrl+Q[/] → Quit dashboard",

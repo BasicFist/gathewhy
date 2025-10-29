@@ -25,6 +25,7 @@ from .widgets import (
     DetailPanel,
     FilterBar,
     GPUCard,
+    HelpOverlay,
     OverviewPanel,
     SearchBar,
     ServiceTable,
@@ -55,7 +56,7 @@ class DashboardApp(App[None]):
 
     BINDINGS = [
         Binding("r", "refresh", "Refresh", priority=True),
-        Binding("q", "quit", "Quit", priority=True),
+        Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("a", "toggle_auto", "Auto-refresh", priority=True),
         Binding("ctrl+l", "clear_log", "Clear", priority=True),
         Binding("j", "next_row", "Next", show=False),
@@ -63,6 +64,7 @@ class DashboardApp(App[None]):
         Binding("/", "focus_search", "Search", priority=True),
         Binding("escape", "blur_search", "Blur", show=False),
         Binding("f", "show_filters", "Filter", priority=True),
+        Binding("?", "toggle_help", "Help", priority=True),
     ]
 
     def __init__(self) -> None:
@@ -113,6 +115,7 @@ class DashboardApp(App[None]):
                 yield DetailPanel()
                 yield Log(id="event-log", highlight=True)
         yield Footer()
+        yield HelpOverlay(id="help-overlay")
 
     # ========================= LIFECYCLE =========================
 
@@ -132,6 +135,23 @@ class DashboardApp(App[None]):
         # Initialize navigation controller
         table = self.query_one(ServiceTable)
         self.nav_controller = NavigationController(table)
+
+        # Apply user preferences for layout elements
+        try:
+            event_log = self.query_one("#event-log", Log)
+            event_log.styles.height = self.log_height
+        except Exception as e:
+            logger.debug(f"Unable to apply log height: {e}")
+
+        try:
+            self.query_one(FilterBar).set_active(self.current_filter)
+        except Exception as e:
+            logger.debug(f"Unable to initialize filter bar state: {e}")
+
+        try:
+            self.query_one(HelpOverlay).hide()
+        except Exception as e:
+            logger.debug(f"Unable to hide help overlay on mount: {e}")
 
         self._refresh_table()
         self.refresh_timer = self.set_interval(
@@ -157,6 +177,13 @@ class DashboardApp(App[None]):
             self.refresh_timer.pause()
             self.log_event("[yellow]⏸[/] Auto-refresh paused")
             self.add_alert("warning", "Auto-refresh paused")
+
+        try:
+            self.query_one(StatsBar).update_stats(
+                self.metrics, self.auto_refresh_enabled, float(self.refresh_interval)
+            )
+        except Exception as e:
+            logger.debug(f"Unable to update stats bar auto-refresh state: {e}")
 
     def action_refresh(self) -> None:
         """Manual refresh (binding: 'r')."""
@@ -201,6 +228,18 @@ class DashboardApp(App[None]):
         """Show filter options (binding: 'f')."""
         self.log_event("[cyan]ℹ️[/] Use filter buttons to show: All | Active | Degraded | Inactive")
 
+    def action_toggle_help(self) -> None:
+        """Toggle the in-app shortcuts and help overlay."""
+        try:
+            overlay = self.query_one(HelpOverlay)
+            overlay.toggle()
+            if overlay.visible:
+                self.log_event("[cyan]❔[/] Help overlay opened")
+            else:
+                self.log_event("[cyan]❔[/] Help overlay closed")
+        except Exception as e:
+            logger.debug(f"Error toggling help overlay: {e}")
+
     @on(Input.Changed, "#search-input")
     def handle_search(self, event: Input.Changed) -> None:
         """Handle search input changes."""
@@ -237,6 +276,7 @@ class DashboardApp(App[None]):
         try:
             table = self.query_one(ServiceTable)
             table.populate(self.filtered_metrics, self.selected_key)
+            self.query_one(FilterBar).set_active(self.current_filter)
         except Exception as e:
             logger.debug(f"Error applying filters: {e}")
 
@@ -266,7 +306,9 @@ class DashboardApp(App[None]):
 
         try:
             # Update stats bar
-            self.query_one(StatsBar).update_stats(self.metrics)
+            self.query_one(StatsBar).update_stats(
+                self.metrics, self.auto_refresh_enabled, float(self.refresh_interval)
+            )
 
             # Update widgets
             self.query_one(OverviewPanel).update_overview(self.metrics)

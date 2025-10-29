@@ -65,6 +65,11 @@ Header {
     margin-right: 1;
 }
 
+#filter-container Button.active-filter {
+    border: solid #00d9ff;
+    text-style: bold;
+}
+
 /* ============= MAIN LAYOUT ============= */
 
 #body {
@@ -200,3 +205,35 @@ $primary: #0f3460;
 $success: #00ff00;
 $warning: #ffb703;
 $error: #ff006e;
+
+/* ============= HELP OVERLAY ============= */
+
+#help-overlay {
+    layer: overlay;
+    display: none;
+    align: center middle;
+    background: #000000 70%;
+}
+
+#help-panel {
+    width: 70;
+    max-width: 90%;
+    background: #16213e;
+    border: solid #00d9ff;
+    padding: 2 4;
+    color: $text;
+    text-align: left;
+}
+
+#help-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#help-body {
+    margin-bottom: 2;
+}
+
+#help-footer {
+    color: #ffb703;
+}

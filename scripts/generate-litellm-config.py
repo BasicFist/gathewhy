@@ -36,6 +36,7 @@ Examples:
 import argparse
 import shutil
 import sys
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -340,7 +341,10 @@ class ConfigGenerator:
             # Use ollama_chat/ for cloud provider (better chat responses)
             # Use ollama/ for local provider (compatibility)
             prefix = "ollama_chat" if provider_name == "ollama_cloud" else "ollama"
-            params: dict = {"model": f"{prefix}/{model_name}", "api_base": base_url}
+            params: dict[str, Any] = {"model": f"{prefix}/{model_name}", "api_base": base_url}
+            if provider_name == "ollama_cloud":
+                # Cloud endpoints require explicit authentication; resolve from env at runtime
+                params["api_key"] = "os.environ/OLLAMA_API_KEY"  # pragma: allowlist secret
             options = raw_model.get("options")
             if options:
                 params["extra_body"] = {"options": options}
@@ -462,7 +466,7 @@ class ConfigGenerator:
         """Build router_settings from mappings"""
         print("\n🔀 Building router settings...")
 
-        router_settings = {
+        router_settings: dict[str, Any] = {
             "routing_strategy": "simple-shuffle",  # Changed from usage-based-routing-v2 (not recommended for production)
             "model_group_alias": {},
             "allowed_fails": 3,
@@ -477,10 +481,17 @@ class ConfigGenerator:
 
         # Build model_group_alias from capabilities
         capabilities = self.mappings.get("capabilities", {})
+        capability_fallbacks: list[dict[str, list[str]]] = []
         for capability, config in capabilities.items():
             models = config.get("preferred_models") or config.get("models") or []
-            if models:
-                router_settings["model_group_alias"][capability] = models
+            if not models:
+                continue
+
+            primary_model = models[0]
+            router_settings["model_group_alias"][capability] = [primary_model]
+
+            if len(models) > 1:
+                capability_fallbacks.append({capability: models[1:]})
 
         # Build fallback chains
         fallback_chains = self.mappings.get("fallback_chains", {})
@@ -510,6 +521,34 @@ class ConfigGenerator:
             if candidates:
                 fallback_entry = {primary_model: candidates}
                 router_settings["fallbacks"].append(fallback_entry)
+
+        # Add capability fallbacks (avoid duplicates)
+        existing_fallback_keys = {
+            next(iter(entry.keys())) for entry in router_settings["fallbacks"]
+        }
+        for entry in capability_fallbacks:
+            alias = next(iter(entry.keys()))
+            if alias not in existing_fallback_keys and entry[alias]:
+                router_settings["fallbacks"].append(entry)
+
+        # Surface richer routing metadata without leaking into LiteLLM core settings
+        lab_extensions: dict[str, Any] = {}
+        if capabilities:
+            lab_extensions["capabilities"] = deepcopy(capabilities)
+        patterns = self.mappings.get("patterns")
+        if patterns:
+            lab_extensions["pattern_routes"] = deepcopy(patterns)
+        load_balancing = self.mappings.get("load_balancing")
+        if load_balancing:
+            lab_extensions["load_balancing"] = deepcopy(load_balancing)
+        routing_rules = self.mappings.get("routing_rules")
+        if routing_rules:
+            lab_extensions["routing_rules"] = deepcopy(routing_rules)
+        special_cases = self.mappings.get("special_cases")
+        if special_cases:
+            lab_extensions["special_cases"] = deepcopy(special_cases)
+        if lab_extensions:
+            router_settings["lab_extensions"] = lab_extensions
 
         print(f"  ✓ Created {len(router_settings['model_group_alias'])} capability groups")
         print(f"  ✓ Created {len(router_settings['fallbacks'])} fallback chains")
@@ -586,7 +625,7 @@ class ConfigGenerator:
                 "cache_params": {"type": "redis", "host": "127.0.0.1", "port": 6379, "ttl": 3600},
                 "set_verbose": True,  # Changed from False - enable verbose logging for debugging
                 "json_logs": True,
-                # Note: Prometheus callbacks are Enterprise-only feature, not available in open source
+                "callbacks": ["prometheus"],  # Enable Prometheus metrics on /metrics
             },
             "router_settings": self.build_router_settings(),
             "server_settings": {
@@ -605,9 +644,9 @@ class ConfigGenerator:
             },
             "rate_limit_settings": self.build_rate_limit_settings(),
             "general_settings": {
-                "background_health_checks": True,  # Added: Enable background health checks
-                "health_check_interval": 300,  # Added: Check every 5 minutes
-                "health_check_details": False,  # Added: Hide sensitive info in responses
+                "background_health_checks": False,
+                "health_check_interval": 300,
+                "health_check_details": False,
                 "# Master Key Authentication": None,
                 "# Uncomment to enable": None,
                 "# master_key": "${LITELLM_MASTER_KEY}",
@@ -779,7 +818,7 @@ class ConfigGenerator:
             print("\nNext steps:")
             print("  1. Review generated configuration")
             print("  2. Test: curl http://localhost:4000/v1/models")
-            print("  3. Apply: cp config/litellm-unified.yaml ../openwebui/config/litellm.yaml")
+            print("  3. Ensure service is provisioned: ./runtime/scripts/run_litellm.sh")
             print("  4. Restart: systemctl --user restart litellm.service")
             return True
         print("\n" + "=" * 80)

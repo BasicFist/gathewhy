@@ -20,6 +20,7 @@ class ServiceMetrics:
         required: Whether provider is required for system operation
         status: Current status ("active", "degraded", "inactive")
         port: Port number the provider listens on
+        endpoint: Full HTTP endpoint used for health checks
         models: Number of models available
         cpu_percent: CPU usage percentage
         memory_mb: Memory usage in megabytes
@@ -37,6 +38,7 @@ class ServiceMetrics:
     required: bool
     status: str
     port: int | None
+    endpoint: str
     models: int | None
     cpu_percent: float
     memory_mb: float
@@ -74,6 +76,7 @@ class ServiceMetrics:
             required=data["required"],
             status=data["status"],
             port=data.get("port"),
+            endpoint=data.get("endpoint", ""),
             models=data.get("models"),
             cpu_percent=data.get("cpu_percent", 0.0),
             memory_mb=data.get("memory_mb", 0.0),

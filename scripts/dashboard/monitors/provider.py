@@ -7,6 +7,7 @@ services including Ollama, vLLM, and llama.cpp variants.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import time
 from typing import Literal
@@ -36,6 +37,33 @@ ALLOWED_ACTIONS: set[Literal["start", "stop", "restart", "enable", "disable"]] =
     "enable",
     "disable",
 }
+
+ERROR_BACKOFF_SECONDS = 60.0
+SOFT_ERROR_BACKOFF_SECONDS = 15.0
+
+
+def _run_systemctl(args: list[str]) -> bool:
+    """Run systemctl command with constrained environment."""
+    env = {
+        "PATH": "/usr/bin:/bin",
+        # Preserve required session metadata for user services
+        "DBUS_SESSION_BUS_ADDRESS": os.environ.get("DBUS_SESSION_BUS_ADDRESS", ""),
+        "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", ""),
+        "HOME": os.environ.get("HOME", ""),
+    }
+    try:
+        subprocess.run(
+            ["systemctl", "--user", *args],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+            env=env,
+        )
+        return True
+    except subprocess.SubprocessError as exc:  # pragma: no cover - defensive
+        logger.debug(f"systemctl {' '.join(args)} failed: {type(exc).__name__}")
+        return False
 
 
 class ProviderMonitor:
@@ -100,6 +128,7 @@ class ProviderMonitor:
         """
         self.gpu_monitor = GPUMonitor()
         self.http_timeout = http_timeout
+        self._cooldowns: dict[str, float] = {}
         # SECURITY: Validate all endpoints at init time
         self._validate_endpoints()
 
@@ -163,6 +192,12 @@ class ProviderMonitor:
                 text=True,
                 check=False,
                 timeout=2,
+                env={
+                    "PATH": "/usr/bin:/bin",
+                    "DBUS_SESSION_BUS_ADDRESS": os.environ.get("DBUS_SESSION_BUS_ADDRESS", ""),
+                    "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", ""),
+                    "HOME": os.environ.get("HOME", ""),
+                },
             )
         except (subprocess.SubprocessError, FileNotFoundError):  # pragma: no cover - OS specific
             return None
@@ -176,7 +211,9 @@ class ProviderMonitor:
             return None
         return pid if pid > 0 else None
 
-    def _collect_process_metrics(self, key: str) -> tuple[int | None, float, float]:
+    def _collect_process_metrics(
+        self, key: str, pid_override: int | None = None
+    ) -> tuple[int | None, float, float]:
         """Collect CPU and memory metrics for a provider process.
 
         Args:
@@ -185,7 +222,7 @@ class ProviderMonitor:
         Returns:
             Tuple of (pid, cpu_percent, memory_mb)
         """
-        pid = self._get_service_pid(key)
+        pid = pid_override if pid_override is not None else self._get_service_pid(key)
         if pid is None:
             return None, 0.0, 0.0
 
@@ -244,54 +281,74 @@ class ProviderMonitor:
             endpoint = str(cfg["endpoint"])
             required = bool(cfg["required"])
             display = str(cfg["display"])
+            now = time.monotonic()
+            cooldown_until = self._cooldowns.get(key, 0.0)
+            pid_hint = self._get_service_pid(key)
 
             start = time.perf_counter()
             status = "inactive"
             models = 0
 
-            try:
-                response = requests.get(endpoint, timeout=self.http_timeout)
-                elapsed_ms = (time.perf_counter() - start) * 1000
+            skip_probe = pid_hint is None and cooldown_until > now
 
-                if response.ok:
-                    try:
-                        payload = response.json()
-                        status = "active"
-                        models = self._parse_models(key, payload)
-                        logger.debug(f"{key}: ✓ Active with {models} models ({elapsed_ms:.0f}ms)")
-                    except ValueError as e:
-                        logger.error(f"{key}: Invalid JSON response: {e}")
-                        notes.append("Invalid JSON payload")
+            if skip_probe:
+                elapsed_ms = 0.0
+                status = "degraded" if required else "inactive"
+                remaining = int(cooldown_until - now)
+                notes.append(f"Probe skipped ({max(remaining, 0)}s cooldown)")
+            else:
+                try:
+                    response = requests.get(endpoint, timeout=self.http_timeout)
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+
+                    if response.ok:
+                        try:
+                            payload = response.json()
+                            status = "active"
+                            models = self._parse_models(key, payload)
+                            self._cooldowns.pop(key, None)
+                            logger.debug(
+                                f"{key}: ✓ Active with {models} models ({elapsed_ms:.0f}ms)"
+                            )
+                        except ValueError as e:
+                            logger.error(f"{key}: Invalid JSON response: {e}")
+                            notes.append("Invalid JSON payload")
+                            status = "degraded" if required else "inactive"
+                            self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                    else:
+                        reason = f"HTTP {response.status_code}"
+                        if response.reason:
+                            reason += f" ({response.reason})"
+                        logger.warning(f"{key}: Provider responded with {reason}")
+                        notes.append(reason)
                         status = "degraded" if required else "inactive"
-                else:
-                    reason = f"HTTP {response.status_code}"
-                    if response.reason:
-                        reason += f" ({response.reason})"
-                    logger.warning(f"{key}: Provider responded with {reason}")
-                    notes.append(reason)
+                        self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                except requests.exceptions.Timeout:
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    logger.warning(f"{key}: Request timeout after {elapsed_ms:.0f}ms")
+                    notes.append(f"Timeout ({elapsed_ms:.0f}ms)")
                     status = "degraded" if required else "inactive"
-            except requests.exceptions.Timeout:
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.warning(f"{key}: Request timeout after {elapsed_ms:.0f}ms")
-                notes.append(f"Timeout ({elapsed_ms:.0f}ms)")
-                status = "degraded" if required else "inactive"
-            except requests.exceptions.ConnectionError as e:
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.warning(f"{key}: Connection error: {str(e)[:50]}")
-                notes.append("Connection refused")
-                status = "degraded" if required else "inactive"
-            except requests.exceptions.RequestException as e:
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.warning(f"{key}: Request failed ({type(e).__name__}): {str(e)[:50]}")
-                notes.append(f"{type(e).__name__}")
-                status = "degraded" if required else "inactive"
-            except Exception as e:  # pragma: no cover - unexpected errors
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.error(f"{key}: Unexpected error: {type(e).__name__}: {e}")
-                notes.append(f"Unexpected error: {type(e).__name__}")
-                status = "degraded" if required else "inactive"
+                    self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                except requests.exceptions.ConnectionError as e:
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    logger.warning(f"{key}: Connection error: {str(e)[:50]}")
+                    notes.append("Connection refused")
+                    status = "degraded" if required else "inactive"
+                    self._cooldowns[key] = now + ERROR_BACKOFF_SECONDS
+                except requests.exceptions.RequestException as e:
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    logger.warning(f"{key}: Request failed ({type(e).__name__}): {str(e)[:50]}")
+                    notes.append(f"{type(e).__name__}")
+                    status = "degraded" if required else "inactive"
+                    self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
+                except Exception as e:  # pragma: no cover - unexpected errors
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    logger.error(f"{key}: Unexpected error: {type(e).__name__}: {e}")
+                    notes.append(f"Unexpected error: {type(e).__name__}")
+                    status = "degraded" if required else "inactive"
+                    self._cooldowns[key] = now + SOFT_ERROR_BACKOFF_SECONDS
 
-            pid, cpu_percent, memory_mb = self._collect_process_metrics(key)
+            pid, cpu_percent, memory_mb = self._collect_process_metrics(key, pid_override=pid_hint)
             memory_percent = (memory_mb / system_memory_total * 100) if system_memory_total else 0.0
             vram_mb, vram_percent = per_pid_vram.get(pid, (0.0, 0.0)) if pid else (0.0, 0.0)
 
@@ -302,6 +359,7 @@ class ProviderMonitor:
                     required=required,
                     status=status,
                     port=urlparse(endpoint).port,
+                    endpoint=endpoint,
                     models=models,
                     cpu_percent=cpu_percent,
                     memory_mb=memory_mb,
@@ -331,6 +389,35 @@ class ProviderMonitor:
 
         return metrics, overview
 
+    @staticmethod
+    def _wait_for_state(service: str, desired: set[str], timeout: float = 8.0) -> bool:
+        """Wait until systemd service reaches one of desired states."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                result = subprocess.run(
+                    ["systemctl", "--user", "is-active", service],
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                    text=True,
+                    env={
+                        "PATH": "/usr/bin:/bin",
+                        "DBUS_SESSION_BUS_ADDRESS": os.environ.get("DBUS_SESSION_BUS_ADDRESS", ""),
+                        "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", ""),
+                        "HOME": os.environ.get("HOME", ""),
+                    },
+                )
+            except subprocess.SubprocessError:  # pragma: no cover - defensive
+                return False
+
+            state = (result.stdout or "").strip()
+            if state in desired:
+                return True
+            time.sleep(0.5)
+        return False
+
     def systemctl(self, key: str, action: str) -> bool:
         """Execute systemctl command with security validation.
 
@@ -354,22 +441,35 @@ class ProviderMonitor:
             logger.warning(f"Rejected invalid action: {action}")
             return False
 
+        if action == "restart":
+            # Restart is handled as stop + start to ensure graceful shutdown.
+            if not self.systemctl(key, "stop"):
+                return False
+            return self.systemctl(key, "start")
+
         service = self._service_name(key)
         if not service:
             return False
 
-        try:
-            subprocess.run(
-                ["systemctl", "--user", action, service],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=8,
-                # SECURITY: Minimal environment to prevent injection
-                env={"PATH": "/usr/bin:/bin"},
-            )
-        except subprocess.SubprocessError as e:
-            logger.debug(f"systemctl {action} {key} failed: {type(e).__name__}")
-            return False
+        if action == "start":
+            if not _run_systemctl(["start", service]):
+                return False
+            return self._wait_for_state(service, {"active"}, timeout=10.0)
 
-        return True
+        if action in {"enable", "disable"}:
+            return _run_systemctl([action, service])
+
+        if action == "stop":
+            if not _run_systemctl(["stop", service]):
+                return False
+
+            if self._wait_for_state(service, {"inactive", "failed"}, timeout=10.0):
+                return True
+
+            logger.warning(f"Graceful stop timed out for {service}; forcing termination")
+            _run_systemctl(["kill", service, "--signal=SIGKILL"])
+
+            return self._wait_for_state(service, {"inactive", "failed"}, timeout=5.0)
+
+        # Should never reach here due to allowlist checks.
+        return False

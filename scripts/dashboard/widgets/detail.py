@@ -162,6 +162,7 @@ class DetailPanel(Vertical):
 
             metadata_label.update(
                 f"[b cyan]📋 Metadata[/]\n"
+                f"Endpoint: [cyan]{metrics.endpoint or 'n/a'}[/]\n"
                 f"Port: [cyan]{metrics.port or 'n/a'}[/]  "
                 f"Models: [cyan]{metrics.models}[/]  "
                 f"PID: [cyan]{metrics.pid or 'n/a'}[/]"

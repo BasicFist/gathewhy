@@ -24,6 +24,10 @@ log_success() {
     ((++TESTS_PASSED))
 }
 
+log_warning() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
 log_error() {
     echo -e "${RED}❌${NC} $1"
     ((++TESTS_FAILED))
@@ -410,16 +414,15 @@ echo ""
 echo "=== Phase 9.6: Prometheus Metrics Check ==="
 echo ""
 
-if curl -s http://localhost:4000/metrics > /dev/null 2>&1; then
-    METRIC_COUNT=$(curl -s http://localhost:4000/metrics 2>/dev/null | grep -c "^litellm_" 2>/dev/null || echo "0")
-    if [ "$METRIC_COUNT" -gt 0 ]; then
+if curl -sf http://localhost:4000/metrics > /dev/null 2>&1; then
+    METRIC_COUNT=$(curl -sf http://localhost:4000/metrics | grep -c "^litellm_" || true)
+    if [ "${METRIC_COUNT:-0}" -gt 0 ]; then
         log_success "Prometheus metrics endpoint available ($METRIC_COUNT LiteLLM metrics)"
     else
-        log_warning "Prometheus endpoint available but no LiteLLM metrics found"
-        log_info "Ensure callbacks: ['prometheus'] is set in litellm_settings"
+        log_info "Prometheus endpoint available but no LiteLLM metrics found (callbacks disabled?)"
     fi
 else
-    log_info "Prometheus metrics endpoint not available (LiteLLM not running)"
+    log_info "Prometheus metrics endpoint not available (LiteLLM callbacks disabled)"
 fi
 
 echo ""

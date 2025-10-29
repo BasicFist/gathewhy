@@ -230,18 +230,11 @@ load_balancing:
 # Defines fallback order when primary provider fails
 
 fallback_chains:
-  "llama3.1:latest":
-    # Prefer other capable models if llama3.1 is unavailable
-    chain:
-      - qwen2.5-coder:7b
-      - qwen-coder-vllm
-      - dolphin-uncensored-vllm
-
   "qwen2.5-coder:7b":
     # Ollama code model can fall back to higher throughput or creative options
     chain:
       - qwen-coder-vllm
-      - dolphin-uncensored-vllm
+      - llama3.1:latest
 
   "qwen3-coder:480b-cloud":
     # Ollama Cloud code model fallback
@@ -272,20 +265,24 @@ fallback_chains:
   "mythomax-l2-13b-q5_k_m":
     chain:
       - llama3.1:latest
-      - qwen-coder-vllm
-      - dolphin-uncensored-vllm
+      - qwen2.5-coder:7b
 
   "qwen-coder-vllm":
     chain:
-      - dolphin-uncensored-vllm
+      - llama3.1:latest
+
+  "dolphin-uncensored-vllm":
+    chain:
+      - qwen-coder-vllm
+      - llama3.1:latest
 
   default:
     # Default fallback chain for all models
     chain:
-      - llama3.1:latest
       - qwen2.5-coder:7b
       - qwen-coder-vllm
       - dolphin-uncensored-vllm
+      - llama3.1:latest
       - gpt-oss:120b-cloud  # Ollama Cloud as final fallback
       - gpt-oss:20b-cloud
 

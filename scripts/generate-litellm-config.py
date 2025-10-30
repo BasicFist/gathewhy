@@ -470,10 +470,10 @@ class ConfigGenerator:
         router_settings: dict[str, Any] = {
             "routing_strategy": "simple-shuffle",  # Changed from usage-based-routing-v2 (not recommended for production)
             "model_group_alias": {},
-            "allowed_fails": 3,
+            "allowed_fails": 5,  # Circuit breaker: 5 failures trigger open state
             "num_retries": 2,
             "timeout": 30,
-            "cooldown_time": 60,
+            "cooldown_time": 60,  # Circuit breaker: 60s recovery timeout
             "enable_pre_call_checks": True,
             "redis_host": "127.0.0.1",
             "redis_port": 6379,
@@ -613,13 +613,13 @@ class ConfigGenerator:
             callbacks = ["prometheus"]
 
         litellm_settings = {
-            "request_timeout": 60,
-            "stream_timeout": 120,  # Changed from 0 (infinite) - set reasonable timeout
-            "num_retries": 3,
-            "timeout": 300,
+            "request_timeout": 60,  # Per-request timeout (seconds)
+            "stream_timeout": 120,  # Streaming response timeout (seconds)
+            "num_retries": 3,  # Number of retry attempts on failure
+            "timeout": 300,  # Overall operation timeout (5 minutes)
             "cache": True,
             "cache_params": {"type": "redis", "host": "127.0.0.1", "port": 6379, "ttl": 3600},
-            "set_verbose": True,  # Changed from False - enable verbose logging for debugging
+            "set_verbose": True,  # Enable verbose logging for debugging
             "json_logs": True,
         }
         if callbacks:

@@ -31,13 +31,14 @@ exact_matches:
     description: "AWQ-quantized 7B code generation model via vLLM"
     backend_model: "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
 
-  # Dolphin Uncensored (Mistral-based)
-  "dolphin-uncensored-vllm":
-    provider: vllm-dolphin
-    priority: primary
-    fallback: ollama
-    description: "7B uncensored Mistral-based model via vLLM (AWQ quantized)"
-    backend_model: "solidrust/dolphin-2.8-mistral-7b-v02-AWQ"
+  # Dolphin Uncensored (Mistral-based) - vLLM Dolphin disabled (single instance mode)
+  # "dolphin-uncensored-vllm":
+  #   provider: vllm-dolphin
+  #   priority: primary
+  #   fallback: ollama
+  #   description: "7B uncensored Mistral-based model via vLLM (AWQ quantized) - DISABLED: use vllm-model-switch.sh to enable"
+  #   backend_model: "solidrust/dolphin-2.8-mistral-7b-v02-AWQ"
+  # Note: vLLM runs single instance. Enable Dolphin with: ./scripts/vllm-model-switch.sh dolphin
 
   # llama.cpp models
   "llama-cpp-default":
@@ -158,17 +159,17 @@ capabilities:
     provider: ollama
     routing_strategy: usage_based
 
-  uncensored:
-    description: "Uncensored models without content filters"
-    preferred_models:
-      - dolphin-uncensored-vllm
-    provider: vllm-dolphin
-    routing_strategy: direct
+  # uncensored:  # Disabled: vLLM runs single instance
+  #   description: "Uncensored models without content filters"
+  #   preferred_models:
+  #     - dolphin-uncensored-vllm
+  #   provider: vllm-dolphin
+  #   routing_strategy: direct
 
   conversational:
     description: "Natural conversation and general assistance"
     preferred_models:
-      - dolphin-uncensored-vllm
+      # - dolphin-uncensored-vllm  # Disabled: vLLM runs single instance
       - llama3.1:latest
       - mythomax-l2-13b-q5_k_m
     routing_strategy: usage_based
@@ -271,17 +272,17 @@ fallback_chains:
     chain:
       - llama3.1:latest
 
-  "dolphin-uncensored-vllm":
-    chain:
-      - qwen-coder-vllm
-      - llama3.1:latest
+  # "dolphin-uncensored-vllm":  # Disabled: vLLM runs single instance
+  #   chain:
+  #     - qwen-coder-vllm
+  #     - llama3.1:latest
 
   default:
     # Default fallback chain for all models
     chain:
       - qwen2.5-coder:7b
       - qwen-coder-vllm
-      - dolphin-uncensored-vllm
+      # - dolphin-uncensored-vllm  # Disabled: vLLM runs single instance
       - llama3.1:latest
       - gpt-oss:120b-cloud  # Ollama Cloud as final fallback
       - gpt-oss:20b-cloud
@@ -373,7 +374,7 @@ metadata:
   changes:
     - "Added Ollama Cloud provider with DeepSeek, Qwen3, Kimi K2, GPT-OSS, and GLM models"
     - "Updated capability routing and fallback chains to leverage cloud capacity"
-    - "Documented local vs cloud routing strategy for CrushVLLM integration"
+    - "Configured local vs cloud routing strategy for optimal performance"
 
 notes: |
   This configuration is consumed by LiteLLM's router.

@@ -6,7 +6,7 @@
 - Access to LAB's secret store (SOPS + age)
 - Two credentials from https://ollama.com/settings/keys:
   - **Ollama Key** (`OLLAMA_KEY`) – lets the local CLI talk to your account (pull/push)
-  - **API Key** (`OLLAMA_API_KEY`) – authenticates REST/SDK calls (LiteLLM, CrushVLLM, etc.)
+  - **API Key** (`OLLAMA_API_KEY`) – authenticates REST/SDK calls (LiteLLM, etc.)
 - Python 3.11+ environment for running `generate-litellm-config.py`
 
 ## 1. Configure Environment

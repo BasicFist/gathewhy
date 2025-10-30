@@ -38,27 +38,6 @@ curl http://localhost:4000/v1/models | jq -r '.data[] | select(.id | contains("c
 ```
 **Result**: All 6 cloud models visible
 
-## CrushVLLM Integration
-
-CrushVLLM can now access cloud models using the standard OpenAI client:
-
-```go
-import "github.com/sashabaranov/go-openai"
-
-client := openai.NewClient("not-needed")
-client.BaseURL = "http://localhost:4000/v1"
-
-resp, err := client.CreateChatCompletion(
-    context.Background(),
-    openai.ChatCompletionRequest{
-        Model: "qwen3-coder:480b-cloud",  // Use any cloud model
-        Messages: []openai.ChatCompletionMessage{
-            {Role: "user", Content: "Your prompt here"},
-        },
-    },
-)
-```
-
 ## Configuration Applied
 
 ### Files Modified
@@ -73,7 +52,6 @@ resp, err := client.CreateChatCompletion(
 
 ### Documentation Created
 - `docs/ollama-cloud-setup.md` - Complete activation and management guide
-- `docs/crush-integration.md` - CrushVLLM integration examples
 
 ## Technical Details
 
@@ -92,22 +70,30 @@ Cloud models integrated into fallback chains:
 - `llama3.1:latest` → `qwen-coder-vllm` → `deepseek-v3.1:671b-cloud`
 - Default fallback → `gpt-oss:120b-cloud`
 
-## Next Steps for CrushVLLM
+## Usage
 
-1. **Use cloud models in CrushVLLM**:
-   - Point to `http://localhost:4000/v1`
-   - Use any cloud model name (e.g., `qwen3-coder:480b-cloud`)
-   - No additional configuration needed
+Access cloud models through the unified gateway at `http://localhost:4000/v1` using any OpenAI-compatible client:
 
-2. **Model Selection**:
-   - **Code**: `qwen3-coder:480b-cloud` (480B parameters)
-   - **Reasoning**: `deepseek-v3.1:671b-cloud` (671B parameters)
-   - **Extreme reasoning**: `kimi-k2:1t-cloud` (1 trillion parameters!)
-   - **General chat**: `gpt-oss:120b-cloud` or `gpt-oss:20b-cloud`
+```python
+import openai
 
-3. **Cost Management**:
-   - See `docs/ollama-cloud-setup.md` for rate limits and cost monitoring
-   - Use local models for development, cloud for complex tasks
+client = openai.OpenAI(
+    api_key="not-needed",
+    base_url="http://localhost:4000/v1"
+)
+
+response = client.chat.completions.create(
+    model="qwen3-coder:480b-cloud",
+    messages=[{"role": "user", "content": "Your prompt"}]
+)
+```
+
+## Model Selection Guide
+
+- **Code**: `qwen3-coder:480b-cloud` (480B parameters)
+- **Reasoning**: `deepseek-v3.1:671b-cloud` (671B parameters)
+- **Extreme reasoning**: `kimi-k2:1t-cloud` (1 trillion parameters)
+- **General chat**: `gpt-oss:120b-cloud` or `gpt-oss:20b-cloud`
 
 ## Monitoring
 
@@ -125,4 +111,4 @@ Check cloud model usage:
 
 ---
 
-**Summary**: Ollama Cloud is fully integrated. CrushVLLM can now access massive cloud models (up to 1T parameters) through the same `http://localhost:4000/v1` endpoint used for local models. Authentication is configured and verified. All 6 cloud models are operational.
+**Summary**: Ollama Cloud is fully integrated. All 6 cloud models (up to 1T parameters) are accessible through the unified gateway at `http://localhost:4000/v1`. Authentication is configured and verified. All models are operational and available to any OpenAI-compatible client.

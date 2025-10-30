@@ -98,10 +98,9 @@ The AI Unified Backend provides a single API endpoint that routes requests to mu
 #### 3. vLLM
 - **Port**: 8001
 - **Type**: Production-grade batched inference
-- **Models**: meta-llama/Llama-2-13b-chat-hf
-- **Best For**: High concurrency, large models (13B+)
-- **Location**: `../CRUSHVLLM`
-- **Special**: MCP integration for advanced features
+- **Models**: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ, solidrust/dolphin-2.8-mistral-7b-v02-AWQ
+- **Best For**: High concurrency, code generation
+- **Location**: Managed via systemd services
 
 ## Request Flow
 
@@ -364,19 +363,6 @@ custom_strategies:
 
 ## Integration Points
 
-### MCP Protocol (vLLM)
-
-vLLM provider exposes MCP tools:
-- `generate_text`: Text completion
-- `chat_completion`: Chat interface
-- `stream_completion`: Streaming generation
-- `server_status`: Health and metrics
-- `server_metrics`: Performance data
-
-**Access**: Through CrushVLLM MCP server
-**Port**: Integrated in vLLM :8001
-**Benefit**: Advanced control beyond standard API
-
 ### Future: GraphQL Interface
 
 Planned enhancement for complex queries:
@@ -402,4 +388,3 @@ query {
 - **Model Mappings**: See `04-model-mappings.md`
 - **Integration Guide**: See `05-integration-guide.md`
 - **OpenWebUI CLAUDE.md**: Full OpenWebUI architecture details
-- **CrushVLLM Architecture**: `../CRUSHVLLM/docs/architecture/`

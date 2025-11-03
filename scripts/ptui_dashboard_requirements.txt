@@ -1,0 +1,11 @@
+# Optional dependencies for PTUI Dashboard async mode
+# Install with: pip install -r scripts/ptui_dashboard_requirements.txt
+#
+# These dependencies enable async architecture for significantly improved performance.
+# If not installed, dashboard falls back to synchronous mode.
+
+# Async HTTP client (required for async mode)
+aiohttp>=3.9.0
+
+# YAML parsing (required for dynamic config loading)
+PyYAML>=6.0.0

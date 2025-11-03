@@ -699,18 +699,39 @@ class OverviewPanel(Static):
         """
         metrics = list(metrics)
         total = len(metrics)
-        active = sum(1 for m in metrics if m.status == "active")
-        degraded = [m for m in metrics if m.status != "active"]
-        avg_cpu = sum(m.cpu_percent for m in metrics) / total if total else 0.0
-        avg_mem = sum(m.memory_percent for m in metrics) / total if total else 0.0
 
-        warn_lines = ", ".join(f"{m.display}" for m in degraded) if degraded else "None"
+        if total == 0:
+            self.update("No providers registered.")
+            return
 
-        self.update(
-            f"[b]Services:[/b] {active}/{total} active\n"
-            f"[b]Average CPU:[/b] {avg_cpu:.1f}%   [b]Average Memory:[/b] {avg_mem:.1f}%\n"
-            f"[b]Attention:[/b] {warn_lines}"
+        active = [m for m in metrics if m.status == "active"]
+        degraded = [m for m in metrics if m.status == "degraded"]
+        inactive = [m for m in metrics if m.status == "inactive"]
+
+        avg_cpu = sum(m.cpu_percent for m in metrics) / total
+        avg_mem = sum(m.memory_percent for m in metrics) / total
+        latencies = [m.response_ms for m in metrics if m.response_ms > 0]
+        avg_latency = sum(latencies) / len(latencies) if latencies else 0.0
+
+        summary_line = (
+            f"[#00ff00 bold]{len(active)} ACTIVE[/] · "          # Neon green
+            f"[#ff6600 bold]{len(degraded)} DEGRADED[/] · "      # Neon orange
+            f"[#ff0044 bold]{len(inactive)} INACTIVE[/] · "      # Neon red
+            f"Avg latency [#00ffff]{avg_latency:.0f} ms[/]"      # Neon cyan
         )
+
+        resources_line = (
+            f"[b]Avg CPU[/] [#00ffff]{avg_cpu:.1f}%[/] · "       # Neon cyan
+            f"[b]Avg memory[/] [#00ffff]{avg_mem:.1f}%[/]"       # Neon cyan
+        )
+
+        if degraded or inactive:
+            impacted = ", ".join(m.display for m in degraded + inactive)
+            attention_line = f"[b]Needs attention:[/] [#ff00ff]{impacted}[/]"  # Neon magenta
+        else:
+            attention_line = "[#00ff00 bold]All providers healthy.[/]"         # Neon green
+
+        self.update("\n".join([summary_line, resources_line, attention_line]))
 
 
 class ServiceTable(DataTable):
@@ -746,21 +767,38 @@ class ServiceTable(DataTable):
         metrics = list(metrics)
         selected_index: int | None = None
 
-        for index, metric in enumerate(metrics):
-            status_style = {
-                "active": "green",
-                "degraded": "yellow",
-                "inactive": "red",
-            }.get(metric.status, "white")
+        def colour_band(value: float, warning: float, danger: float) -> str:
+            if value >= danger:
+                return "#ff0044"  # Neon red for danger
+            if value >= warning:
+                return "#ff6600"  # Neon orange for warning
+            return "#00ff00"      # Neon green for good
 
-            cpu_text = f"{metric.cpu_percent:.1f}%"
-            mem_text = f"{metric.memory_mb:.0f}MB"
-            vram_text = "-" if not metric.vram_mb else f"{metric.vram_mb:.0f}MB"
-            resp_text = f"{metric.response_ms:.0f}ms"
+        for index, metric in enumerate(metrics):
+            status_markup = {
+                "active": "[#00ff00 bold]ACTIVE[/]",      # Neon green
+                "degraded": "[#ff6600 bold]DEGRADED[/]",  # Neon orange
+                "inactive": "[#ff0044 bold]INACTIVE[/]",  # Neon red
+            }.get(metric.status, metric.status.title())
+
+            cpu_colour = colour_band(metric.cpu_percent, warning=70, danger=85)
+            mem_colour = colour_band(metric.memory_percent, warning=65, danger=80)
+
+            cpu_text = f"[{cpu_colour}]{metric.cpu_percent:.1f}%[/]"
+            mem_text = f"{metric.memory_mb:.0f}MB ([{mem_colour}]{metric.memory_percent:.1f}%[/])"
+
+            if metric.vram_mb:
+                vram_colour = colour_band(metric.vram_percent, warning=70, danger=90)
+                vram_text = f"[{vram_colour}]{metric.vram_mb:.0f}MB ({metric.vram_percent:.0f}%)[/]"
+            else:
+                vram_text = "[dim]-[/]"
+
+            latency_colour = colour_band(metric.response_ms, warning=800, danger=1500)
+            resp_text = f"[{latency_colour}]{metric.response_ms:.0f}ms[/]"
 
             self.add_row(
                 metric.display,
-                f"[{status_style}]{metric.status.title()}[/]",
+                status_markup,
                 cpu_text,
                 mem_text,
                 vram_text,
@@ -792,19 +830,25 @@ class GPUCard(Static):
             overview: GPUOverview with aggregated GPU statistics
         """
         if not overview.detected:
-            self.update("No NVIDIA GPU detected or NVML unavailable.")
+            self.update("[dim]GPU metrics unavailable[/dim]")
             return
 
+        utilisation = (
+            (overview.total_used_mb / overview.total_capacity_mb * 100)
+            if overview.total_capacity_mb
+            else 0.0
+        )
+
         lines = [
-            f"Total VRAM: {overview.total_used_mb:.0f}/{overview.total_capacity_mb:.0f}MB ("
-            f"{(overview.total_used_mb / overview.total_capacity_mb * 100) if overview.total_capacity_mb else 0:.1f}% )",
-            f"Peak utilisation: {overview.peak_util_percent:.1f}%",
+            f"[b]Total usage:[/] [#00ff00]{overview.total_used_mb:.0f}/{overview.total_capacity_mb:.0f}MB ({utilisation:.1f}%)[/]",  # Neon green
+            f"[b]Peak activity:[/] [#ff6600]{overview.peak_util_percent:.1f}%[/]",  # Neon orange
         ]
 
         for entry in overview.per_gpu:
             lines.append(
-                f"GPU {int(entry['id'])}: {entry['memory_used_mb']:.0f}/"
-                f"{entry['memory_total_mb']:.0f}MB ({entry['memory_util_percent']:.1f}%)"
+                f"GPU {int(entry['id'])}: [#00ff00]{entry['memory_used_mb']:.0f}/{entry['memory_total_mb']:.0f}MB[/] "  # Neon green
+                f"([#00ffff]{entry['memory_util_percent']:.1f}%[/]) · "  # Neon cyan
+                f"load [#ff00ff]{entry['gpu_util_percent']:.0f}%[/]"     # Neon magenta
             )
 
         self.update("\n".join(lines))
@@ -879,37 +923,45 @@ class DetailPanel(Vertical):
 
         try:
             status_colour = {
-                "active": "green",
-                "degraded": "yellow",
-                "inactive": "red",
-            }.get(metrics.status, "white")
+                "active": "#00ff00",    # Neon green
+                "degraded": "#ff6600",  # Neon orange
+                "inactive": "#ff0044",  # Neon red
+            }.get(metrics.status, "#ffffff")
 
-            title.update(f"[b]{metrics.display}[/b] ({'required' if metrics.required else 'optional'})")
+            title.update(f"[b][#ffd700]{metrics.display}[/b] [#00ffff]({'required' if metrics.required else 'optional'})[/]")  # Gold title, cyan text
             status_label.update(
-                f"Status: [{status_colour}]{metrics.status.upper()}[/]  |  Response: {metrics.response_ms:.0f} ms"
+                f"[b]Status:[/] [{status_colour} bold]{metrics.status.upper()}[/] · Response [#00ffff]{metrics.response_ms:.0f} ms[/]"  # Cyan text
             )
             resources_label.update(
-                "CPU: {:.1f}%   MEM: {:.1f} MB ({:.1f}%)   VRAM: {}".format(
-                    metrics.cpu_percent,
-                    metrics.memory_mb,
-                    metrics.memory_percent,
-                    "-" if not metrics.vram_mb else f"{metrics.vram_mb:.1f} MB ({metrics.vram_percent:.1f}%)",
+                "[b]Resources:[/] CPU [#00ff00]{cpu:.1f}%[/] · Memory [#ff00ff]{mem:.1f} MB[/] ([#00ffff]{mem_pct:.1f}%[/]) · VRAM {vram}".format(
+                    cpu=metrics.cpu_percent,
+                    mem=metrics.memory_mb,
+                    mem_pct=metrics.memory_percent,
+                    vram="-"
+                    if not metrics.vram_mb
+                    else f"[#ff00ff]{metrics.vram_mb:.1f} MB[/] ([#00ffff]{metrics.vram_percent:.1f}%[/])",  # Magenta and cyan
                 )
             )
             metadata_label.update(
-                "Port: {}   Models: {}   PID: {}".format(
-                    metrics.port or "n/a",
-                    metrics.models,
-                    metrics.pid or "n/a",
+                "[b]Port [#00ffff]{port}[/b] · Models [#ff00ff]{models}[/] · PID [#00ffff]{pid}[/]".format(
+                    port=metrics.port or "n/a",
+                    models=metrics.models,
+                    pid=metrics.pid or "n/a",
                 )
             )
 
             notes_log.clear()
             if metrics.notes:
                 for line in metrics.notes:
-                    notes_log.write(line)
+                    # Color code notes based on content
+                    if "timeout" in line.lower() or "error" in line.lower():
+                        notes_log.write(f"[#ff0044]{line}[/]")  # Neon red for errors
+                    elif "warning" in line.lower():
+                        notes_log.write(f"[#ff6600]{line}[/]")  # Neon orange for warnings
+                    else:
+                        notes_log.write(f"[#00ffff]{line}[/]")  # Neon cyan for info
             else:
-                notes_log.write("No warnings recorded.")
+                notes_log.write("[#00ff00]No warnings recorded.[/]")  # Neon green
         except Exception as e:
             logger.warning(f"Error updating detail panel: {type(e).__name__}: {e}")
 
@@ -942,70 +994,262 @@ class DashboardApp(App[None]):
     """
 
     CSS = """
+    /* Enhanced Neon Cyberpunk grid layout for dashboard */
+
     Screen {
-        layout: vertical;
+        background: #0a0e27;  /* Deep blue-black background */
+        color: #ffffff;       /* Bright white text */
     }
 
-    /* Body grid splits the view in two columns
-       Left: overview + table, Right: GPU + detail + event log
+    Header {
+        background: #1a1a2e;     /* Dark panel background */
+        color: #00ffff;          /* Neon cyan */
+        text-style: bold;
+        height: 3;
+    }
 
-       ┌───────────────┬────────────┐
-       │ overview      │ gpu        │
-       │ service table │ detail/log │
-       └───────────────┴────────────┘
-
-       Fine-tune spacing with padding and gaps so layout stays compact. */
+    Footer {
+        background: #1a1a2e;     /* Dark panel background */
+        color: #00ffff;          /* Neon cyan */
+        height: 3;
+    }
 
     Container#body {
-        layout: grid;
-        grid-size: 2;
-        grid-columns: 3fr 2fr;
-        grid-rows: auto 1fr;
+        layout: vertical;
         height: 1fr;
         padding: 1 2;
     }
 
-    Vertical#left-column,
-    Vertical#right-column {
-        layout: vertical;
+    Horizontal#summary-strip {
+        layout: horizontal;
+        height: 8;               /* Increased height for better visibility */
+        margin-bottom: 1;
     }
 
-    OverviewPanel {
-        border: solid #3a3a3a;
-        padding: 1;
+    Container#main-row {
+        layout: horizontal;
+        height: 1fr;
+        margin-bottom: 1;
     }
 
     ServiceTable {
+        border: heavy #ff00ff;   /* Neon magenta border */
+        background: #1a1a2e;     /* Dark panel background */
+        color: #00ffff;          /* Neon cyan text */
         height: 1fr;
-        border: solid #3a3a3a;
+        width: 7fr;
+        margin-right: 1;
+    }
+
+    Vertical#detail-column {
+        height: 1fr;
+        layout: vertical;
+        width: 3fr;
+        margin-left: 1;
+        padding: 0 1;
+    }
+
+    Container#log-wrapper {
+        height: 10;              /* Increased height for better log visibility */
+        margin-top: 1;
+        padding: 0 1;
+    }
+
+    OverviewPanel {
+        width: 3fr;
+        border: heavy #00ffff;   /* Neon cyan border */
+        background: #1a1a2e;     /* Dark panel background */
+        color: #ffffff;          /* White text */
+        padding: 1 2;
+        min-height: 6;
+        margin-right: 1;
     }
 
     GPUCard {
-        border: solid #3a3a3a;
-        padding: 1;
+        width: 2fr;
+        border: heavy #00ff00;   /* Neon green border */
+        background: #1a1a2e;     /* Dark panel background */
+        color: #ffffff;          /* White text */
+        padding: 1 2;
+        min-height: 6;
+        margin-left: 1;
     }
 
-    /* Detail panel and log share the right column vertically.
-       Detail gets the remaining height with the log pinned at the bottom.
-       Provide some contrast for the action row. */
+    ServiceTable > .datatable--header {
+        background: #2a2a4e;     /* Highlight background */
+        color: #ffd700;          /* Gold text */
+        text-style: bold;
+    }
+
+    ServiceTable > .datatable--cursor {
+        background: #2a2a4e;     /* Highlight background */
+        color: #00ff00;          /* Neon green text */
+        text-style: bold;
+    }
+
+    ServiceTable > .datatable--odd-row {
+        background: #1a1a2e;     /* Panel background */
+    }
+
+    ServiceTable > .datatable--even-row {
+        background: #151530;     /* Subtle background */
+    }
 
     #detail-panel {
-        border: solid #3a3a3a;
-        padding: 1;
+        border: heavy #ffd700;   /* Gold border */
+        background: #1a1a2e;     /* Dark panel background */
+        color: #ffffff;          /* White text */
+        padding: 1 2;
         height: 1fr;
+        min-height: 14;          /* Increased height */
+    }
+
+    #detail-title {
+        color: #ffd700;          /* Gold text */
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #detail-status {
+        color: #00ffff;          /* Cyan text */
+        margin-bottom: 1;
+    }
+
+    #detail-resources {
+        color: #ff00ff;          /* Magenta text */
+        margin-bottom: 1;
+    }
+
+    #detail-metadata {
+        color: #00ffff;          /* Cyan text */
+        margin-bottom: 1;
     }
 
     #detail-actions {
-        padding-top: 1;
+        padding: 1 0;
+        width: 100%;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+
+    #detail-actions Button {
+        margin-right: 1;
+        width: 12;               /* Fixed width for consistent buttons */
+    }
+
+    #detail-notes {
+        min-height: 6;
+        border: heavy #bf00ff;   /* Purple border */
+        background: #0f0f1f;     /* Dark background */
+        color: #c7a2ff;          /* Light purple text */
+        padding: 1;
+    }
+
+    Button {
+        background: #1a1a2e;     /* Dark panel background */
+        border: solid #00ffff;   /* Neon cyan border */
+        color: #00ffff;          /* Neon cyan text */
+        text-style: bold;
+        height: 3;
+    }
+
+    Button:hover {
+        background: #2a2a4e;     /* Highlight background */
+        border: heavy #00ffff;   /* Neon cyan border */
+        color: #7dffff;          /* Lighter cyan text */
+    }
+
+    Button.-success {
+        border: solid #00ff00;   /* Neon green border */
+        color: #00ff00;          /* Neon green text */
+        background: #002200;     /* Dark green background */
+    }
+
+    Button.-success:hover {
+        background: #003300;     /* Darker green background */
+        border: heavy #00ff00;   /* Neon green border */
+        color: #39ff14;          /* Bright green text */
+    }
+
+    Button.-error {
+        border: solid #ff0044;   /* Neon red border */
+        color: #ff0044;          /* Neon red text */
+        background: #220000;     /* Dark red background */
+    }
+
+    Button.-error:hover {
+        background: #330000;     /* Darker red background */
+        border: heavy #ff0044;   /* Neon red border */
+        color: #ff2266;          /* Lighter red text */
+    }
+
+    Button.-warning {
+        border: solid #ff6600;   /* Neon orange border */
+        color: #ff6600;          /* Neon orange text */
+        background: #221100;     /* Dark orange background */
+    }
+
+    Button.-warning:hover {
+        background: #331a00;     /* Darker orange background */
+        border: heavy #ff6600;   /* Neon orange border */
+        color: #ff8844;          /* Lighter orange text */
+    }
+
+    Button.-primary {
+        border: solid #ff00ff;   /* Neon magenta border */
+        color: #ff00ff;          /* Neon magenta text */
+        background: #220022;     /* Dark magenta background */
+    }
+
+    Button.-primary:hover {
+        background: #330033;     /* Darker magenta background */
+        border: heavy #ff00ff;   /* Neon magenta border */
+        color: #ff44ff;          /* Lighter magenta text */
     }
 
     Log {
-        height: 12;
-        border: solid #333333;
-        padding: 1;
+        border: heavy #00ffff;   /* Neon cyan border */
+        background: #0f0f1f;     /* Dark background */
+        color: #7dffff;          /* Light cyan text */
+        padding: 1 2;
+        height: 10;
+    }
+
+    #event-log {
+        color: #7dffff;          /* Light cyan text */
+        padding: 0 1;
+    }
+
+    ScrollBar {
+        background: #1a1a2e;     /* Dark panel background */
+        border: solid #00ffff;   /* Neon cyan border */
+    }
+
+    ScrollBar > .scrollbar--thumb {
+        background: #ff00ff;     /* Neon magenta */
+    }
+
+    ScrollBar > .scrollbar--thumb:hover {
+        background: #ffff00;     /* Neon yellow */
+    }
+
+    /* Additional flashy elements for enhanced visual impact */
+    Header Clock {
+        color: #ff00ff;          /* Neon magenta for clock */
+        text-style: bold;
+    }
+
+    /* Add some glow effects for extra flash */
+    ServiceTable:focus-within {
+        border: heavy #ff00ff;
+        box-shadow: 0 0 5 #ff00ff;
+    }
+
+    #detail-panel:focus-within {
+        border: heavy #ffd700;
+        box-shadow: 0 0 5 #ffd700;
     }
     """
-
     BINDINGS = [
         Binding("r", "refresh", "Refresh"),
         Binding("q", "quit", "Quit"),
@@ -1034,12 +1278,14 @@ class DashboardApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Container(id="body"):
-            with Vertical(id="left-column"):
+            with Horizontal(id="summary-strip"):
                 yield OverviewPanel(id="overview")
-                yield ServiceTable()
-            with Vertical(id="right-column"):
                 yield GPUCard(id="gpu")
-                yield DetailPanel()
+            with Container(id="main-row"):
+                yield ServiceTable()
+                with Vertical(id="detail-column"):
+                    yield DetailPanel()
+            with Container(id="log-wrapper"):
                 yield Log(id="event-log", highlight=True)
         yield Footer()
 
@@ -1055,7 +1301,7 @@ class DashboardApp(App[None]):
         self.refresh_timer = self.set_interval(
             DEFAULT_REFRESH_INTERVAL, self._refresh_table, pause=not self.auto_refresh
         )
-        self.log_event(f"[green]✓ Dashboard initialized[/] (refresh: {DEFAULT_REFRESH_INTERVAL}s)")
+        self.log_event(f"[#00ff00 bold]✓ Dashboard initialized[/] ([#00ffff]refresh: {DEFAULT_REFRESH_INTERVAL}s[/])")  # Neon green and cyan
 
     def action_quit(self) -> None:
         """Quit the application and save state."""
@@ -1068,15 +1314,15 @@ class DashboardApp(App[None]):
         self.auto_refresh = not self.auto_refresh
         if self.auto_refresh:
             self.refresh_timer.resume()
-            self.log_event(f"Auto-refresh enabled ({DEFAULT_REFRESH_INTERVAL}s cadence).")
+            self.log_event(f"[#00ff00]Auto-refresh enabled[/] ([#00ffff]{DEFAULT_REFRESH_INTERVAL}s cadence[/]).")  # Neon green and cyan
         else:
             self.refresh_timer.pause()
-            self.log_event("Auto-refresh paused.")
+            self.log_event("[#ff6600]Auto-refresh paused.[/]")  # Neon orange
 
     def action_refresh(self) -> None:
         """Manually refresh all metrics (binding: 'r')."""
         self._refresh_table()
-        self.log_event("Manual refresh completed.")
+        self.log_event("[#00ff00]Manual refresh completed.[/]")  # Neon green
 
     def action_clear_log(self) -> None:
         """Clear event log (binding: 'ctrl+l')."""
@@ -1096,7 +1342,7 @@ class DashboardApp(App[None]):
         except Exception as e:
             error_msg = f"{type(e).__name__}"
             logger.error(f"Error collecting provider snapshot: {error_msg}: {e}")
-            self.log_event(f"[red]✗ Snapshot failed:[/] {error_msg}")
+            self.log_event(f"[#ff0044 bold]✗ Snapshot failed:[/] [#ff6600]{error_msg}[/]")  # Neon red and orange
             return
 
         try:
@@ -1111,7 +1357,7 @@ class DashboardApp(App[None]):
         except Exception as e:
             error_msg = f"{type(e).__name__}"
             logger.error(f"Error updating dashboard displays: {error_msg}: {e}")
-            self.log_event(f"[red]✗ Display update failed:[/] {error_msg}")
+            self.log_event(f"[#ff0044 bold]✗ Display update failed:[/] [#ff6600]{error_msg}[/]")  # Neon red and orange
 
     def _find_metric(self, key: str | None) -> ServiceMetrics | None:
         """Find ServiceMetrics by provider key.
@@ -1170,13 +1416,13 @@ class DashboardApp(App[None]):
         logger.info(f"Service action requested: {event.action} on {event.service_key}")
         success = self.monitor.systemctl(event.service_key, event.action)
         if success:
-            msg = f"[green]✓[/] {event.action.title()} sent to {event.service_key}"
+            msg = f"[#00ff00 bold]✓[/] [#00ffff]{event.action.title()} sent to {event.service_key}[/]"  # Neon green and cyan
             self.log_event(msg)
             logger.info(f"Service action succeeded: {event.action} on {event.service_key}")
             # Refresh immediately to reflect new status
             self.set_timer(1.0, self._refresh_table)
         else:
-            msg = f"[red]✗ Failed[/] to {event.action} {event.service_key}"
+            msg = f"[#ff0044 bold]✗ Failed[/] [#ff6600]to {event.action} {event.service_key}[/]"  # Neon red and orange
             self.log_event(msg)
             logger.warning(f"Service action failed: {event.action} on {event.service_key}")
 

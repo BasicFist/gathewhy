@@ -2,10 +2,13 @@
 """
 Interactive PTUI dashboard implemented with curses.
 Provides a live view of service health, model availability, and key actions.
+
+Performance: Async architecture with aiohttp for concurrent requests.
 """
 
 from __future__ import annotations
 
+import asyncio
 import curses
 import json
 import os
@@ -20,8 +23,31 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-DEFAULT_HTTP_TIMEOUT = float(os.getenv("PTUI_HTTP_TIMEOUT", "10"))
-AUTO_REFRESH_SECONDS = float(os.getenv("PTUI_REFRESH_SECONDS", "5"))
+# Try to import aiohttp for async operations (optional dependency)
+try:
+    import aiohttp
+
+    ASYNC_AVAILABLE = True
+except ImportError:
+    ASYNC_AVAILABLE = False
+
+
+def validate_env_float(name: str, default: str, min_val: float, max_val: float) -> float:
+    """Validate environment variable as float within bounds."""
+    value_str = os.getenv(name, default)
+    try:
+        value = float(value_str)
+        if not min_val <= value <= max_val:
+            raise ValueError(f"{name} must be {min_val}-{max_val}, got {value}")
+        return value
+    except ValueError as e:
+        print(f"Invalid {name}: {e}. Using default: {default}", file=sys.stderr)
+        return float(default)
+
+
+DEFAULT_HTTP_TIMEOUT = validate_env_float("PTUI_HTTP_TIMEOUT", "10", 0.5, 120.0)
+AUTO_REFRESH_SECONDS = validate_env_float("PTUI_REFRESH_SECONDS", "5", 1.0, 60.0)
+LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
 
 
 @dataclass
@@ -63,30 +89,145 @@ def safe_addstr(
         stdscr.addnstr(y, x, text.ljust(width), width, attr)
 
 
-SERVICES: list[Service] = [
-    Service("LiteLLM Gateway", "http://localhost:4000", "/health", required=True),
-    Service("Ollama", "http://localhost:11434", "/api/tags", required=True),
-    Service("llama.cpp (Python)", "http://localhost:8000", "/v1/models", required=False),
-    Service("llama.cpp (Native)", "http://localhost:8080", "/v1/models", required=False),
-    Service("vLLM", "http://localhost:8001", "/v1/models", required=False),
-]
+def load_services_from_config() -> list[Service]:
+    """Load services from config/providers.yaml with fallback to defaults."""
+    config_path = Path(__file__).parent.parent / "config" / "providers.yaml"
+
+    # Default fallback services
+    default_services = [
+        Service("LiteLLM Gateway", "http://localhost:4000", "/health/liveliness", required=True),
+        Service("Ollama", "http://localhost:11434", "/api/tags", required=True),
+        Service("llama.cpp (Python)", "http://localhost:8000", "/v1/models", required=False),
+        Service("llama.cpp (Native)", "http://localhost:8080", "/v1/models", required=False),
+        Service("vLLM", "http://localhost:8001", "/v1/models", required=False),
+    ]
+
+    if not config_path.exists():
+        return default_services
+
+    try:
+        # Try to load YAML (only if available)
+        try:
+            import yaml
+        except ImportError:
+            return default_services
+
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+
+        if not config or "providers" not in config:
+            return default_services
+
+        services = []
+        providers = config["providers"]
+
+        # Map provider keys to display names
+        provider_map = {
+            "ollama": ("Ollama", "/api/tags", True),
+            "vllm": ("vLLM", "/v1/models", False),
+            "llama_cpp_python": ("llama.cpp (Python)", "/v1/models", False),
+            "llama_cpp_native": ("llama.cpp (Native)", "/v1/models", False),
+            "litellm_gateway": ("LiteLLM Gateway", "/health/liveliness", True),
+        }
+
+        for key, provider_data in providers.items():
+            if provider_data.get("status") != "active":
+                continue
+
+            base_url = provider_data.get("base_url", "")
+            if key in provider_map:
+                display_name, endpoint, required = provider_map[key]
+            else:
+                display_name = provider_data.get("description", key)
+                endpoint = "/health"
+                required = False
+
+            services.append(Service(display_name, base_url, endpoint, required))
+
+        # Always ensure LiteLLM Gateway is present
+        if not any(s.name == "LiteLLM Gateway" for s in services):
+            services.insert(
+                0, Service("LiteLLM Gateway", "http://localhost:4000", "/health/liveliness", True)
+            )
+
+        return services if services else default_services
+
+    except Exception as e:
+        print(f"Warning: Failed to load providers config: {e}", file=sys.stderr)
+        return default_services
 
 
-def fetch_json(url: str, timeout: float) -> tuple[dict[str, Any] | None, float | None, str | None]:
+SERVICES: list[Service] = load_services_from_config()
+
+
+def fetch_json(
+    url: str, timeout: float, api_key: str | None = None
+) -> tuple[dict[str, Any] | None, float | None, str | None]:
+    """Fetch JSON from URL with optional authentication (synchronous).
+
+    Args:
+        url: URL to fetch
+        timeout: Request timeout in seconds
+        api_key: Optional API key for Bearer authentication
+
+    Returns:
+        Tuple of (data, latency, error_message)
+    """
     start_time = time.perf_counter()
     try:
-        request = Request(url, headers={"User-Agent": "ptui-dashboard"})
+        headers = {"User-Agent": "ptui-dashboard"}
+        if api_key:
+            headers["Authorization"] = f"Bearer sk-{api_key}"
+
+        request = Request(url, headers=headers)
         with urlopen(request, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8"))
         latency = time.perf_counter() - start_time
         return data, latency, None
     except (HTTPError, URLError, TimeoutError) as exc:
+        latency = time.perf_counter() - start_time
+        return None, latency, str(exc)
+    except Exception as exc:  # pragma: no cover - safety net
         return None, None, str(exc)
+
+
+async def fetch_json_async(
+    session: aiohttp.ClientSession, url: str, timeout: float, api_key: str | None = None
+) -> tuple[dict[str, Any] | None, float | None, str | None]:
+    """Fetch JSON from URL with optional authentication (asynchronous).
+
+    Args:
+        session: aiohttp ClientSession
+        url: URL to fetch
+        timeout: Request timeout in seconds
+        api_key: Optional API key for Bearer authentication
+
+    Returns:
+        Tuple of (data, latency, error_message)
+    """
+    start_time = time.perf_counter()
+    try:
+        headers = {"User-Agent": "ptui-dashboard"}
+        if api_key:
+            headers["Authorization"] = f"Bearer sk-{api_key}"
+
+        timeout_obj = aiohttp.ClientTimeout(total=timeout)
+        async with session.get(url, headers=headers, timeout=timeout_obj) as response:
+            data = await response.json()
+        latency = time.perf_counter() - start_time
+        return data, latency, None
+    except TimeoutError:
+        latency = time.perf_counter() - start_time
+        return None, latency, "Request timed out"
+    except aiohttp.ClientError as exc:
+        latency = time.perf_counter() - start_time
+        return None, latency, str(exc)
     except Exception as exc:  # pragma: no cover - safety net
         return None, None, str(exc)
 
 
 def check_service(service: Service, timeout: float) -> dict[str, Any]:
+    """Check service health synchronously."""
     url = f"{service.url}{service.endpoint}"
     data, latency, error = fetch_json(url, timeout)
     status_ok = data is not None and error is None
@@ -98,8 +239,38 @@ def check_service(service: Service, timeout: float) -> dict[str, Any]:
     }
 
 
+async def check_service_async(
+    session: aiohttp.ClientSession, service: Service, timeout: float
+) -> dict[str, Any]:
+    """Check service health asynchronously."""
+    url = f"{service.url}{service.endpoint}"
+    data, latency, error = await fetch_json_async(session, url, timeout)
+    status_ok = data is not None and error is None
+    return {
+        "service": service,
+        "status": status_ok,
+        "latency": latency,
+        "error": error,
+    }
+
+
 def get_models(timeout: float) -> dict[str, Any]:
-    data, latency, error = fetch_json("http://localhost:4000/v1/models", timeout)
+    """Fetch model list from LiteLLM gateway with authentication support (synchronous)."""
+    data, latency, error = fetch_json(
+        "http://localhost:4000/v1/models", timeout, api_key=LITELLM_API_KEY
+    )
+    if not data or "data" not in data:
+        return {"models": [], "error": error or "Unable to fetch model list", "latency": latency}
+
+    models = [entry.get("id", "unknown") for entry in data.get("data", [])]
+    return {"models": models, "error": None, "latency": latency}
+
+
+async def get_models_async(session: aiohttp.ClientSession, timeout: float) -> dict[str, Any]:
+    """Fetch model list from LiteLLM gateway with authentication support (asynchronous)."""
+    data, latency, error = await fetch_json_async(
+        session, "http://localhost:4000/v1/models", timeout, api_key=LITELLM_API_KEY
+    )
     if not data or "data" not in data:
         return {"models": [], "error": error or "Unable to fetch model list", "latency": latency}
 
@@ -135,6 +306,7 @@ def run_validation() -> str:
 
 
 def gather_state(timeout: float) -> dict[str, Any]:
+    """Gather all state synchronously (fallback when async not available)."""
     services_status = [check_service(service, timeout) for service in SERVICES]
     models_info = get_models(timeout)
     healthy_required = sum(
@@ -157,13 +329,66 @@ def gather_state(timeout: float) -> dict[str, Any]:
     }
 
 
+async def gather_state_async(timeout: float) -> dict[str, Any]:
+    """Gather all state asynchronously with concurrent requests.
+
+    This is significantly faster than the synchronous version as all
+    service health checks run concurrently instead of sequentially.
+    """
+    async with aiohttp.ClientSession() as session:
+        # Create tasks for concurrent execution
+        service_tasks = [check_service_async(session, service, timeout) for service in SERVICES]
+        models_task = get_models_async(session, timeout)
+
+        # Execute all service checks concurrently + models fetch
+        services_status, models_info = await asyncio.gather(
+            asyncio.gather(*service_tasks), models_task
+        )
+
+    # Calculate summary statistics
+    healthy_required = sum(
+        1 for entry in services_status if entry["service"].required and entry["status"]
+    )
+    total_required = sum(1 for entry in services_status if entry["service"].required)
+    healthy_optional = sum(
+        1 for entry in services_status if not entry["service"].required and entry["status"]
+    )
+    total_optional = sum(1 for entry in services_status if not entry["service"].required)
+
+    return {
+        "services": services_status,
+        "models": models_info,
+        "summary": {
+            "required": (healthy_required, total_required),
+            "optional": (healthy_optional, total_optional),
+        },
+        "timestamp": datetime.now(),
+    }
+
+
+def gather_state_smart(timeout: float) -> dict[str, Any]:
+    """Gather state using async if available, otherwise fallback to sync.
+
+    This is the main entry point that other code should use.
+    """
+    if ASYNC_AVAILABLE:
+        # Use async version for better performance
+        return asyncio.run(gather_state_async(timeout))
+
+    # Fallback to synchronous version
+    return gather_state(timeout)
+
+
 def action_refresh_state(_: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    updated_state = gather_state(DEFAULT_HTTP_TIMEOUT)
-    return "Service state refreshed.", updated_state
+    """Refresh state action using smart async/sync selection."""
+    updated_state = gather_state_smart(DEFAULT_HTTP_TIMEOUT)
+    mode = "async" if ASYNC_AVAILABLE else "sync"
+    return f"Service state refreshed ({mode}).", updated_state
 
 
 def action_health_probe(_: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    updated_state = gather_state(DEFAULT_HTTP_TIMEOUT)
+    """Health probe action using smart async/sync selection."""
+    updated_state = gather_state_smart(DEFAULT_HTTP_TIMEOUT)
     summary = updated_state.get("summary", {})
     required_ok, required_total = summary.get("required", (0, 0))
     if required_total == 0 or required_ok == required_total:
@@ -389,6 +614,63 @@ def draw_footer(
         safe_addstr(stdscr, footer_y + 3, 2, message, width - 4)
 
 
+def handle_menu_keys(key: int, menu_index: int, menu_items: list[MenuItem]) -> tuple[int, str, str]:
+    """Handle keyboard input when menu is focused.
+
+    Args:
+        key: Curses key code
+        menu_index: Current menu selection index
+        menu_items: List of menu items
+
+    Returns:
+        Tuple of (new_menu_index, new_focus, message)
+    """
+    current_item = menu_items[menu_index]
+
+    if key == curses.KEY_UP:
+        return (menu_index - 1) % len(menu_items), "menu", ""
+    if key == curses.KEY_DOWN:
+        return (menu_index + 1) % len(menu_items), "menu", ""
+    if key in (curses.KEY_RIGHT, 9) and current_item.supports_actions:  # Tab
+        return menu_index, "content", "Actions focused."
+    if key in (curses.KEY_ENTER, 10, 13) and current_item.supports_actions:
+        return menu_index, "content", "Actions focused."
+    if key == curses.KEY_BTAB:  # Shift-Tab
+        return menu_index, "menu", ""
+
+    return menu_index, "menu", ""
+
+
+def handle_action_keys(
+    key: int, action_selection: int, action_items: list[ActionItem]
+) -> tuple[int, str, str | None]:
+    """Handle keyboard input when actions panel is focused.
+
+    Args:
+        key: Curses key code
+        action_selection: Current action selection index
+        action_items: List of available actions
+
+    Returns:
+        Tuple of (new_action_selection, new_focus, execute_action_index or None)
+    """
+    if not action_items:
+        return action_selection, "menu", None
+
+    if key == curses.KEY_UP:
+        return (action_selection - 1) % len(action_items), "content", None
+    if key == curses.KEY_DOWN:
+        return (action_selection + 1) % len(action_items), "content", None
+    if key in (curses.KEY_LEFT, curses.KEY_BTAB):  # Left arrow or Shift-Tab
+        return action_selection, "menu", "Menu focused."
+    if key in (9,):  # Tab
+        return action_selection, "menu", "Menu focused."
+    if key in (curses.KEY_ENTER, 10, 13):  # Enter
+        return action_selection, "content", action_selection
+
+    return action_selection, "content", None
+
+
 def interactive_dashboard(stdscr: Any) -> None:
     curses.curs_set(0)
     stdscr.nodelay(True)
@@ -419,7 +701,7 @@ def interactive_dashboard(stdscr: Any) -> None:
     menu_index = 0
     focus = "menu"
     message = ""
-    state = gather_state(DEFAULT_HTTP_TIMEOUT)
+    state = gather_state_smart(DEFAULT_HTTP_TIMEOUT)
     last_refresh = datetime.now()
     last_auto_refresh = time.monotonic()
 
@@ -435,13 +717,16 @@ def interactive_dashboard(stdscr: Any) -> None:
 
         header_title = "AI Backend Unified - PTUI Command Center"
         safe_addstr(stdscr, 0, 2, header_title, width - 4, curses.color_pair(4) | curses.A_BOLD)
+        mode_indicator = "(async)" if ASYNC_AVAILABLE else "(sync)"
+        mode_color = curses.color_pair(1) if ASYNC_AVAILABLE else curses.color_pair(3)
+        subtitle = f"ptui-dashboard {mode_indicator}"
         safe_addstr(
             stdscr,
             1,
             2,
-            "ai-dashboard",
+            subtitle,
             width - 4,
-            curses.color_pair(5),
+            curses.color_pair(5) | mode_color,
         )
         from contextlib import suppress
 
@@ -523,8 +808,9 @@ def interactive_dashboard(stdscr: Any) -> None:
             break
 
         if key in (ord("r"), ord("R")):
-            apply_state(gather_state(DEFAULT_HTTP_TIMEOUT))
-            message = "Service state refreshed."
+            apply_state(gather_state_smart(DEFAULT_HTTP_TIMEOUT))
+            mode = "async" if ASYNC_AVAILABLE else "sync"
+            message = f"Service state refreshed ({mode})."
             continue
 
         if key == curses.KEY_RESIZE:
@@ -532,50 +818,23 @@ def interactive_dashboard(stdscr: Any) -> None:
             continue
 
         if key in (ord("g"), ord("G")):
-            apply_state(gather_state(DEFAULT_HTTP_TIMEOUT))
-            message = "State gathered."
+            apply_state(gather_state_smart(DEFAULT_HTTP_TIMEOUT))
+            mode = "async" if ASYNC_AVAILABLE else "sync"
+            message = f"State gathered ({mode})."
             continue
 
         if focus == "menu":
-            if key == curses.KEY_UP:
-                menu_index = (menu_index - 1) % len(menu_items)
-                message = ""
-                continue
-            if key == curses.KEY_DOWN:
-                menu_index = (menu_index + 1) % len(menu_items)
-                message = ""
-                continue
-            if key in (curses.KEY_RIGHT, 9) and current_item.supports_actions:
-                focus = "content"
-                message = "Actions focused."
-                continue
-            if key in (curses.KEY_ENTER, 10, 13) and current_item.supports_actions:
-                focus = "content"
-                message = "Actions focused."
-                continue
-            if key == curses.KEY_BTAB:
-                message = ""
-                continue
+            menu_index, focus, message = handle_menu_keys(key, menu_index, menu_items)
+            continue
 
-        elif focus == "content" and current_item.supports_actions:
-            if key == curses.KEY_UP and ACTION_ITEMS:
-                action_selection = (action_selection - 1) % len(ACTION_ITEMS)
-                message = ""
-                continue
-            if key == curses.KEY_DOWN and ACTION_ITEMS:
-                action_selection = (action_selection + 1) % len(ACTION_ITEMS)
-                message = ""
-                continue
-            if key in (curses.KEY_LEFT, curses.KEY_BTAB):
-                focus = "menu"
-                message = "Menu focused."
-                continue
-            if key in (9,) and ACTION_ITEMS:
-                focus = "menu"
-                message = "Menu focused."
-                continue
-            if key in (curses.KEY_ENTER, 10, 13) and ACTION_ITEMS:
-                action = ACTION_ITEMS[action_selection]
+        # Handle action keys if in content with actions
+        if focus == "content" and current_item.supports_actions:
+            action_selection, focus, execute_idx = handle_action_keys(
+                key, action_selection, ACTION_ITEMS
+            )
+            if execute_idx is not None:
+                # Execute the action
+                action = ACTION_ITEMS[execute_idx]
                 pre_message = f"{action.title}: running..."
                 draw_footer(stdscr, pre_message, last_refresh, "Actions")
                 stdscr.refresh()
@@ -585,11 +844,12 @@ def interactive_dashboard(stdscr: Any) -> None:
                 else:
                     last_auto_refresh = time.monotonic()
                 message = action_message
-                continue
+            continue
 
         if key == -1 and (now - last_auto_refresh) > AUTO_REFRESH_SECONDS:
-            apply_state(gather_state(DEFAULT_HTTP_TIMEOUT))
-            message = "Auto-refreshed."
+            apply_state(gather_state_smart(DEFAULT_HTTP_TIMEOUT))
+            mode = "async" if ASYNC_AVAILABLE else "sync"
+            message = f"Auto-refreshed ({mode})."
             continue
 
         time.sleep(0.05)

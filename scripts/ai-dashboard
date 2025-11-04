@@ -1239,15 +1239,13 @@ class DashboardApp(App[None]):
         text-style: bold;
     }
 
-    /* Add some glow effects for extra flash */
+    /* Focus effects using border styles instead of box-shadow */
     ServiceTable:focus-within {
         border: heavy #ff00ff;
-        box-shadow: 0 0 5 #ff00ff;
     }
 
     #detail-panel:focus-within {
         border: heavy #ffd700;
-        box-shadow: 0 0 5 #ffd700;
     }
     """
     BINDINGS = [

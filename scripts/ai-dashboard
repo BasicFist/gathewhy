@@ -67,6 +67,7 @@ STATE_FILE = STATE_DIR / "dashboard_state.json"
 ALLOWED_SERVICES: dict[str, str] = {
     "ollama": "ollama.service",
     "vllm": "vllm.service",
+    "vllm_dolphin": "vllm-dolphin.service",
     "llama_cpp_python": "llamacpp-python.service",
     "llama_cpp_native": "llama-cpp-native.service",
     "litellm_gateway": "litellm.service",
@@ -398,7 +399,7 @@ class ProviderMonitor:
 
     # SECURITY: Allowed endpoint hosts (localhost only, prevent SSRF)
     ALLOWED_HOSTS: set[str] = {"127.0.0.1", "localhost"}
-    ALLOWED_PORTS: set[int] = {11434, 8000, 8001, 8080, 4000}
+    ALLOWED_PORTS: set[int] = {11434, 8000, 8001, 8002, 8080, 4000}
 
     PROVIDERS: dict[str, dict[str, object]] = {
         "ollama": {
@@ -413,6 +414,13 @@ class ProviderMonitor:
             "display": "vLLM",
             "service": "vllm.service",
             "required": True,
+            "type": "litellm",
+        },
+        "vllm_dolphin": {
+            "endpoint": "http://127.0.0.1:8002/v1/models",
+            "display": "vLLM (Dolphin)",
+            "service": "vllm-dolphin.service",
+            "required": False,
             "type": "litellm",
         },
         "llama_cpp_python": {

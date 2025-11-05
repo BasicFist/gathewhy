@@ -43,8 +43,81 @@ exact_matches:
   "llama-cpp-default":
     provider: llama_cpp_python
     priority: primary
-    fallback: llama_cpp_native
+    fallback: null
     description: "GGUF model via llama.cpp Python bindings"
+  "llama-cpp-llama3.1":
+    provider: llama_cpp_python
+    priority: primary
+    fallback: ollama
+    description: "Meta Llama 3.1 8B Instruct Q4_K_M served via llama.cpp Python server"
+    backend_model: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+  "llama-cpp-mistral-nemo":
+    provider: llama_cpp_python
+    priority: primary
+    fallback: ollama
+    description: "Mistral Nemo Instruct 12B Q4_K_M via llama.cpp for fast analytical chat"
+    backend_model: "Mistral-Nemo-Instruct-2407.Q4_K_M.gguf"
+  "llama-cpp-deepseek-coder-lite":
+    provider: llama_cpp_python
+    priority: primary
+    fallback: vllm-qwen
+    description: "DeepSeek Coder v2 Lite Q4_K_M for deterministic coding via llama.cpp"
+    backend_model: "DeepSeek-Coder-V2-Lite-Instruct.Q4_K_M.gguf"
+  "llama-cpp-openhermes-2.5":
+    provider: llama_cpp_python
+    priority: primary
+    fallback: ollama
+    description: "OpenHermes 2.5 (Mistral) Q5_K_M served via llama.cpp for rich conversation"
+    backend_model: "openhermes-2.5-mistral-7b.Q5_K_M.gguf"
+  "llama-cpp-phi3-medium":
+    provider: llama_cpp_python
+    priority: primary
+    fallback: ollama
+    description: "Phi-3 Medium 4K Instruct Q4_K_M via llama.cpp for factual Q&A"
+    backend_model: "phi-3-medium-4k-instruct.Q4_K_M.gguf"
+  "llama-cpp-mixtral-8x7b":
+    provider: llama_cpp_python
+    priority: secondary
+    fallback: ollama
+    description: "Mixtral 8x7B Instruct v0.1 Q4_K_M via llama.cpp for heavier reasoning (partial GPU offload)"
+    backend_model: "mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf"
+
+  # Ollama Cloud models (remote)
+  "deepseek-v3.1:671b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "DeepSeek V3.1 671B hosted on Ollama Cloud"
+
+  "qwen3-coder:480b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "Qwen3 Coder 480B cloud variant"
+
+  "kimi-k2:1t-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "Kimi K2 1T ultra-long context model"
+
+  "gpt-oss:120b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "GPT-OSS 120B open-source aligned model"
+
+  "gpt-oss:20b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "GPT-OSS 20B open-source aligned model"
+
+  "glm-4.6:cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "Zhipu GLM 4.6 hosted on Ollama Cloud"
 
 # ============================================================================
 # PATTERN-BASED ROUTING
@@ -80,7 +153,7 @@ patterns:
   # GGUF files → llama.cpp
   - pattern: ".*\\.gguf$"
     provider: llama_cpp_python
-    fallback: llama_cpp_native
+    fallback: ollama
     description: "GGUF quantized models"
 
 # ============================================================================
@@ -92,7 +165,9 @@ capabilities:
     description: "Models specialized for code"
     preferred_models:
       - qwen2.5-coder:7b
-      - deepseek-coder-v2  # If pulled
+      - qwen-coder-vllm
+      - llama-cpp-deepseek-coder-lite
+      - qwen3-coder:480b-cloud
     provider: ollama
     routing_strategy: load_balance
 
@@ -101,6 +176,11 @@ capabilities:
     preferred_models:
       - qwen2.5-coder:7b
       - llama3.1:latest
+      - llama-cpp-llama3.1
+      - llama-cpp-mistral-nemo
+      - llama-cpp-phi3-medium
+      - llama-cpp-mixtral-8x7b
+      - deepseek-v3.1:671b-cloud
     provider: ollama
     routing_strategy: usage_based
 
@@ -108,7 +188,11 @@ capabilities:
     description: "Models optimized for multi-step reasoning and problem solving"
     preferred_models:
       - llama3.1:latest
+      - llama-cpp-llama3.1
+      - llama-cpp-mistral-nemo
+      - llama-cpp-mixtral-8x7b
       - qwen-coder-vllm
+      - deepseek-v3.1:671b-cloud
     provider: ollama
     routing_strategy: direct
 
@@ -117,6 +201,9 @@ capabilities:
     preferred_models:
       - mythomax-l2-13b-q5_k_m
       - llama3.1:latest
+      - llama-cpp-llama3.1
+      - llama-cpp-openhermes-2.5
+      - kimi-k2:1t-cloud
     provider: ollama
     routing_strategy: usage_based
 
@@ -132,7 +219,13 @@ capabilities:
     preferred_models:
       - dolphin-uncensored-vllm
       - llama3.1:latest
+      - llama-cpp-llama3.1
+      - llama-cpp-mistral-nemo
+      - llama-cpp-openhermes-2.5
       - mythomax-l2-13b-q5_k_m
+      - gpt-oss:20b-cloud
+      - gpt-oss:120b-cloud
+      - glm-4.6:cloud
     routing_strategy: usage_based
 
   high_throughput:
@@ -143,15 +236,23 @@ capabilities:
 
   low_latency:
     description: "Single-request speed priority"
-    provider: llama_cpp_native
-    fallback: llama_cpp_python
+    provider: llama_cpp_python
+    fallback: ollama
     routing_strategy: fastest_response
 
   general_chat:
     description: "General conversational AI"
     preferred_models:
       - llama3.1:latest
+      - llama-cpp-llama3.1
+      - llama-cpp-mistral-nemo
+      - llama-cpp-openhermes-2.5
       - mythomax-l2-13b-q5_k_m
+      - llama-cpp-phi3-medium
+      - llama-cpp-mixtral-8x7b
+      - gpt-oss:20b-cloud
+      - gpt-oss:120b-cloud
+      - glm-4.6:cloud
     routing_strategy: usage_based
 
   large_context:
@@ -159,7 +260,10 @@ capabilities:
     min_context: 8192
     providers:
       - llama_cpp_python  # Configured for 8192 context
-      - vllm  # Supports up to 4096 by default
+    preferred_models:
+      - llama-cpp-llama3.1
+      - llama-cpp-mistral-nemo
+      - llama-cpp-mixtral-8x7b
     routing_strategy: most_capacity
 
 # ============================================================================
@@ -210,6 +314,36 @@ fallback_chains:
       - llama3.1:latest
       - qwen-coder-vllm
       - dolphin-uncensored-vllm
+  "llama-cpp-llama3.1":
+    chain:
+      - llama3.1:latest
+      - qwen2.5-coder:7b
+      - dolphin-uncensored-vllm
+  "llama-cpp-mistral-nemo":
+    chain:
+      - llama3.1:latest
+      - llama-cpp-llama3.1
+      - dolphin-uncensored-vllm
+  "llama-cpp-deepseek-coder-lite":
+    chain:
+      - qwen-coder-vllm
+      - qwen2.5-coder:7b
+      - dolphin-uncensored-vllm
+  "llama-cpp-openhermes-2.5":
+    chain:
+      - llama3.1:latest
+      - mythomax-l2-13b-q5_k_m
+      - llama-cpp-llama3.1
+  "llama-cpp-phi3-medium":
+    chain:
+      - llama3.1:latest
+      - llama-cpp-mistral-nemo
+      - llama-cpp-llama3.1
+  "llama-cpp-mixtral-8x7b":
+    chain:
+      - llama-cpp-mistral-nemo
+      - llama-cpp-llama3.1
+      - deepseek-v3.1:671b-cloud
 
   "qwen-coder-vllm":
     chain:
@@ -235,7 +369,7 @@ routing_rules:
   # 4. Default provider
 
   default_provider: ollama
-  default_fallback: llama_cpp_python
+  default_fallback: ollama
 
   request_metadata_routing:
     # Route based on request headers/metadata
@@ -259,7 +393,7 @@ routing_rules:
 
     - size: "8B - 13B"
       provider: ollama
-      fallback: llama_cpp_python
+      fallback: vllm-qwen
       reason: "Medium models, Ollama preferred"
 
     - size: "> 13B"

@@ -175,7 +175,7 @@ providers:
 
   ollama_cloud:
     type: ollama
-    base_url: https://api.ollama.com/v1
+    base_url: https://ollama.com/v1
     status: active
     description: Ollama Cloud API for large models without local GPU
     requires_api_key: true

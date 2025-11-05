@@ -59,6 +59,7 @@ MAPPINGS_FILE = PROJECT_ROOT / "config" / "model-mappings.yaml"
 OUTPUT_FILE = PROJECT_ROOT / "config" / "litellm-unified.yaml"
 BACKUP_DIR = PROJECT_ROOT / "config" / "backups"
 VERSION_FILE = PROJECT_ROOT / "config" / ".litellm-version"
+LLAMACPP_MANIFEST = PROJECT_ROOT / "config" / "llamacpp-models.yaml"
 
 # Configure structured logging
 logger.remove()
@@ -158,6 +159,7 @@ class ConfigGenerator:
             exact_matches=exact_matches,
             fallback_chains=fallback_chains,
         )
+        self.llamacpp_manifest = self._load_llamacpp_manifest()
 
     def generate_version(self) -> str:
         """
@@ -198,6 +200,41 @@ class ConfigGenerator:
                 reason=type(e).__name__,
             )
             return timestamp_version
+
+    def _load_llamacpp_manifest(self) -> dict[str, dict[str, Any]]:
+        """
+        Load llama.cpp manifest mapping alias → metadata.
+
+        Returns:
+            dict: alias mapped to manifest entry. Empty dict if manifest missing.
+        """
+        if not LLAMACPP_MANIFEST.exists():
+            logger.warning(
+                "llama.cpp manifest missing; continuing without manifest integration",
+                manifest=str(LLAMACPP_MANIFEST),
+            )
+            return {}
+
+        try:
+            with open(LLAMACPP_MANIFEST, encoding="utf-8") as fh:
+                payload = yaml.safe_load(fh) or {}
+        except yaml.YAMLError as exc:
+            logger.warning(
+                "Failed to parse llama.cpp manifest",
+                manifest=str(LLAMACPP_MANIFEST),
+                error=str(exc),
+            )
+            return {}
+
+        manifest: dict[str, dict[str, Any]] = {}
+        for entry in payload.get("models", []):
+            alias = entry.get("alias")
+            if not alias:
+                continue
+            manifest[alias] = entry
+
+        logger.debug("Loaded llama.cpp manifest", count=len(manifest))
+        return manifest
 
     def build_model_list(self) -> list[dict[str, Any]]:
         """
@@ -281,9 +318,32 @@ class ConfigGenerator:
                 if isinstance(model, dict) and "description" in model:
                     model_info["notes"] = model["description"]
 
+                display_name = self._get_display_name(provider_name, model_name)
+
+                # Merge llama.cpp manifest metadata if available
+                manifest_entry = self.llamacpp_manifest.get(display_name)
+                if manifest_entry:
+                    backend_expected = manifest_entry.get("backend_model")
+                    if (
+                        backend_expected
+                        and isinstance(model, dict)
+                        and model.get("name")
+                        and model["name"] != backend_expected
+                    ):
+                        logger.warning(
+                            "Manifest backend mismatch",
+                            alias=display_name,
+                            manifest_backend=backend_expected,
+                            provider_backend=model.get("name"),
+                        )
+                    if "context_length" not in model_info and manifest_entry.get("context_length"):
+                        model_info["context_length"] = manifest_entry["context_length"]
+                    if manifest_entry.get("notes") and "notes" not in model_info:
+                        model_info["notes"] = manifest_entry["notes"]
+
                 # Create model entry
                 model_entry: dict[str, Any] = {
-                    "model_name": self._get_display_name(provider_name, model_name),
+                    "model_name": display_name,
                     "litellm_params": litellm_params,
                     "model_info": model_info,
                 }
@@ -497,10 +557,27 @@ class ConfigGenerator:
             candidates: list[str] = []
             for fallback_model in chain.get("chain", []):
                 if fallback_model == primary_model:
+                    logger.debug(
+                        "Skipping self-referential fallback",
+                        primary_model=primary_model,
+                        fallback_model=fallback_model,
+                    )
                     continue
                 if fallback_model not in known_models:
+                    logger.warning(
+                        "Invalid fallback model skipped - model not found in configuration",
+                        primary_model=primary_model,
+                        fallback_model=fallback_model,
+                        available_models=sorted(known_models)[:10],  # Show first 10
+                        hint="Check model name in providers.yaml or model-mappings.yaml",
+                    )
                     continue
                 if fallback_model in candidates:
+                    logger.debug(
+                        "Skipping duplicate fallback model",
+                        primary_model=primary_model,
+                        fallback_model=fallback_model,
+                    )
                     continue
                 candidates.append(fallback_model)
 
@@ -580,9 +657,15 @@ class ConfigGenerator:
                 "num_retries": 3,
                 "timeout": 300,
                 "cache": True,
-                "cache_params": {"type": "redis", "host": "127.0.0.1", "port": 6379, "ttl": 3600},
+                "cache_params": {
+                    "type": "redis",
+                    "host": "127.0.0.1",
+                    "port": 6379,
+                    "ttl": 3600,
+                },
                 "set_verbose": False,
                 "json_logs": True,
+                "fallback_to_no_cache_on_redis_error": True,  # Graceful degradation
             },
             "router_settings": self.build_router_settings(),
             "server_settings": {
@@ -600,13 +683,11 @@ class ConfigGenerator:
                 "prometheus": {"enabled": True, "port": 9090},
             },
             "rate_limit_settings": self.build_rate_limit_settings(),
-            "general_settings": {
-                "# Master Key Authentication": None,
-                "# Uncomment to enable": None,
-                "# master_key": "${LITELLM_MASTER_KEY}",
-                "# Salt Key for DB encryption": None,
-                "# salt_key": "${LITELLM_SALT_KEY}",
-            },
+            # Note: Authentication is disabled by default
+            # To enable authentication, add to general_settings:
+            #   master_key: ${LITELLM_MASTER_KEY}
+            #   salt_key: ${LITELLM_SALT_KEY}
+            "general_settings": {},
             "debug": False,
             "debug_router": False,
             "test_mode": False,

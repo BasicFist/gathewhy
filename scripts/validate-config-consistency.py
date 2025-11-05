@@ -262,6 +262,10 @@ class ConfigValidator:
             litellm_params = model_entry.get("litellm_params", {})
             model_path = litellm_params.get("model", "")
 
+            # llama.cpp local models use placeholder path that is not present in providers.yaml
+            if model_path == "openai/local-model":
+                continue
+
             # Extract actual model name
             extracted_model = None
             if "/" in model_path:
@@ -284,6 +288,64 @@ class ConfigValidator:
                     f"LiteLLM model '{model_name}' references '{extracted_model}' "
                     f"which is not defined in providers.yaml"
                 )
+
+    def validate_circular_fallback_chains(self):
+        """Detect circular dependencies in fallback chains"""
+        self.log_info("Detecting circular dependencies in fallback chains...")
+
+        fallback_chains = self.mappings_config.get("fallback_chains", {})
+        if not fallback_chains:
+            self.log_success("No fallback chains to validate")
+            return
+
+        def detect_cycle(model: str, chain: dict, visited: set, rec_stack: set, path: list):
+            """DFS-based cycle detection with path tracking"""
+            visited.add(model)
+            rec_stack.add(model)
+            path.append(model)
+
+            # Get fallback models for current model
+            fallback_list = chain.get("chain", []) if isinstance(chain, dict) else []
+
+            for fallback in fallback_list:
+                if fallback not in visited:
+                    # Recursively check fallback
+                    fallback_chain = fallback_chains.get(fallback, {})
+                    cycle_path = detect_cycle(
+                        fallback, fallback_chain, visited, rec_stack, path.copy()
+                    )
+                    if cycle_path:
+                        return cycle_path
+                elif fallback in rec_stack:
+                    # Cycle detected!
+                    path.append(fallback)
+                    return path
+
+            rec_stack.remove(model)
+            return None
+
+        # Check each fallback chain for cycles
+        visited = set()
+        cycles_found = []
+
+        for model, chain in fallback_chains.items():
+            if model not in visited:
+                cycle_path = detect_cycle(model, chain, visited, set(), [])
+                if cycle_path:
+                    cycle_str = " -> ".join(cycle_path)
+                    cycles_found.append(cycle_str)
+                    self.log_error(
+                        f"Circular fallback dependency detected: {cycle_str}",
+                        hint="Remove the circular reference to prevent infinite loops",
+                    )
+
+        if not cycles_found:
+            self.log_success("No circular dependencies found in fallback chains")
+        else:
+            self.log_error(
+                f"Found {len(cycles_found)} circular fallback chain(s)",
+                hint="Fix circular dependencies in model-mappings.yaml",
+            )
 
     def validate_naming_conventions(self):
         """Validate model naming conventions and detect typos"""
@@ -421,6 +483,7 @@ class ConfigValidator:
         self.validate_provider_to_mapping_consistency()
         self.validate_mapping_to_provider_consistency()
         self.validate_backend_model_references()
+        self.validate_circular_fallback_chains()  # NEW: Enhanced cycle detection with path tracking
         self.validate_fallback_chain_integrity()
         self.validate_litellm_consistency()
         self.validate_naming_conventions()

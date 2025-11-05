@@ -400,6 +400,10 @@ class ProviderMonitor:
     # SECURITY: Allowed endpoint hosts (localhost only, prevent SSRF)
     ALLOWED_HOSTS: set[str] = {"127.0.0.1", "localhost"}
     ALLOWED_PORTS: set[int] = {11434, 8000, 8001, 8002, 8080, 4000}
+    VLLM_MEMORY_REQUIREMENTS_MB: dict[str, float] = {
+        "vllm": 6000.0,
+        "vllm_dolphin": 7000.0,
+    }
 
     PROVIDERS: dict[str, dict[str, object]] = {
         "ollama": {
@@ -446,9 +450,16 @@ class ProviderMonitor:
         },
     }
 
-    def __init__(self) -> None:
+    def __init__(self, use_http_endpoint: bool = True) -> None:
         """Initialize provider monitor with validation."""
         self.gpu_monitor = GPUMonitor()
+        self.last_error: str | None = None
+        self.use_http_endpoint = use_http_endpoint
+        self.service_endpoint = (
+            os.environ.get("SERVICE_CONTROL_ENDPOINT", "").rstrip("/")
+            if use_http_endpoint
+            else ""
+        )
         # SECURITY: Validate all endpoints at init time
         self._validate_endpoints()
 
@@ -671,6 +682,41 @@ class ProviderMonitor:
         if not service:
             return False
 
+        # Prefer HTTP control endpoint when configured
+        if self.service_endpoint and action in ALLOWED_ACTIONS:
+            try:
+                response = requests.post(
+                    f"{self.service_endpoint}/service/{key}/{action}",
+                    timeout=5,
+                )
+                if response.ok:
+                    data = response.json()
+                    success = bool(data.get("success"))
+                    if not success:
+                        self.last_error = data.get("message", "Service action rejected")
+                    return success
+                self.last_error = f"HTTP {response.status_code} from service controller"
+                logger.warning(self.last_error)
+                return False
+            except requests.RequestException as exc:
+                logger.warning(
+                    "Service control endpoint unavailable, falling back to systemctl",
+                    error=str(exc),
+                )
+                # Continue to local fallback
+                self.last_error = None
+
+        # Pre-flight GPU headroom check for vLLM start actions
+        if action == "start" and key in self.VLLM_MEMORY_REQUIREMENTS_MB:
+            required = self.VLLM_MEMORY_REQUIREMENTS_MB[key]
+            has_headroom, free_mb = self._has_gpu_headroom(required)
+            if not has_headroom:
+                self.last_error = (
+                    f"Insufficient GPU memory for {key} (free {free_mb:.0f} MB, need {required:.0f} MB)"
+                )
+                logger.warning(self.last_error)
+                return False
+
         try:
             subprocess.run(
                 ["systemctl", "--user", action, service],
@@ -682,10 +728,24 @@ class ProviderMonitor:
                 env={"PATH": "/usr/bin:/bin"},
             )
         except subprocess.SubprocessError as e:
-            logger.debug(f"systemctl {action} {key} failed: {type(e).__name__}")
+            self.last_error = f"systemctl {action} {key} failed: {type(e).__name__}"
+            logger.debug(self.last_error)
             return False
 
         return True
+
+    def _has_gpu_headroom(self, required_mb: float) -> tuple[bool, float]:
+        """Check if any GPU has at least required_mb free VRAM."""
+        info = self.gpu_monitor.get_gpu_info()
+        if not info:
+            # If GPUs are not detected, assume success (prevent false negatives on CPU-only systems)
+            return True, required_mb
+
+        free_values = [
+            max(0.0, gpu["memory_total_mb"] - gpu["memory_used_mb"]) for gpu in info
+        ]
+        available = max(free_values) if free_values else 0.0
+        return available >= required_mb, available
 
 
 # ---------------------------------------------------------------------------
@@ -1420,6 +1480,7 @@ class DashboardApp(App[None]):
             event: ServiceAction event with action and service key
         """
         logger.info(f"Service action requested: {event.action} on {event.service_key}")
+        self.monitor.last_error = None
         success = self.monitor.systemctl(event.service_key, event.action)
         if success:
             msg = f"[#00ff00 bold]✓[/] [#00ffff]{event.action.title()} sent to {event.service_key}[/]"  # Neon green and cyan
@@ -1428,7 +1489,11 @@ class DashboardApp(App[None]):
             # Refresh immediately to reflect new status
             self.set_timer(1.0, self._refresh_table)
         else:
-            msg = f"[#ff0044 bold]✗ Failed[/] [#ff6600]to {event.action} {event.service_key}[/]"  # Neon red and orange
+            error_detail = self.monitor.last_error or "Unknown error"
+            msg = (
+                f"[#ff0044 bold]✗ Failed[/] [#ff6600]to {event.action} {event.service_key}[/] "
+                f"[#ff0044]{error_detail}[/]"
+            )
             self.log_event(msg)
             logger.warning(f"Service action failed: {event.action} on {event.service_key}")
 

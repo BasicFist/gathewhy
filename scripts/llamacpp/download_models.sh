@@ -1,57 +1,118 @@
-#!/usr/bin/env bash
-#
-# Download curated GGUF weights for the llama.cpp Python endpoint.
-# Requires the `hf` CLI and a Hugging Face token with access to TheBloke repos.
-#
-# Usage:
-#   HF_TOKEN=hf_xxx scripts/llamacpp/download_models.sh
-#   # or export HF_TOKEN globally / run `hf auth login` beforehand.
-#
-set -euo pipefail
+#!/usr/bin/env python3
+"""
+Download curated GGUF weights for the llama.cpp Python endpoint.
 
-MODEL_ROOT="${MODEL_ROOT:-/home/miko/LAB/models/gguf/library}"
+Uses the manifest at config/llamacpp-models.yaml to keep metadata centralized.
+The manifest contains `repo_id`, `filename`, and `storage_dir` entries for each
+model so both download automation and configuration generation stay in sync.
+"""
 
-MODELS=$(
-  cat <<'EOF'
-Meta-Llama-3.1-8B-Instruct-Q4_K_M|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
-Mistral-Nemo-Instruct-2407-Q4_K_M|QuantFactory/Mistral-Nemo-Instruct-2407-GGUF|Mistral-Nemo-Instruct-2407.Q4_K_M.gguf
-DeepSeek-Coder-V2-Lite-Q4_K_M|QuantFactory/DeepSeek-Coder-V2-Lite-Instruct-GGUF|DeepSeek-Coder-V2-Lite-Instruct.Q4_K_M.gguf
-OpenHermes-2.5-Mistral-Q5_K_M|TheBloke/OpenHermes-2.5-Mistral-7B-GGUF|openhermes-2.5-mistral-7b.Q5_K_M.gguf
-Phi-3-medium-4k-instruct-Q4_K_M|ssmits/Phi-3-medium-4k-instruct-Q4_K_M-GGUF|phi-3-medium-4k-instruct.Q4_K_M.gguf
-Mixtral-8x7B-Instruct-v0.1-Q4_K_M|TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF|mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
-EOF
-)
+from __future__ import annotations
 
-HF_BIN="$(command -v hf || true)"
-if [[ -z "${HF_BIN}" ]]; then
-  echo "ERROR: hf CLI not found. Install with 'pip install huggingface_hub[cli]'." >&2
-  exit 1
-fi
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
-echo "Model library root: ${MODEL_ROOT}"
-mkdir -p "${MODEL_ROOT}"
+import yaml
 
-echo "Checking Hugging Face authentication..."
-if ! HF_TOKEN="${HF_TOKEN:-}" "${HF_BIN}" auth whoami >/dev/null 2>&1; then
-  cat >&2 <<'MSG'
-ERROR: Not authenticated with Hugging Face.
-Please export HF_TOKEN or run `hf auth login` before downloading gated model files.
-MSG
-  exit 1
-fi
 
-while IFS='|' read -r DISPLAY_NAME REPO_ID FILENAME; do
-  [[ -z "${DISPLAY_NAME}" ]] && continue
-  TARGET_DIR="${MODEL_ROOT}/${DISPLAY_NAME}"
-  mkdir -p "${TARGET_DIR}"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MANIFEST_PATH = PROJECT_ROOT / "config" / "llamacpp-models.yaml"
+DEFAULT_ROOT = Path("/home/miko/LAB/models/gguf/library")
 
-  echo "→ Downloading ${DISPLAY_NAME} (${FILENAME})..."
-  HF_TOKEN="${HF_TOKEN:-}" "${HF_BIN}" download \
-    "${REPO_ID}" "${FILENAME}" \
-    --local-dir "${TARGET_DIR}" \
-    --revision main
 
-  echo "   Stored at ${TARGET_DIR}/${FILENAME}"
-done <<< "${MODELS}"
+def load_manifest() -> list[dict[str, str]]:
+    try:
+        with MANIFEST_PATH.open("r", encoding="utf-8") as fh:
+            payload = yaml.safe_load(fh) or {}
+    except FileNotFoundError as exc:  # pragma: no cover - defensive
+        raise SystemExit(f"Manifest not found: {MANIFEST_PATH}") from exc
+    except yaml.YAMLError as exc:  # pragma: no cover - defensive
+        raise SystemExit(f"Invalid YAML in manifest: {exc}") from exc
 
-echo "All requested models downloaded into ${MODEL_ROOT}."
+    models = payload.get("models", [])
+    if not models:
+        raise SystemExit("Manifest does not contain any models.")
+    return models
+
+
+def ensure_auth(hf_bin: str) -> None:
+    env = os.environ.copy()
+    token = env.get("HF_TOKEN", "")
+    result = subprocess.run(
+        [hf_bin, "auth", "whoami"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            "Hugging Face authentication required. "
+            "Export HF_TOKEN or run `hf auth login` before downloading."
+        )
+
+
+def hf_download(hf_bin: str, repo_id: str, filename: str, target_dir: Path) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    args = [
+        hf_bin,
+        "download",
+        repo_id,
+        filename,
+        "--local-dir",
+        str(target_dir),
+        "--revision",
+        "main",
+    ]
+    result = subprocess.run(args, env=env, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to download {filename} from {repo_id}: {result.stderr.strip()}"
+        )
+
+
+def main() -> int:
+    model_root = Path(os.environ.get("MODEL_ROOT", DEFAULT_ROOT))
+    hf_bin = os.environ.get("HF_BIN") or subprocess.run(
+        ["which", "hf"], capture_output=True, text=True, check=False
+    ).stdout.strip()
+
+    if not hf_bin:
+        raise SystemExit(
+            "hf CLI not found. Install with `pip install huggingface_hub[cli]`."
+        )
+
+    ensure_auth(hf_bin)
+    models = load_manifest()
+
+    print(f"Model library root: {model_root}")
+    model_root.mkdir(parents=True, exist_ok=True)
+
+    for entry in models:
+        alias = entry["alias"]
+        repo_id = entry["repo_id"]
+        filename = entry["filename"]
+        storage_dir = entry["storage_dir"]
+        target_dir = model_root / storage_dir
+
+        print(f"→ Downloading {alias} ({filename})...")
+        try:
+            hf_download(hf_bin, repo_id, filename, target_dir)
+        except RuntimeError as exc:
+            print(f"   ✗ {exc}", file=sys.stderr)
+            return 1
+
+        target_path = target_dir / filename
+        print(f"   Stored at {target_path}")
+
+    print("All requested models downloaded.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

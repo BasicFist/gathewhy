@@ -1,53 +1,87 @@
-#!/usr/bin/env bash
-# Switch the active llama.cpp model by updating the current.gguf symlink.
-# Usage: scripts/llamacpp/switch_model.sh <alias>
-set -euo pipefail
+#!/usr/bin/env python3
+"""
+Swap the active llama.cpp model by updating current.gguf based on the manifest.
 
-MODELS_ROOT="${MODELS_ROOT:-/home/miko/LAB/models/gguf/library}"
-ACTIVE_DIR="${ACTIVE_DIR:-/home/miko/LAB/models/gguf/active}"
-SYSTEMD_UNIT="llamacpp-python.service"
+Usage:
+    scripts/llamacpp/switch_model.sh <alias>
+"""
 
-if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 <model-alias>" >&2
-  exit 1
-fi
+from __future__ import annotations
 
-alias="$1"
+import os
+import subprocess
+import sys
+from pathlib import Path
 
-case "$alias" in
-  llama-cpp-llama3.1)
-    target="Meta-Llama-3.1-8B-Instruct-Q4_K_M/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
-    ;;
-  llama-cpp-mistral-nemo)
-    target="Mistral-Nemo-Instruct-2407-Q4_K_M/Mistral-Nemo-Instruct-2407.Q4_K_M.gguf"
-    ;;
-  llama-cpp-deepseek-coder-lite)
-    target="DeepSeek-Coder-V2-Lite-Q4_K_M/DeepSeek-Coder-V2-Lite-Instruct.Q4_K_M.gguf"
-    ;;
-  llama-cpp-openhermes-2.5)
-    target="OpenHermes-2.5-Mistral-Q5_K_M/openhermes-2.5-mistral-7b.Q5_K_M.gguf"
-    ;;
-  llama-cpp-phi3-medium)
-    target="Phi-3-medium-4k-instruct-Q4_K_M/phi-3-medium-4k-instruct.Q4_K_M.gguf"
-    ;;
-  llama-cpp-mixtral-8x7b)
-    target="Mixtral-8x7B-Instruct-v0.1-Q4_K_M/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf"
-    ;;
-  *)
-    echo "Unknown alias '$alias'." >&2
-    exit 1
-    ;;
-esac
+import yaml
 
-src="${MODELS_ROOT}/${target}"
-if [[ ! -f "${src}" ]]; then
-  echo "Model file not found: ${src}" >&2
-  exit 1
-fi
 
-mkdir -p "${ACTIVE_DIR}"
-ln -sf "${src}" "${ACTIVE_DIR}/current.gguf"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MANIFEST_PATH = PROJECT_ROOT / "config" / "llamacpp-models.yaml"
+MODELS_ROOT = Path(os.environ.get("MODELS_ROOT", "/home/miko/LAB/models/gguf/library"))
+ACTIVE_DIR = Path(os.environ.get("ACTIVE_DIR", "/home/miko/LAB/models/gguf/active"))
+SYSTEMD_UNIT = os.environ.get("SYSTEMD_UNIT", "llamacpp-python.service")
 
-echo "Restarting ${SYSTEMD_UNIT}..."
-systemctl --user restart "${SYSTEMD_UNIT}"
-echo "${alias} is now active."
+
+def load_manifest() -> dict[str, dict[str, str]]:
+    try:
+        data = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError as exc:  # pragma: no cover - defensive
+        raise SystemExit(f"Manifest not found: {MANIFEST_PATH}") from exc
+    except yaml.YAMLError as exc:  # pragma: no cover - defensive
+        raise SystemExit(f"Invalid YAML in manifest: {exc}") from exc
+
+    mapping: dict[str, dict[str, str]] = {}
+    for entry in data.get("models", []):
+        alias = entry.get("alias")
+        if not alias:
+            continue
+        mapping[alias] = entry
+    return mapping
+
+
+def restart_service() -> None:
+    subprocess.run(
+        ["systemctl", "--user", "restart", SYSTEMD_UNIT],
+        check=True,
+        env={"PATH": "/usr/bin:/bin"},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print("Usage: scripts/llamacpp/switch_model.sh <alias>", file=sys.stderr)
+        return 1
+
+    alias = argv[1]
+    manifest = load_manifest()
+
+    if alias not in manifest:
+        print(f"Unknown alias '{alias}'.", file=sys.stderr)
+        return 1
+
+    entry = manifest[alias]
+    storage_dir = entry["storage_dir"]
+    filename = entry["filename"]
+
+    src = MODELS_ROOT / storage_dir / filename
+    if not src.exists():
+        print(f"Model file not found: {src}", file=sys.stderr)
+        return 1
+
+    ACTIVE_DIR.mkdir(parents=True, exist_ok=True)
+    target = ACTIVE_DIR / "current.gguf"
+    if target.exists() or target.is_symlink():
+        target.unlink()
+    target.symlink_to(src)
+
+    print(f"Restarting {SYSTEMD_UNIT}...")
+    restart_service()
+    print(f"{alias} is now active.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

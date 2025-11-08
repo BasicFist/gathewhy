@@ -77,16 +77,6 @@ initial_prompt: |
     - `config/litellm.yaml`: Current LiteLLM routing
     - `scripts/run_litellm.sh`: LiteLLM startup
 
-  ### CrushVLLM (../CRUSHVLLM/)
-  - **Role**: vLLM inference engine with TUI
-  - **Contains**: vLLM server, MCP integration, model management
-  - **Port**: 8001 (vLLM server), MCP tools
-  - **Language**: Go + Python (vLLM)
-  - **Key Files**:
-    - `cmd/mcp-vllm/`: MCP server
-    - `internal/vllm/`: Server management
-    - `configs/`: vLLM configuration
-
   ## Configuration Philosophy
 
   **Non-Invasive**: Extends existing systems without modifying working code
@@ -116,10 +106,9 @@ initial_prompt: |
 
   When working on this project:
   1. Reference OpenWebUI for LiteLLM implementation details
-  2. Reference CrushVLLM for vLLM integration patterns
-  3. Use Serena memories for architectural context
-  4. Test changes with validation script before committing
-  5. Update memories when patterns change
+  2. Use Serena memories for architectural context
+  3. Test changes with validation script before committing
+  4. Update memories when patterns change
 
   ## Memory Strategy
 

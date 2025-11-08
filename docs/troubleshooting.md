@@ -342,12 +342,12 @@ curl -X POST http://localhost:8001/v1/chat/completions \
   }'
 ```
 
-5. **CRUSHVLLM quick-setup fails**:
+5. **vLLM installation fails with old version**:
 ```bash
 # Symptoms: "Failed to build vllm==0.2.5"
-# Root cause: CRUSHVLLM uses outdated vLLM version
+# Root cause: Outdated vLLM version in old scripts
 
-# Solution: Use manual installation instead
+# Solution: Use manual installation with latest version
 python3 -m venv ~/venvs/vllm
 source ~/venvs/vllm/bin/activate
 pip install --upgrade pip
@@ -518,10 +518,10 @@ curl http://localhost:8001/v1/models | jq
 # Unload unused Ollama models
 # (Ollama loads on-demand, but keeps in memory)
 
-# For vLLM, restart with single model
-cd ../CRUSHVLLM
-./crush stop
-./crush start --model meta-llama/Llama-2-13b-chat-hf
+# For vLLM, restart service with desired model
+systemctl --user restart vllm-qwen.service
+# Or restart the alternate model service
+systemctl --user restart vllm-dolphin.service
 ```
 
 2. **Reduce vLLM GPU memory**:

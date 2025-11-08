@@ -24,6 +24,10 @@ log_success() {
     ((++TESTS_PASSED))
 }
 
+log_warning() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
 log_error() {
     echo -e "${RED}❌${NC} $1"
     ((++TESTS_FAILED))
@@ -373,6 +377,52 @@ if command -v redis-cli > /dev/null 2>&1; then
     fi
 else
     log_info "redis-cli not found, skipping Redis check"
+fi
+
+echo ""
+
+# ============================================================================
+# PHASE 9.5: CACHE HEALTH CHECK (LiteLLM /cache/ping endpoint)
+# ============================================================================
+
+echo "=== Phase 9.5: Cache Health Check ==="
+echo ""
+
+if curl -s http://localhost:4000/cache/ping > /dev/null 2>&1; then
+    CACHE_STATUS=$(curl -s http://localhost:4000/cache/ping 2>/dev/null | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$CACHE_STATUS" = "healthy" ]; then
+        log_success "Redis cache health check passed"
+
+        # Get additional cache details
+        CACHE_TYPE=$(curl -s http://localhost:4000/cache/ping 2>/dev/null | jq -r '.cache_type // "unknown"' 2>/dev/null || echo "unknown")
+        log_info "Cache type: $CACHE_TYPE"
+    elif [ "$CACHE_STATUS" = "unknown" ]; then
+        log_info "Cache health endpoint returned unexpected response"
+    else
+        log_warning "Redis cache status: $CACHE_STATUS"
+    fi
+else
+    log_info "Cache health endpoint not available (LiteLLM not running or endpoint not configured)"
+fi
+
+echo ""
+
+# ============================================================================
+# PHASE 9.6: PROMETHEUS METRICS CHECK
+# ============================================================================
+
+echo "=== Phase 9.6: Prometheus Metrics Check ==="
+echo ""
+
+if curl -sf http://localhost:4000/metrics > /dev/null 2>&1; then
+    METRIC_COUNT=$(curl -sf http://localhost:4000/metrics | grep -c "^litellm_" || true)
+    if [ "${METRIC_COUNT:-0}" -gt 0 ]; then
+        log_success "Prometheus metrics endpoint available ($METRIC_COUNT LiteLLM metrics)"
+    else
+        log_info "Prometheus endpoint available but no LiteLLM metrics found (callbacks disabled?)"
+    fi
+else
+    log_info "Prometheus metrics endpoint not available (LiteLLM callbacks disabled)"
 fi
 
 echo ""

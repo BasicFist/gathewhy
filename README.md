@@ -68,6 +68,31 @@ cat config/providers.yaml
 cat config/model-mappings.yaml
 ```
 
+## 📚 Documentation
+
+**Quick Navigation:**
+- **[📖 Documentation Index](DOCUMENTATION-INDEX.md)** - Master navigation guide for all documentation
+- **[⚡ Configuration Quick Reference](CONFIGURATION-QUICK-REFERENCE.md)** - Fast lookup for common tasks
+- **[🔌 API Reference](docs/API-REFERENCE.md)** - Complete API documentation with examples
+- **[🏗️ Architecture Guide](docs/architecture.md)** - Detailed system architecture
+- **[🚀 Quick Start](docs/quick-start.md)** - Fastest path to using the unified backend
+
+**By Task:**
+- Adding providers → [docs/adding-providers.md](docs/adding-providers.md)
+- Troubleshooting → [docs/troubleshooting.md](docs/troubleshooting.md)
+- Monitoring → [docs/observability.md](docs/observability.md)
+- Configuration → [CONFIGURATION-QUICK-REFERENCE.md](CONFIGURATION-QUICK-REFERENCE.md)
+
+**Knowledge Base** (Serena Memories in `.serena/memories/`):
+1. [Architecture](serena/memories/01-architecture.md) - Complete system design
+2. [Provider Registry](.serena/memories/02-provider-registry.md) - All provider details
+3. [Routing Config](.serena/memories/03-routing-config.md) - Routing logic
+4. [Model Mappings](.serena/memories/04-model-mappings.md) - Model selection patterns
+5. [Integration Guide](.serena/memories/05-integration-guide.md) - Usage examples
+6. [Troubleshooting Patterns](.serena/memories/06-troubleshooting-patterns.md) - Common issues
+7. [Operational Runbooks](.serena/memories/07-operational-runbooks.md) - Step-by-step procedures
+8. [Testing Patterns](.serena/memories/08-testing-patterns.md) - Test strategies
+
 ## Project Structure
 
 ```
@@ -129,8 +154,7 @@ ai-backend-unified/
 ## Component Projects
 
 This coordination project references:
-- **OpenWebUI**: `/home/miko/LAB/dev/openwebui/` - Gateway + Ollama + llama.cpp
-- **CrushVLLM**: `/home/miko/LAB/dev/CRUSHVLLM/` - vLLM inference engine
+- **OpenWebUI**: `/home/miko/LAB/dev/openwebui/` - Gateway + Ollama + llama.cpp + vLLM
 - **Model switch script**: `scripts/vllm-model-switch.sh` (binds vLLM to localhost with doc-tuned batching limits)
 
 ## Key Concepts

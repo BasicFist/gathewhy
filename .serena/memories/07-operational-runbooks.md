@@ -124,8 +124,9 @@ systemctl --user restart litellm.service
 
 **Step 1: Update vLLM server**
 ```bash
-cd ../CRUSHVLLM
-./crush model load huggingface/model-path
+# Update vLLM systemd service with new model path
+systemctl --user edit vllm-qwen.service
+# Or use vllm-model-switch.sh script if available
 ```
 
 **Step 2: Follow same config steps as Ollama** (steps 3-5)

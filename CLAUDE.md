@@ -394,7 +394,6 @@ git commit --no-verify
 ## Related Projects
 
 - **OpenWebUI** (`../openwebui/`): Contains actual LiteLLM server, Ollama integration, llama.cpp backends
-- **CrushVLLM** (`../CRUSHVLLM/`): vLLM inference engine with MCP integration
 
 ## Important Notes
 

@@ -42,13 +42,22 @@ llama_cpp_native:
   description: "llama.cpp native C++ server"
   health_check: "curl -f http://localhost:8080/v1/models"
 
-vllm:
+vllm_qwen:
   port: 8001
   protocol: http
   required: false
-  service: null  # Launched via venv
-  description: "vLLM high-throughput inference engine"
+  service: vllm-qwen.service
+  description: "vLLM Qwen Coder model (AWQ-quantized, 7B)"
   health_check: "curl -f http://localhost:8001/v1/models"
+
+vllm_dolphin:
+  port: 8002
+  protocol: http
+  required: false
+  service: vllm-dolphin.service
+  description: "vLLM Dolphin Mistral model (AWQ-quantized, 7B) - disabled, use vllm-model-switch.sh"
+  health_check: "curl -f http://localhost:8002/v1/models"
+  notes: "vLLM runs single instance - only one vLLM service active at a time"
 
 # ============================================================================
 # OPENWEBUI ECOSYSTEM
@@ -133,7 +142,7 @@ redis:
 reserved:
   # Reserve ports for future expansion
   embedding_service:
-    port: 8002
+    port: 8004
     description: "Future: Dedicated embedding service (sentence-transformers)"
 
   ab_testing_service:
@@ -159,8 +168,8 @@ ranges:
 # ============================================================================
 
 metadata:
-  version: "1.0"
-  last_updated: "2025-10-21"
-  total_ports_allocated: 13
+  version: "1.1"
+  last_updated: "2025-10-30"
+  total_ports_allocated: 14  # Added vllm_dolphin (disabled but documented)
   total_ports_reserved: 3
   conflict_check_command: "./scripts/check-port-conflicts.sh"

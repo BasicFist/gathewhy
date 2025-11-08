@@ -48,53 +48,6 @@ providers:
       - Context window up to 8192 tokens
       - Parallel requests (4 concurrent)
       - OpenAI-compatible API
-    models:
-      - name: Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
-        size: "8B"
-        quantization: Q4_K_M
-        context_length: 131072
-        specialty: general_chat
-        model_path: /home/miko/LAB/models/gguf/library/Meta-Llama-3.1-8B-Instruct-Q4_K_M/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
-        description: "Default Meta Llama 3.1 8B Instruct model served via llama.cpp Python"
-      - name: Mistral-Nemo-Instruct-2407.Q4_K_M.gguf
-        size: "12B"
-        quantization: Q4_K_M
-        context_length: 131072
-        specialty: reasoning
-        model_path: /home/miko/LAB/models/gguf/library/Mistral-Nemo-Instruct-2407-Q4_K_M/Mistral-Nemo-Instruct-2407.Q4_K_M.gguf
-        description: "Mistral Nemo Instruct 12B (2407) tuned for analytical reasoning with extended context"
-        recommended_gpu_layers: 60
-      - name: DeepSeek-Coder-V2-Lite-Instruct.Q4_K_M.gguf
-        size: "16B"
-        quantization: Q4_K_M
-        context_length: 16384
-        specialty: code_generation
-        model_path: /home/miko/LAB/models/gguf/library/DeepSeek-Coder-V2-Lite-Q4_K_M/DeepSeek-Coder-V2-Lite-Instruct.Q4_K_M.gguf
-        description: "DeepSeek Coder v2 Lite for deterministic code completion"
-        recommended_gpu_layers: 60
-      - name: openhermes-2.5-mistral-7b.Q5_K_M.gguf
-        size: "7B"
-        quantization: Q5_K_M
-        context_length: 8192
-        specialty: creative_writing
-        model_path: /home/miko/LAB/models/gguf/library/OpenHermes-2.5-Mistral-Q5_K_M/openhermes-2.5-mistral-7b.Q5_K_M.gguf
-        description: "OpenHermes 2.5 (Mistral) for rich conversational and creative responses"
-      - name: phi-3-medium-4k-instruct.Q4_K_M.gguf
-        size: "14B"
-        quantization: Q4_K_M
-        context_length: 4096
-        specialty: knowledge_retrieval
-        model_path: /home/miko/LAB/models/gguf/library/Phi-3-medium-4k-instruct-Q4_K_M/phi-3-medium-4k-instruct.Q4_K_M.gguf
-        description: "Phi-3 Medium 4K Instruct for factual answering with low latency"
-        recommended_gpu_layers: 48
-      - name: mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
-        size: "46B"
-        quantization: Q4_K_M
-        context_length: 32768
-        specialty: advanced_reasoning
-        model_path: /home/miko/LAB/models/gguf/library/Mixtral-8x7B-Instruct-v0.1-Q4_K_M/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
-        description: "Mixtral 8x7B MoE for heavier reasoning workloads (requires partial GPU offload)"
-        recommended_gpu_layers: 40
     configuration:
       n_gpu_layers: -1  # Full GPU offload
       n_ctx: 8192
@@ -107,8 +60,8 @@ providers:
   llama_cpp_native:
     type: llama_cpp
     base_url: http://127.0.0.1:8080
-    status: disabled
-    description: llama.cpp native C++ server (maximum performance) - NOT CURRENTLY DEPLOYED
+    status: active
+    description: llama.cpp native C++ server (maximum performance)
     features:
       - Pure C/C++ implementation
       - No Python overhead
@@ -149,7 +102,7 @@ providers:
   vllm-dolphin:
     type: vllm
     base_url: http://127.0.0.1:8002
-    status: active
+    status: disabled  # vLLM runs single instance - use vllm-model-switch.sh to enable
     description: vLLM high-throughput inference with AWQ quantization (Dolphin model)
     features:
       - Continuous batching
@@ -175,11 +128,11 @@ providers:
 
   ollama_cloud:
     type: ollama
-    base_url: https://ollama.com/v1
+    base_url: https://ollama.com
     status: active
     description: Ollama Cloud API for large models without local GPU
     requires_api_key: true
-    env_var: OLLAMA_CLOUD_API_KEY
+    env_var: OLLAMA_API_KEY
     features:
       - Cloud-hosted large models (no local GPU required)
       - Data-center-grade hardware
@@ -206,6 +159,10 @@ providers:
         specialty: general_chat
     health_endpoint: /api/tags
     docs: https://docs.ollama.com/cloud
+    rate_limits:
+      hourly: true
+      daily: true
+      details: "Free preview with generous limits"
 
   # ============================================================================
   # TEMPLATE PROVIDERS (Disabled, for reference)
@@ -256,13 +213,15 @@ providers:
 # ============================================================================
 
 metadata:
-  version: "1.2"
-  last_updated: "2025-11-04"
-  total_providers: 5  # ollama, llama_cpp_python, llama_cpp_native, vllm-qwen, vllm-dolphin
-  total_models_available: 17  # 3 Ollama + 6 llama.cpp + 2 vLLM + 6 Ollama Cloud
+  version: "1.4"
+  last_updated: "2025-10-30"
+  total_providers: 5  # ollama, llama_cpp_python, llama_cpp_native, vllm-qwen (active), ollama_cloud
+  total_models_available: 11  # 3 Ollama + 1 vLLM + 1 llama.cpp + 6 Ollama Cloud
+  notes: "vllm-dolphin disabled - vLLM runs single instance on port 8001"
 
   provider_types:
     - ollama: Simple local server
+    - ollama_cloud: Managed cloud API (Ollama)
     - llama_cpp: High-performance C++ inference
     - vllm: Production-grade batched inference
     - openai: Cloud API providers
@@ -283,6 +242,11 @@ metadata:
       best_for: High concurrency, production workloads
       performance: Very High (batched)
       resource_usage: High (requires GPU)
+
+    ollama_cloud:
+      best_for: Massive models without local GPU
+      performance: Data-center grade
+      resource_usage: Remote (billable)
 
 # ============================================================================
 # HEALTH CHECK CONFIGURATION

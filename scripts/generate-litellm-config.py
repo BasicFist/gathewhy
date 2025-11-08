@@ -704,9 +704,12 @@ class ConfigGenerator:
                 old_backup.unlink()
                 print(f"    Removed: {old_backup.name}")
 
-    def write_config(self, config: dict):
-        """Write configuration to file"""
-        print(f"\n✍️  Writing configuration to {OUTPUT_FILE.relative_to(PROJECT_ROOT)}...")
+    def write_config(self, config: dict, temp_file: Path | None = None):
+        """Write configuration to file (optionally to temp file for validation)"""
+        target_file = temp_file if temp_file else OUTPUT_FILE
+
+        if not temp_file:
+            print(f"\n✍️  Writing configuration to {OUTPUT_FILE.relative_to(PROJECT_ROOT)}...")
 
         # Custom YAML representer for cleaner output
         def represent_none(self, _):
@@ -715,7 +718,7 @@ class ConfigGenerator:
         yaml.add_representer(type(None), represent_none)
 
         # Write configuration
-        with open(OUTPUT_FILE, "w") as f:
+        with open(target_file, "w") as f:
             # Write header comments manually for better formatting
             f.write(
                 "# ============================================================================\n"
@@ -751,7 +754,8 @@ class ConfigGenerator:
                 width=120,
             )
 
-        print("  ✓ Configuration written successfully")
+        if not temp_file:
+            print("  ✓ Configuration written successfully")
 
     def save_version(self):
         """Save version information"""
@@ -768,9 +772,12 @@ class ConfigGenerator:
 
         print(f"\n📌 Version saved: {self.version}")
 
-    def validate(self):
+    def validate(self, config_file: Path | None = None):
         """Validate generated configuration"""
-        print("\n✅ Validating generated configuration...")
+        target_file = config_file if config_file else OUTPUT_FILE
+
+        if not config_file:
+            print("\n✅ Validating generated configuration...")
 
         try:
             import runpy
@@ -783,40 +790,88 @@ class ConfigGenerator:
             if validate_all_configs is None:
                 raise ImportError("validate_all_configs not found in validate-config-schema.py")
 
-            validate_all_configs(PROVIDERS_FILE, MAPPINGS_FILE, OUTPUT_FILE)
+            validate_all_configs(PROVIDERS_FILE, MAPPINGS_FILE, target_file)
 
-            print("  ✓ Validation passed")
+            if not config_file:
+                print("  ✓ Validation passed")
             return True
         except Exception as e:
-            print(f"  ❌ Validation failed: {e}")
+            if not config_file:
+                print(f"  ❌ Validation failed: {e}")
+            return False
+
+    def rollback_from_latest_backup(self):
+        """Rollback to most recent backup"""
+        if not BACKUP_DIR.exists():
+            print("  ❌ No backup directory found - cannot rollback")
+            return False
+
+        backups = sorted(
+            BACKUP_DIR.glob("litellm-unified.yaml.*"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
+
+        if not backups:
+            print("  ❌ No backups available for rollback")
+            return False
+
+        latest_backup = backups[0]
+        print(f"  Rolling back to: {latest_backup.name}")
+
+        try:
+            shutil.copy2(latest_backup, OUTPUT_FILE)
+            print("  ✓ Rollback successful")
+            return True
+        except Exception as e:
+            print(f"  ❌ Rollback failed: {e}")
             return False
 
     def generate(self):
-        """Main generation workflow"""
+        """Main generation workflow with atomic validation"""
         print("=" * 80)
         print("LiteLLM Configuration Generator")
         print("=" * 80)
 
-        # Load sources
-        self.load_sources()
+        temp_file = None
+        try:
+            # Load sources
+            self.load_sources()
 
-        # Generate version
-        self.version = self.generate_version()
+            # Generate version
+            self.version = self.generate_version()
 
-        # Backup existing
-        self.backup_existing()
+            # Backup existing
+            self.backup_existing()
 
-        # Build configuration
-        config = self.build_config()
+            # Build configuration
+            config = self.build_config()
 
-        # Write configuration
-        self.write_config(config)
+            # Write to temporary file first
+            temp_file = OUTPUT_FILE.parent / f".{OUTPUT_FILE.name}.tmp"
+            print("\n📝 Writing to temporary file for validation...")
+            self.write_config(config, temp_file)
 
-        # Save version
-        self.save_version()
+            # Validate temporary file BEFORE writing to production
+            print("\n✅ Validating configuration before deployment...")
+            if not self.validate(temp_file):
+                print("\n" + "=" * 80)
+                print("❌ Configuration validation failed")
+                print("=" * 80)
+                print("\nConfiguration was NOT updated (invalid config detected)")
+                print("Previous configuration remains active")
+                if temp_file.exists():
+                    temp_file.unlink()
+                return False
 
-        # Validate
-        if self.validate():
+            # Validation passed - atomically replace the file
+            print("\n✍️  Deploying validated configuration...")
+            shutil.move(str(temp_file), str(OUTPUT_FILE))
+            print("  ✓ Configuration deployed successfully")
+
+            # Save version
+            self.save_version()
+
             print("\n" + "=" * 80)
             print("✅ Configuration generated successfully!")
             print("=" * 80)
@@ -829,11 +884,23 @@ class ConfigGenerator:
             print("  3. Ensure service is provisioned: ./runtime/scripts/run_litellm.sh")
             print("  4. Restart: systemctl --user restart litellm.service")
             return True
-        print("\n" + "=" * 80)
-        print("❌ Configuration generation failed validation")
-        print("=" * 80)
-        print("\nPlease fix validation errors and try again")
-        return False
+
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Generation cancelled by user")
+            if temp_file and temp_file.exists():
+                temp_file.unlink()
+            raise
+
+        except Exception as e:
+            print(f"\n❌ Error during generation: {e}")
+            if temp_file and temp_file.exists():
+                temp_file.unlink()
+            print("\n🔄 Generation failed - attempting rollback...")
+            if self.rollback_from_latest_backup():
+                print("  ✓ Rolled back to previous configuration")
+            else:
+                print("  ⚠️  Rollback failed - manual intervention may be required")
+            return False
 
 
 def list_backups():

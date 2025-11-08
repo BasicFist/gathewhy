@@ -1,0 +1,187 @@
+version: '3.8'
+
+# Docker Compose for Integration Tests
+# Used by CI/CD to run tests with real provider services
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   pytest -m integration
+#   docker compose -f docker-compose.test.yml down
+
+services:
+  # Redis Cache - Required for LiteLLM caching tests
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - test-network
+
+  # Ollama - LLM inference server (lightweight models for testing)
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - test-network
+
+  # Mock vLLM - Lightweight OpenAI-compatible server for testing
+  # Uses a small model to minimize CI resource usage
+  mock-vllm:
+    image: python:3.11-slim
+    ports:
+      - "8001:8001"
+    command: >
+      bash -c "
+        pip install fastapi uvicorn pydantic &&
+        cat > /tmp/mock_vllm.py << 'EOF'
+      from fastapi import FastAPI
+      from pydantic import BaseModel
+
+      app = FastAPI()
+
+      class CompletionRequest(BaseModel):
+          model: str
+          prompt: str
+          max_tokens: int = 100
+
+      class ChatMessage(BaseModel):
+          role: str
+          content: str
+
+      class ChatCompletionRequest(BaseModel):
+          model: str
+          messages: list[ChatMessage]
+          max_tokens: int = 100
+
+      @app.get('/v1/models')
+      def list_models():
+          return {
+              'object': 'list',
+              'data': [
+                  {'id': 'mock-vllm-model', 'object': 'model', 'created': 1234567890}
+              ]
+          }
+
+      @app.post('/v1/completions')
+      def completions(req: CompletionRequest):
+          return {
+              'id': 'mock-completion',
+              'object': 'text_completion',
+              'created': 1234567890,
+              'model': req.model,
+              'choices': [
+                  {
+                      'text': 'Mock response from vLLM',
+                      'index': 0,
+                      'finish_reason': 'stop'
+                  }
+              ]
+          }
+
+      @app.post('/v1/chat/completions')
+      def chat_completions(req: ChatCompletionRequest):
+          return {
+              'id': 'mock-chat-completion',
+              'object': 'chat.completion',
+              'created': 1234567890,
+              'model': req.model,
+              'choices': [
+                  {
+                      'message': {
+                          'role': 'assistant',
+                          'content': 'Mock chat response from vLLM'
+                      },
+                      'index': 0,
+                      'finish_reason': 'stop'
+                  }
+              ]
+          }
+
+      @app.get('/health')
+      def health():
+          return {'status': 'healthy'}
+      EOF
+        uvicorn mock_vllm:app --host 0.0.0.0 --port 8001
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - test-network
+
+  # Mock llama.cpp - Simple HTTP server for testing
+  mock-llamacpp:
+    image: python:3.11-slim
+    ports:
+      - "8000:8000"
+    command: >
+      bash -c "
+        pip install fastapi uvicorn &&
+        cat > /tmp/mock_llamacpp.py << 'EOF'
+      from fastapi import FastAPI
+
+      app = FastAPI()
+
+      @app.get('/v1/models')
+      def list_models():
+          return {
+              'object': 'list',
+              'data': [
+                  {'id': 'llama-2-7b', 'object': 'model'}
+              ]
+          }
+
+      @app.post('/v1/chat/completions')
+      def chat_completions():
+          return {
+              'id': 'mock-llamacpp',
+              'object': 'chat.completion',
+              'choices': [
+                  {
+                      'message': {
+                          'role': 'assistant',
+                          'content': 'Mock response from llama.cpp'
+                      }
+                  }
+              ]
+          }
+
+      @app.get('/health')
+      def health():
+          return {'status': 'ok'}
+      EOF
+        uvicorn mock_llamacpp:app --host 0.0.0.0 --port 8000
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - test-network
+
+volumes:
+  ollama-data:
+    driver: local
+
+networks:
+  test-network:
+    driver: bridge

@@ -1,0 +1,171 @@
+{
+  "dashboard": {
+    "title": "AI Backend - Overview",
+    "tags": ["ai-backend", "overview"],
+    "timezone": "browser",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "5s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total Requests",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(litellm_requests_total[5m]))",
+            "legendFormat": "Requests/sec"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Request Success Rate",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "sum(rate(litellm_requests_total{status=\"success\"}[5m])) / sum(rate(litellm_requests_total[5m])) * 100",
+            "legendFormat": "Success %"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 90, "color": "yellow"},
+                {"value": 95, "color": "green"}
+              ]
+            },
+            "min": 0,
+            "max": 100,
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Active Providers",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(up{job=\"ai-providers\"} == 1)",
+            "legendFormat": "Active"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "P95 Latency",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 2, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Requests by Provider",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(litellm_requests_total[5m])",
+            "legendFormat": "{{provider}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 6,
+        "title": "Error Rate by Provider",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(litellm_requests_total{status=\"error\"}[5m])",
+            "legendFormat": "{{provider}} - errors"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "custom": {"fillOpacity": 10}
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Cache Hit Rate",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "rate(redis_cache_hits[5m]) / (rate(redis_cache_hits[5m]) + rate(redis_cache_misses[5m])) * 100",
+            "legendFormat": "Hit Rate"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 12},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 50, "color": "yellow"},
+                {"value": 80, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Model Usage Distribution",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (model) (rate(litellm_requests_total[5m]))",
+            "legendFormat": "{{model}}"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 8, "x": 8, "y": 12}
+      },
+      {
+        "id": 9,
+        "title": "Provider Health Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "up{job=\"ai-providers\"}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "gridPos": {"h": 6, "w": 8, "x": 16, "y": 12}
+      }
+    ]
+  }
+}

@@ -40,6 +40,25 @@ cat config/model-mappings.yaml
 # View generated LiteLLM gateway configuration (do NOT edit directly)
 cat config/litellm-unified.yaml  # AUTO-GENERATED marker at top
 
+# ===== Unified Configuration Manager (NEW) =====
+# Single tool to manage all configuration operations
+
+# Show configuration status (providers, routing, models, version)
+python3 scripts/config-manager.py status
+
+# Validate all configuration layers
+python3 scripts/config-manager.py validate
+
+# Generate LiteLLM config (with pre-validation)
+python3 scripts/config-manager.py generate
+
+# Migrate to latest schema version
+python3 scripts/config-manager.py migrate
+
+# Test routing for specific model
+python3 scripts/config-manager.py test-routing --model llama3.1:8b
+
+# ===== Legacy Commands (still work) =====
 # Regenerate LiteLLM config after updating providers or model mappings
 python3 scripts/generate-litellm-config.py
 ```
@@ -100,6 +119,10 @@ pytest -n auto
 
 3. **Generate LiteLLM config**:
    ```bash
+   # Using unified config manager (recommended)
+   python3 scripts/config-manager.py generate
+
+   # Or using individual commands
    python3 scripts/generate-litellm-config.py
    python3 scripts/validate-config-schema.py  # Validate schemas
    python3 scripts/validate-config-consistency.py  # Check consistency
@@ -221,6 +244,7 @@ ai-backend-unified/
 │   ├── backups/                # Auto-created backups on reload
 │   └── schemas/                # Pydantic validation models
 ├── scripts/                    # Automation and utilities
+│   ├── config-manager.py              # Unified config management (NEW)
 │   ├── generate-litellm-config.py     # Generate config from YAML sources
 │   ├── validate-config-schema.py      # Pydantic validation
 │   ├── validate-config-consistency.py # Cross-config consistency check
@@ -229,11 +253,13 @@ ai-backend-unified/
 │   ├── check-port-conflicts.sh        # Port availability check
 │   ├── monitor-redis-cache.sh         # Cache monitoring
 │   ├── reload-litellm-config.sh       # Safe config hot-reload
-│   ├── check-port-conflicts.sh        # Port conflict detection
+│   ├── migrations/                    # Config migration framework
+│   │   └── __init__.py                # Migration infrastructure
 │   ├── debugging/                     # Request analysis tools
 │   ├── profiling/                     # Performance analysis tools
 │   ├── loadtesting/                   # Load test suites
 │   ├── manage-providers.py            # Provider management utility
+│   ├── migrate-config.py              # Configuration migration CLI
 │   ├── ptui_dashboard.py              # TUI monitoring dashboard
 │   └── monitor*                       # Various monitoring scripts
 ├── tests/                      # Comprehensive test suite (75+ tests)
@@ -248,14 +274,32 @@ ai-backend-unified/
 │   ├── docker-compose.yml      # Prometheus + Grafana
 │   ├── prometheus.yml          # Metrics scraping config
 │   └── grafana/                # 5 pre-built dashboards
-├── docs/                       # Documentation
+├── docs/                       # Documentation (organized by category)
 │   ├── architecture.md         # System design
 │   ├── adding-providers.md     # Provider integration guide
 │   ├── consuming-api.md        # API usage for LAB projects
 │   ├── observability.md        # Monitoring and debugging guide
 │   ├── troubleshooting.md      # Common issues and solutions
 │   ├── quick-start.md          # Quick start guide
-│   └── model-selection-guide.md # Choose the right model
+│   ├── model-selection-guide.md # Choose the right model
+│   ├── reference/              # Configuration reference docs
+│   │   ├── CONFIG-SCHEMA.md
+│   │   └── CONFIGURATION-QUICK-REFERENCE.md
+│   ├── operations/             # Operations guides
+│   │   ├── DEPLOYMENT.md
+│   │   └── STATUS-CURRENT.md
+│   ├── reports/                # Audit reports and status updates
+│   │   ├── CRITICAL-AUDIT-REPORT.md
+│   │   ├── FIXES-APPLIED-2025-11-08.md
+│   │   ├── PRIORITIES-IMPLEMENTATION-2025-11-08.md
+│   │   ├── PHASE-2-COMPLETION-REPORT.md
+│   │   ├── CONSOLIDATION-SUMMARY.md
+│   │   ├── LITELLM-OFFICIAL-DOCS-GAP-ANALYSIS.md
+│   │   └── STRUCTURE-CONSOLIDATION-2025-11-08.md
+│   └── archive/                # Historical documents
+│       ├── AI-DASHBOARD-PURPOSE.md
+│       ├── CONSOLIDATION-PLAN.md
+│       └── CRUSH-FIX-APPLIED.md
 ├── web-ui/                     # Web dashboard (optional UI)
 │   ├── app.py                  # Flask application
 │   └── database.py             # SQLite database
@@ -484,15 +528,42 @@ grep "llama3.1:8b" config/litellm-unified.yaml
 
 ## Documentation Structure
 
+**Root Files** (Essential navigation):
 - **README.md** - Project overview and quick start
+- **CLAUDE.md** - AI assistant instructions (this file)
+- **DOCUMENTATION-INDEX.md** - Master navigation with task-based guide
+
+**Guides** (docs/):
 - **docs/architecture.md** - System design and request flows
 - **docs/adding-providers.md** - Step-by-step provider integration guide
 - **docs/consuming-api.md** - How LAB projects use the unified endpoint
 - **docs/observability.md** - Monitoring, debugging, profiling, load testing
 - **docs/quick-start.md** - Get started in 5 minutes
 - **docs/troubleshooting.md** - Common issues and solutions
+
+**Reference** (docs/reference/):
+- **docs/reference/CONFIG-SCHEMA.md** - Configuration file schemas
+- **docs/reference/CONFIGURATION-QUICK-REFERENCE.md** - Quick reference guide
+
+**Operations** (docs/operations/):
+- **docs/operations/DEPLOYMENT.md** - Deployment procedures
+- **docs/operations/STATUS-CURRENT.md** - Current project status
+
+**Reports** (docs/reports/):
+- **docs/reports/CRITICAL-AUDIT-REPORT.md** - Critical audit (2025-11-08)
+- **docs/reports/FIXES-APPLIED-2025-11-08.md** - Critical fixes summary
+- **docs/reports/PRIORITIES-IMPLEMENTATION-2025-11-08.md** - Priority features
+- **docs/reports/PHASE-2-COMPLETION-REPORT.md** - Phase 2 completion
+- **docs/reports/STRUCTURE-CONSOLIDATION-2025-11-08.md** - Structure cleanup
+- **docs/reports/CONSOLIDATION-SUMMARY.md** - Consolidation summary
+- **docs/reports/LITELLM-OFFICIAL-DOCS-GAP-ANALYSIS.md** - Gap analysis
+
+**Testing & Scripts**:
 - **tests/README.md** - Testing documentation and test categories
 - **scripts/README.md** - Scripts documentation
+
+**Historical** (docs/archive/):
+- Archived documents from previous phases
 
 ## Key Concepts
 
@@ -537,6 +608,12 @@ Source files (`providers.yaml`, `model-mappings.yaml`) are edited by humans. The
 ## Quick Commands Reference
 
 ```bash
+# Configuration management (unified tool)
+python3 scripts/config-manager.py status      # Show config status
+python3 scripts/config-manager.py validate    # Validate all configs
+python3 scripts/config-manager.py generate    # Generate LiteLLM config
+python3 scripts/config-manager.py migrate     # Migrate to latest version
+
 # Validate everything
 ./scripts/validate-all-configs.sh
 
@@ -546,7 +623,8 @@ pytest
 # Add new provider
 vim config/providers.yaml
 vim config/model-mappings.yaml
-python3 scripts/generate-litellm-config.py
+python3 scripts/config-manager.py generate     # Recommended
+# OR: python3 scripts/generate-litellm-config.py  # Legacy
 ./scripts/validate-all-configs.sh
 
 # Check provider health
@@ -560,6 +638,7 @@ cd monitoring && docker compose up -d
 
 # Test model routing
 curl http://localhost:4000/v1/models | jq
+python3 scripts/config-manager.py test-routing --model llama3.1:8b
 
 # Check port conflicts
 ./scripts/check-port-conflicts.sh

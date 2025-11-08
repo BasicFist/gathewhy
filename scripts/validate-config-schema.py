@@ -80,6 +80,24 @@ class ProvidersYAML(BaseModel):
             raise ValueError('At least one provider must have status="active"')
         return self
 
+    @model_validator(mode="after")
+    def validate_vllm_single_instance(self):
+        """Ensure only one vLLM provider is active at a time (single instance constraint)"""
+        providers = self.providers
+        active_vllm = [
+            name for name, config in providers.items()
+            if config.type == "vllm" and config.status == "active"
+        ]
+
+        if len(active_vllm) > 1:
+            raise ValueError(
+                f"Only one vLLM provider can be active at a time (single instance mode). "
+                f"Found {len(active_vllm)} active vLLM providers: {', '.join(active_vllm)}. "
+                f"Please set status='disabled' for all but one vLLM provider, or use "
+                f"scripts/vllm-model-switch.sh to switch between vLLM models."
+            )
+        return self
+
 
 # ============================================================================
 # MODEL MAPPINGS CONFIGURATION MODELS

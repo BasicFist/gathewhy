@@ -1,0 +1,126 @@
+═══════════════════════════════════════════════════════════════════════════════
+  AI DASHBOARD - NEON CYBERPUNK THEME PREVIEW
+═══════════════════════════════════════════════════════════════════════════════
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  AI Backend Dashboard                                          12:34:56 PM ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+                      [DEEP BLUE-BLACK BACKGROUND #0a0e27]
+
+╔═══════════════════════════════════════════╗ ╔══════════════════════════════╗
+║ OVERVIEW PANEL                            ║ ║ GPU MONITORING               ║
+║ [CYAN BORDER #00ffff]                     ║ ║ [GREEN BORDER #00ff00]       ║
+║                                           ║ ║                              ║
+║ Services: 4/5 active                      ║ ║ Total VRAM: 15234/24576 MB   ║
+║ Average CPU: 23.5%  Average Memory: 12.3% ║ ║ Peak utilisation: 67.3%      ║
+║ Attention: vLLM                           ║ ║                              ║
+║                                           ║ ║ GPU 0: 15234/24576MB (62.0%) ║
+╚═══════════════════════════════════════════╝ ╚══════════════════════════════╝
+
+╔═══════════════════════════════════════════╗ ╔══════════════════════════════╗
+║ SERVICE TABLE                             ║ ║ DETAIL PANEL                 ║
+║ [MAGENTA BORDER #ff00ff]                  ║ ║ [GOLD BORDER #ffd700]        ║
+║                                           ║ ║                              ║
+║ Provider          Status    CPU   Memory  ║ ║ Ollama (required)            ║
+║ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ║ ║                              ║
+║ Ollama            ACTIVE    45.2% 2048MB  ║ ║ Status: ACTIVE | Resp: 23ms  ║
+║ vLLM              INACTIVE  0.0%  0MB     ║ ║ CPU: 45.2%  MEM: 2048MB      ║
+║ llama.cpp (Py)    ACTIVE    12.3% 512MB   ║ ║ VRAM: 15234MB (62.0%)        ║
+║ llama.cpp (Nat)   ACTIVE    8.1%  256MB   ║ ║                              ║
+║ LiteLLM Gateway   ACTIVE    3.2%  128MB   ║ ║ Port: 11434  Models: 7       ║
+║                                           ║ ║ PID: 12345                   ║
+║ [Selected row: CYAN cursor highlight]     ║ ║                              ║
+║                                           ║ ║ ┌ Start ┐┌ Stop ┐┌ Restart ┐ ║
+╚═══════════════════════════════════════════╝ ║ │ [GRN] ││ [RED] ││ [ORG]   │ ║
+                                               ║ └───────┘└───────┘└─────────┘ ║
+                                               ╚══════════════════════════════╝
+
+                                               ╔══════════════════════════════╗
+                                               ║ EVENT LOG                    ║
+                                               ║ [CYAN BORDER #00ffff]        ║
+                                               ║                              ║
+                                               ║ ✓ Dashboard initialized      ║
+                                               ║ ✓ Start sent to ollama       ║
+                                               ║ ✗ Snapshot failed: Timeout   ║
+                                               ║                              ║
+                                               ╚══════════════════════════════╝
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  r refresh | q quit | a toggle auto-refresh | ctrl+l clear log             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+═══════════════════════════════════════════════════════════════════════════════
+  COLOR LEGEND
+═══════════════════════════════════════════════════════════════════════════════
+
+  BORDERS:
+    ═══  Cyan (#00ffff)    - Overview Panel, Event Log
+    ═══  Magenta (#ff00ff) - Service Table
+    ═══  Green (#00ff00)   - GPU Card
+    ═══  Gold (#ffd700)    - Detail Panel
+
+  STATUS INDICATORS:
+    ACTIVE    - Neon Green (#00ff00)
+    DEGRADED  - Neon Orange (#ff6600)
+    INACTIVE  - Neon Red (#ff0044)
+
+  BACKGROUNDS:
+    Main Screen    - Deep Blue-Black (#0a0e27)
+    Panels         - Dark Blue (#1a1a2e)
+    Logs           - Darker Blue (#0f0f1f)
+    Table Rows     - Alternating (#1a1a2e / #151530)
+    Table Header   - Highlight Blue (#2a2a4e)
+
+  TEXT COLORS:
+    Primary Text   - White (#ffffff)
+    Headers        - Gold (#ffd700)
+    Status Info    - Cyan (#00ffff)
+    Resources      - Magenta (#ff00ff)
+    Success Msgs   - Neon Green (#00ff00)
+    Error Msgs     - Neon Red (#ff0044)
+
+  BUTTONS:
+    Start      - Green border and text (#00ff00)
+    Stop       - Red border and text (#ff0044)
+    Restart    - Orange border and text (#ff6600)
+    Enable     - Magenta border and text (#ff00ff)
+    Disable    - Magenta border and text (#ff00ff)
+
+    Hover states use darker backgrounds with brighter text
+
+═══════════════════════════════════════════════════════════════════════════════
+  VISUAL FEATURES
+═══════════════════════════════════════════════════════════════════════════════
+
+  ✨ Heavy borders for maximum visual impact
+  ✨ Color-coded panels for clear hierarchy
+  ✨ Dark backgrounds for high contrast with neon colors
+  ✨ Zebra striping in service table
+  ✨ Bold status indicators (green/orange/red)
+  ✨ Semantic button colors (green=safe, red=danger, orange=caution)
+  ✨ Hover effects on interactive elements
+  ✨ Color-coded event log messages
+  ✨ Bright neon text on dark backgrounds
+  ✨ Consistent cyberpunk aesthetic throughout
+
+═══════════════════════════════════════════════════════════════════════════════
+  DESIGN INSPIRATION
+═══════════════════════════════════════════════════════════════════════════════
+
+  🎬 Blade Runner (1982) - Neon-soaked cyberpunk cityscape
+  🎮 Cyberpunk 2077 (2020) - Night City's vibrant neon aesthetic
+  🎥 Tron (1982) - Glowing digital world with cyan/magenta palette
+  🌃 Synthwave/Vaporwave - Retro-futuristic color schemes
+  🏙️ Tokyo Neon Signs - Bright, eye-catching urban lighting
+
+═══════════════════════════════════════════════════════════════════════════════
+
+This ASCII preview represents the layout and color scheme of the enhanced
+AI Dashboard. Actual rendering in the terminal will use full 24-bit colors
+for maximum vibrancy and visual impact.
+
+Run the dashboard to experience the full neon cyberpunk theme:
+  python3 scripts/ai-dashboard
+
+═══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,58 @@
+model_list:
+- model_name: llama3.1:latest
+  litellm_params:
+    model: ollama/llama3.1:latest
+    api_base: http://127.0.0.1:11434
+  model_info:
+    tags:
+    - general_chat
+    - 8b
+    provider: ollama
+
+- model_name: qwen2.5-coder:7b
+  litellm_params:
+    model: ollama/qwen2.5-coder:7b
+    api_base: http://127.0.0.1:11434
+  model_info:
+    tags:
+    - code_generation
+    - 7.6b
+    provider: ollama
+
+- model_name: qwen-coder-vllm
+  litellm_params:
+    model: workspace-coder
+    api_base: http://127.0.0.1:8001/v1
+    custom_llm_provider: openai
+    stream: true
+    api_key: not-needed
+  model_info:
+    tags:
+    - code_generation
+    - 7b
+    - awq
+    provider: vllm-qwen
+    context_length: 4096
+
+litellm_settings:
+  request_timeout: 60
+  cache: true
+  cache_params:
+    type: redis
+    host: 127.0.0.1
+    port: 6379
+    ttl: 3600
+
+router_settings:
+  fallbacks:
+    - model: qwen-coder-vllm
+      fallback_models:
+        - llama3.1:latest
+        - qwen2.5-coder:7b
+    - model: llama3.1:latest
+      fallback_models:
+        - qwen2.5-coder:7b
+
+server_settings:
+  port: 4000
+  host: 0.0.0.0

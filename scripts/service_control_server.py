@@ -19,19 +19,23 @@ import sys
 from contextlib import suppress
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from importlib import util
+from importlib import machinery, util
 from pathlib import Path
 from urllib.parse import urlparse
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 AI_DASHBOARD_PATH = PROJECT_ROOT / "scripts" / "ai-dashboard"
 
-spec = util.spec_from_file_location("ai_dashboard_module", AI_DASHBOARD_PATH)
+if not AI_DASHBOARD_PATH.exists():  # pragma: no cover - defensive
+    raise ImportError(f"Unable to locate ai-dashboard module at {AI_DASHBOARD_PATH}")
+
+loader = machinery.SourceFileLoader("ai_dashboard_module", str(AI_DASHBOARD_PATH))
+spec = util.spec_from_loader(loader.name, loader)
 if spec is None or spec.loader is None:  # pragma: no cover - defensive
-    raise ImportError(f"Unable to load ai-dashboard module from {AI_DASHBOARD_PATH}")
+    raise ImportError("Unable to create module spec for ai-dashboard")
 ai_dashboard = util.module_from_spec(spec)
-sys.modules["ai_dashboard_module"] = ai_dashboard
-spec.loader.exec_module(ai_dashboard)
+sys.modules[loader.name] = ai_dashboard
+loader.exec_module(ai_dashboard)
 
 ProviderMonitor = ai_dashboard.ProviderMonitor  # type: ignore[attr-defined]
 ALLOWED_SERVICES = ai_dashboard.ALLOWED_SERVICES  # type: ignore[attr-defined]

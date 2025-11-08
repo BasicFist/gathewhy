@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - Core automation lives in `scripts/`, with validation (`validate-unified-backend.sh`), config reload (`reload-litellm-config.sh`), monitoring, and load testing helpers. Import shared bash helpers from `scripts/common.sh` when extending shell tooling.
 - Provider and routing source of truth is in `config/` (`providers.yaml`, `model-mappings.yaml`, `litellm-unified.yaml`). Keep backups in `config/backups/` intact; they are rotated by the tooling.
-- Python services, assets, and templates for the admin UI sit in `web-ui/`. Configuration for that UI lives in `web-ui/config.yaml`.
+- Python services, assets, and templates for the admin UI are now part of the Grafana monitoring stack under `monitoring/`. Configuration for monitoring lives in `monitoring/grafana/`.
 - Tests are grouped under `tests/` by pyramid level (`unit/`, `integration/`, `contract/`, `monitoring/`) and share fixtures via `tests/conftest.py`.
 - Documentation references live in `docs/`; operational dashboards and compose files are under `monitoring/`.
 
@@ -31,7 +31,7 @@
 
 ## Commit & Pull Request Guidelines
 - Follow the Conventional Commits pattern visible in history (`type(scope): short summary`), e.g., `feat(ptui): add provider dashboard bulk actions`. Scope should match top-level directories when possible.
-- PRs should describe the change, list validation commands run, and link any tracked issues. Include configuration diffs or screenshots when touching `web-ui/`.
+- PRs should describe the change, list validation commands run, and link any tracked issues. Include configuration diffs or screenshots when touching `monitoring/` or dashboard-related changes.
 - Expect reviewers to request evidence of `./scripts/validate-unified-backend.sh` and focused pytest suites; paste the command output summary in the PR body.
 
 ## Configuration & Deployment Safety

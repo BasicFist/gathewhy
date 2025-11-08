@@ -47,7 +47,6 @@ def validate_env_float(name: str, default: str, min_val: float, max_val: float) 
 
 DEFAULT_HTTP_TIMEOUT = validate_env_float("PTUI_HTTP_TIMEOUT", "10", 0.5, 120.0)
 AUTO_REFRESH_SECONDS = validate_env_float("PTUI_REFRESH_SECONDS", "5", 1.0, 60.0)
-LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
 
 
 @dataclass
@@ -160,24 +159,11 @@ def load_services_from_config() -> list[Service]:
 SERVICES: list[Service] = load_services_from_config()
 
 
-def fetch_json(
-    url: str, timeout: float, api_key: str | None = None
-) -> tuple[dict[str, Any] | None, float | None, str | None]:
-    """Fetch JSON from URL with optional authentication (synchronous).
-
-    Args:
-        url: URL to fetch
-        timeout: Request timeout in seconds
-        api_key: Optional API key for Bearer authentication
-
-    Returns:
-        Tuple of (data, latency, error_message)
-    """
+def fetch_json(url: str, timeout: float) -> tuple[dict[str, Any] | None, float | None, str | None]:
+    """Fetch JSON from URL (synchronous)."""
     start_time = time.perf_counter()
     try:
         headers = {"User-Agent": "ptui-dashboard"}
-        if api_key:
-            headers["Authorization"] = f"Bearer sk-{api_key}"
 
         request = Request(url, headers=headers)
         with urlopen(request, timeout=timeout) as response:
@@ -192,24 +178,12 @@ def fetch_json(
 
 
 async def fetch_json_async(
-    session: aiohttp.ClientSession, url: str, timeout: float, api_key: str | None = None
+    session: aiohttp.ClientSession, url: str, timeout: float
 ) -> tuple[dict[str, Any] | None, float | None, str | None]:
-    """Fetch JSON from URL with optional authentication (asynchronous).
-
-    Args:
-        session: aiohttp ClientSession
-        url: URL to fetch
-        timeout: Request timeout in seconds
-        api_key: Optional API key for Bearer authentication
-
-    Returns:
-        Tuple of (data, latency, error_message)
-    """
+    """Fetch JSON from URL (asynchronous)."""
     start_time = time.perf_counter()
     try:
         headers = {"User-Agent": "ptui-dashboard"}
-        if api_key:
-            headers["Authorization"] = f"Bearer sk-{api_key}"
 
         timeout_obj = aiohttp.ClientTimeout(total=timeout)
         async with session.get(url, headers=headers, timeout=timeout_obj) as response:
@@ -255,10 +229,8 @@ async def check_service_async(
 
 
 def get_models(timeout: float) -> dict[str, Any]:
-    """Fetch model list from LiteLLM gateway with authentication support (synchronous)."""
-    data, latency, error = fetch_json(
-        "http://localhost:4000/v1/models", timeout, api_key=LITELLM_API_KEY
-    )
+    """Fetch model list from LiteLLM gateway (synchronous)."""
+    data, latency, error = fetch_json("http://localhost:4000/v1/models", timeout)
     if not data or "data" not in data:
         return {"models": [], "error": error or "Unable to fetch model list", "latency": latency}
 
@@ -267,9 +239,9 @@ def get_models(timeout: float) -> dict[str, Any]:
 
 
 async def get_models_async(session: aiohttp.ClientSession, timeout: float) -> dict[str, Any]:
-    """Fetch model list from LiteLLM gateway with authentication support (asynchronous)."""
+    """Fetch model list from LiteLLM gateway (asynchronous)."""
     data, latency, error = await fetch_json_async(
-        session, "http://localhost:4000/v1/models", timeout, api_key=LITELLM_API_KEY
+        session, "http://localhost:4000/v1/models", timeout
     )
     if not data or "data" not in data:
         return {"models": [], "error": error or "Unable to fetch model list", "latency": latency}

@@ -226,7 +226,8 @@ check_provider_reachability() {
     local providers_down=0
 
     # LiteLLM Gateway (most critical)
-    if curl -sf http://localhost:4000/health > /dev/null 2>&1; then
+    # Use /health/liveliness endpoint which doesn't require authentication
+    if curl -sf http://localhost:4000/health/liveliness > /dev/null 2>&1; then
         log_success "  LiteLLM Gateway (4000) - responding"
         providers_healthy=$((providers_healthy + 1))
     else

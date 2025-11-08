@@ -4,6 +4,8 @@
 
 The AI Unified Backend provides a single API endpoint that routes requests to multiple LLM inference providers (Ollama, llama.cpp, vLLM), enabling LAB projects to consume AI services through a consistent OpenAI-compatible interface.
 
+> **Note**: Formerly, there was an AI-generated duplicate "gateway" directory in `ai/services/litellm-gateway/` that served the same function. This duplication has been identified and the redundant directory has been removed. This document describes the consolidated architecture with a single unified backend.
+
 ## System Architecture
 
 ```

@@ -4,12 +4,12 @@
 
 ## Executive Summary
 
-This project provides **three distinct dashboard implementations** for monitoring the AI Backend Unified infrastructure. Each dashboard targets different use cases, environments, and user preferences. This guide helps you choose the right dashboard for your needs and understand the trade-offs between them.
+This project provides **two primary dashboard implementations** for monitoring the AI Backend Unified infrastructure. Each dashboard targets different use cases, environments, and user preferences. This guide helps you choose the right dashboard for your needs and understand the trade-offs between them.
 
 **Quick Recommendation**:
 - **Local monitoring with full features**: Use **AI Dashboard** (Textual)
 - **Remote SSH sessions**: Use **PTUI Dashboard** (curses)
-- **Browser-based access**: Use **Web UI** (Gradio)
+- **Browser-based access**: Use **Grafana** (professional web monitoring)
 
 ## Dashboard Overview
 
@@ -34,91 +34,91 @@ This project provides **three distinct dashboard implementations** for monitorin
 - Universal terminal compatibility (xterm, vt100, etc.)
 - No external dependencies (uses stdlib only)
 - Minimal resource footprint (<5MB)
-- Authentication support (LITELLM_MASTER_KEY)
+- No authentication required (works on air‑gapped boxes)
 - Best for remote SSH sessions and constrained environments
 
 **Technology Stack**: Python 3.12+, curses (stdlib), urllib (stdlib)
 
-### 3. Web UI (Gradio) - `web-ui/app.py`
+### 3. Grafana Web Dashboard - `monitoring/grafana/dashboards/`
 
-**Browser-based monitoring interface** built with Gradio.
+**Professional web-based monitoring** replacing the deprecated Web UI.
 
 **Key Characteristics**:
-- Accessible from any device with a web browser
+- Professional metrics visualization with 5 pre-built dashboards
+- Historical data and trend analysis (30-day retention)
+- Alerting and notification system
 - Mobile-friendly responsive design
-- No terminal required
-- Shareable URL for team access (optional)
-- Best for non-technical users and mobile access
+- Best for long-term monitoring and stakeholder reporting
 
-**Technology Stack**: Python 3.12+, Gradio, Flask, SQLite
+**Technology Stack**: Prometheus, Grafana (Docker containers)
 
 ## Detailed Feature Comparison
 
 ### Core Functionality
 
-| Feature | AI Dashboard | PTUI Dashboard | Web UI |
-|---------|-------------|----------------|--------|
-| **Service Health Monitoring** | ✅ Full | ✅ Full | ✅ Basic |
-| **Model Discovery** | ✅ Real-time from LiteLLM | ✅ Real-time from LiteLLM | ✅ Cached list |
-| **Latency Tracking** | ✅ P50/P95/P99 | ✅ Per-request | ✅ Average only |
-| **Error Display** | ✅ Detailed with context | ✅ Error message | ✅ Status code |
-| **Auto-refresh** | ✅ 3-10s configurable | ✅ 1-60s configurable | ✅ 5s fixed |
-| **Manual Refresh** | ✅ 'r' key | ✅ 'r' key or action | ✅ Button click |
+| Feature | AI Dashboard | PTUI Dashboard | Grafana Web Dashboard |
+|---------|-------------|----------------|----------------------|
+| **Service Health Monitoring** | ✅ Full | ✅ Full | ✅ Professional dashboards |
+| **Model Discovery** | ✅ Real-time from LiteLLM | ✅ Real-time from LiteLLM | ✅ Model metrics & usage |
+| **Latency Tracking** | ✅ P50/P95/P99 | ✅ Per-request | ✅ Historical P50/P95/P99 |
+| **Error Display** | ✅ Detailed with context | ✅ Error message | ✅ Error rate metrics |
+| **Auto-refresh** | ✅ 3-10s configurable | ✅ 1-60s configurable | ✅ Real-time via WebSocket |
+| **Manual Refresh** | ✅ 'r' key | ✅ 'r' key or action | ✅ Click refresh button |
 
 ### Advanced Features
 
-| Feature | AI Dashboard | PTUI Dashboard | Web UI |
-|---------|-------------|----------------|--------|
+| Feature | AI Dashboard | PTUI Dashboard | Grafana Web Dashboard |
+|---------|-------------|----------------|-----------------------|
 | **Service Control** | ✅ Start/stop/restart | ❌ Read-only | ❌ Read-only |
-| **GPU Monitoring** | ✅ Utilization graphs | ❌ Not supported | ⚠️ Basic stats |
-| **Event Logging** | ✅ Real-time stream | ❌ Not supported | ⚠️ Basic logs |
-| **Validation Actions** | ✅ Run validation scripts | ✅ Run validation scripts | ⚠️ Limited |
-| **Health Probes** | ✅ Comprehensive | ✅ Required/optional | ✅ Basic |
-| **Historical Data** | ⚠️ In-memory only | ❌ Not supported | ✅ SQLite database |
+| **GPU Monitoring** | ✅ Utilization graphs | ❌ Not supported | ✅ GPU metrics (if exposed) |
+| **Event Logging** | ✅ Real-time stream | ❌ Not supported | ✅ Integrated with Loki |
+| **Validation Actions** | ✅ Run validation scripts | ✅ Run validation scripts | ✅ Historical analysis |
+| **Health Probes** | ✅ Comprehensive | ✅ Required/optional | ✅ Health status metrics |
+| **Historical Data** | ⚠️ In-memory only | ❌ Not supported | ✅ 30-day retention |
 
 ### User Experience
 
-| Feature | AI Dashboard | PTUI Dashboard | Web UI |
-|---------|-------------|----------------|--------|
-| **Keyboard Navigation** | ✅ Full (arrows, tab, hotkeys) | ✅ Full (arrows, tab, enter) | ⚠️ Limited |
+| Feature | AI Dashboard | PTUI Dashboard | Grafana Web Dashboard |
+|---------|-------------|----------------|------------------------|
+| **Keyboard Navigation** | ✅ Full (arrows, tab, hotkeys) | ✅ Full (arrows, tab, enter) | ✅ Browser shortcuts |
 | **Mouse Support** | ✅ Click to select | ❌ Keyboard only | ✅ Full mouse support |
-| **Visual Design** | ✅ Modern with borders/colors | ✅ Simple ASCII | ✅ Web UI components |
-| **Accessibility** | ✅ Screen reader support | ✅ Terminal compatible | ✅ ARIA labels |
-| **Learning Curve** | ⚠️ Medium (many features) | ✅ Low (simple interface) | ✅ Low (familiar web UI) |
+| **Visual Design** | ✅ Modern with borders/colors | ✅ Simple ASCII | ✅ Professional web UI |
+| **Accessibility** | ✅ Screen reader support | ✅ Terminal compatible | ✅ ARIA labels, WCAG |
+| **Learning Curve** | ⚠️ Medium (many features) | ✅ Low (simple interface) | ✅ Low to medium (professional tools) |
 
 ### Technical Requirements
 
-| Requirement | AI Dashboard | PTUI Dashboard | Web UI |
-|------------|-------------|----------------|--------|
-| **Dependencies** | Textual, rich | None (stdlib), aiohttp (optional) | Gradio, Flask, SQLite |
-| **Install Size** | ~15MB | ~0MB (stdlib) | ~50MB |
-| **Memory Usage** | 10-15MB | <5MB | 50-100MB |
+| Requirement | AI Dashboard | PTUI Dashboard | Grafana Web Dashboard |
+|-------------|-------------|----------------|------------------------|
+| **Dependencies** | Textual, rich | None (stdlib), aiohttp (optional) | Prometheus, Grafana (Docker) |
+| **Install Size** | ~15MB | ~0MB (stdlib) | ~500MB (Docker images) |
+| **Memory Usage** | 10-15MB | <5MB | High (Grafana + Prometheus) |
 | **CPU Usage** | Low-Medium | Minimal | Medium |
 | **Terminal Support** | Modern (Kitty, iTerm2, Alacritty, tmux) | Universal (xterm, vt100, ssh) | N/A (browser-based) |
-| **Network Access** | Not required | Not required | HTTP port (7860) |
-| **Python Version** | 3.8+ | 3.8+ | 3.8+ |
+| **Network Access** | Not required | Not required | HTTP/HTTPS port (3000) |
+| **Python Version** | 3.8+ | 3.8+ | N/A (separate Docker stack) |
 
 ### Configuration & Customization
 
-| Feature | AI Dashboard | PTUI Dashboard | Web UI |
-|---------|-------------|----------------|--------|
-| **Environment Variables** | ✅ AI_DASH_* | ✅ PTUI_* | ✅ WEB_UI_* |
-| **Config File Support** | ✅ providers.yaml | ✅ providers.yaml | ❌ Hardcoded |
-| **Dynamic Service Loading** | ✅ Auto-reload | ✅ Auto-reload | ❌ Restart required |
-| **Authentication** | ❌ Not required | ✅ LITELLM_MASTER_KEY | ❌ Not required |
-| **Rate Limiting** | ❌ Not applicable | ❌ Not applicable | ⚠️ Basic (Gradio) |
-| **Logging** | ✅ To file | ✅ To stderr | ✅ To file |
+| Feature | AI Dashboard | PTUI Dashboard | Grafana Web Dashboard |
+|---------|-------------|----------------|------------------------|
+| **Environment Variables** | ✅ AI_DASH_* | ✅ PTUI_* | ✅ GF_*, PROMETHEUS_* |
+| **Config File Support** | ✅ providers.yaml | ✅ providers.yaml | ✅ grafana/provisioning/ |
+| **Dynamic Service Loading** | ✅ Auto-reload | ✅ Auto-reload | ✅ Auto-discovery |
+| **Authentication** | ❌ Not required | ❌ Not required | ✅ Grafana auth system |
+| **Rate Limiting** | ❌ Not applicable | ❌ Not applicable | ✅ Prometheus query limits |
+| **Logging** | ✅ To file | ✅ To stderr | ✅ Integrated with Loki |
 
 ### Remote Access & Security
 
-| Feature | AI Dashboard | PTUI Dashboard | Web UI |
-|---------|-------------|----------------|--------|
+| Feature | AI Dashboard | PTUI Dashboard | Grafana Web Dashboard |
+|---------|-------------|----------------|------------------------|
 | **SSH Access** | ✅ Yes (modern terminals) | ✅ Yes (universal) | ❌ Not applicable |
 | **Browser Access** | ❌ Not applicable | ❌ Not applicable | ✅ Yes |
-| **Network Exposure** | ❌ Local only | ❌ Local only | ⚠️ Configurable |
-| **Authentication** | ❌ Not built-in | ✅ API key support | ❌ Not built-in |
-| **Encryption** | ✅ SSH tunnel | ✅ SSH tunnel | ⚠️ Requires HTTPS |
-| **Multi-user** | ❌ Single session | ❌ Single session | ✅ Multiple users |
+| **Network Exposure** | ❌ Local only | ❌ Local only | ⚠️ Configurable (secure setup needed) |
+| **Authentication** | ❌ Not built-in | ❌ Not built-in | ✅ Grafana user management |
+| **Encryption** | ✅ SSH tunnel | ✅ SSH tunnel | ✅ HTTPS (recommended) |
+| **Multi-user** | ❌ Single session | ❌ Single session | ✅ Multiple users with roles |
 
 ## Use Case Recommendations
 
@@ -154,13 +154,11 @@ AI_DASH_REFRESH_INTERVAL=3 python3 scripts/ai-dashboard
 1. **SSH Sessions** - Remote access over SSH with basic terminal support
 2. **Constrained Environments** - Limited resources or dependencies
 3. **Universal Compatibility** - Need to work on any terminal (xterm, vt100, etc.)
-4. **Authentication Required** - LiteLLM has master key authentication enabled
-5. **Emergency Access** - Fallback when Textual dashboard won't render
+4. **Emergency Access** - Fallback when Textual dashboard won't render
 
 **Requirements**:
 - Python 3.8+ (no external dependencies)
 - Any terminal with curses support (virtually universal)
-- Optional: LITELLM_MASTER_KEY for authenticated endpoints
 
 **Example Workflow**:
 ```bash
@@ -173,10 +171,6 @@ python3 scripts/ptui_dashboard.py
 pip install -r scripts/ptui_dashboard_requirements.txt
 python3 scripts/ptui_dashboard.py  # Dashboard shows "(async)" indicator
 
-# With authentication
-export LITELLM_MASTER_KEY="your-key"
-python3 scripts/ptui_dashboard.py
-
 # Custom configuration
 export PTUI_HTTP_TIMEOUT=15
 export PTUI_REFRESH_SECONDS=10
@@ -186,36 +180,60 @@ python3 scripts/ptui_dashboard.py
 python3 scripts/benchmark_dashboard_performance.py --compare
 ```
 
-### When to Use Web UI (Gradio)
+### When to Use Grafana Web Dashboard
 
 **Primary Scenarios**:
 1. **Browser Access** - Access from any device without terminal
-2. **Mobile Monitoring** - View status from phone/tablet
-3. **Non-Technical Users** - Share with team members unfamiliar with CLI
-4. **Public Dashboards** - Expose monitoring to wider audience (with caution)
-5. **Historical Analysis** - SQLite database stores historical data
+2. **Mobile Monitoring** - View status from phone/tablet with professional interface
+3. **Stakeholder Reporting** - Share comprehensive metrics with management
+4. **Historical Analysis** - 30-day metric retention with trend analysis
+5. **Alert & Notification Systems** - Integrated alerting for critical issues
+6. **Multi-user Access** - Role-based access for team members
 
 **Requirements**:
-- Python 3.8+ with Gradio and Flask installed
-- Network access to server (HTTP port 7860)
+- Docker/Podman for monitoring stack
+- Network access to server (HTTP port 3000 for Grafana)
 - Web browser (any modern browser, mobile-friendly)
 
 **Example Workflow**:
 ```bash
-# Install dependencies
-pip install gradio flask
+# Start monitoring stack
+cd monitoring
+docker compose up -d
 
-# Launch web UI
-python3 web-ui/app.py
+# Access dashboards
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
 
-# Access from browser
-# http://localhost:7860
+# View dashboards in browser
+# 5 pre-built dashboards for AI backend monitoring
+# Custom dashboards can be created via Grafana UI
 
 # Or with custom configuration
-export WEB_UI_PORT=8080
-export WEB_UI_SHARE=false  # Don't create public URL
-python3 web-ui/app.py
+export GF_SECURITY_ADMIN_PASSWORD=mypassword
+docker compose up -d
 ```
+
+### When to Use WTH Dashboard (Beta)
+
+**Primary Scenarios**:
+1. Responsive terminals (tmux/kitty) where sticker layouts shine
+2. Teams that prefer writing shell/Gum scripts instead of Python Textual widgets
+3. Operators who want a lightweight, modular dashboard installed alongside LiteLLM
+
+**Requirements**:
+- [WTH](https://github.com/mrusme/wth) installed locally
+- [Gum](https://github.com/charmbracelet/gum) for rich styling (optional)
+- Bash utilities: `curl`, `jq`, `systemctl`
+
+**Example Workflow**:
+```bash
+./scripts/install-wth-dashboard.sh
+export WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets
+wth run --config $HOME/.config/wth/wth.yaml
+```
+
+See [docs/wth-dashboard.md](wth-dashboard.md) for widget details and customization tips.
 
 ## Architecture Differences
 
@@ -288,41 +306,46 @@ python3 web-ui/app.py
 - Minimal required dependencies (stdlib only)
 - Optional async mode for significantly improved performance
 
-### Web UI (Gradio) Architecture
+### Grafana Web Dashboard Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
-│          Web UI (Gradio)                        │
+│        Grafana Web Dashboard                    │
 ├─────────────────────────────────────────────────┤
-│  Gradio Interface                               │
-│    ├─ Status Tab                                │
-│    │    └─ Service health table                 │
-│    ├─ Models Tab                                │
-│    │    └─ Model list with filters              │
-│    ├─ Logs Tab                                  │
-│    │    └─ Historical logs from SQLite          │
-│    └─ Settings Tab                              │
-│         └─ Configuration options                │
+│  Grafana Interface                              │
+│    ├─ Overview Dashboard                        │
+│    │    └─ Request rate, error rate, latency    │
+│    ├─ Token Usage Dashboard                     │
+│    │    └─ Cost tracking, consumption by model  │
+│    ├─ Performance Dashboard                     │
+│    │    └─ Latency comparison, P95 trends       │
+│    ├─ Provider Health Dashboard                 │
+│    │    └─ Success rates, traffic distribution  │
+│    └─ System Health Dashboard                   │
+│         └─ Redis metrics, cache hit rate        │
 ├─────────────────────────────────────────────────┤
-│  Backend (Flask + SQLite)                       │
-│    ├─ Database Layer                            │
-│    │    • event_log table                       │
-│    │    • service_status snapshots              │
-│    │    • query helpers                         │
-│    ├─ API Layer                                 │
-│    │    • /health endpoint polling              │
-│    │    • /v1/models caching                    │
-│    └─ Refresh Timer                             │
-│         • 5s interval (fixed)                   │
-│         • Stores to database                    │
+│  Backend (Prometheus + Loki)                    │
+│    ├─ Metrics Collection Layer                  │
+│    │    • Token consumption (input, output)     │
+│    │    • Request tracking                      │
+│    │    • Latency (total, TTFB, API time)       │
+│    │    • System health (Redis, self)           │
+│    ├─ Log Aggregation (Loki)                    │
+│    │    • JSON structured logs                  │
+│    │    • Request ID correlation                 │
+│    │    • Provider-specific tagging             │
+│    └─ Dashboard Provisioning                    │
+│         • 5 pre-built dashboards (JSON)         │
+│         • Auto-provisioned via configmaps       │
 └─────────────────────────────────────────────────┘
 ```
 
 **Key Design Decisions**:
-- Web-based UI for universal access
-- SQLite for historical data persistence
-- Fixed refresh interval (simplicity over configurability)
-- Gradio handles all HTTP/WebSocket complexity
+- Professional web-based UI for universal access
+- Prometheus for real-time metrics collection
+- Loki for structured log aggregation
+- Pre-built dashboards for immediate insights
+- Auto-provisioned via configuration files
 
 ## Migration Guide
 
@@ -408,8 +431,7 @@ If you're considering **consolidating to one dashboard** to reduce maintenance b
 
 **Steps**:
 1. No installation needed (stdlib only)
-2. Configure authentication (if needed): `export LITELLM_MASTER_KEY="key"`
-3. Launch: `python3 scripts/ptui_dashboard.py`
+2. Launch: `python3 scripts/ptui_dashboard.py`
 4. Feature mapping:
    - Service Overview → Same (with latency)
    - Model Catalog → Same
@@ -485,15 +507,7 @@ tput lines # Should be >= 24
 
 **Issue**: Authentication fails (401 errors on /v1/models)
 
-**Solution**:
-```bash
-# Set API key
-export LITELLM_MASTER_KEY="your-actual-key-here"
-python3 scripts/ptui_dashboard.py
-
-# Verify key is correct
-curl -H "Authorization: Bearer sk-your-actual-key-here" http://localhost:4000/v1/models
-```
+**Solution**: LiteLLM runs without auth by default. If you explicitly enabled master-key protection, verify the key matches the gateway configuration as described in `docs/security-setup.md`.
 
 **Issue**: Terminal rendering is ugly (no colors, broken lines)
 
@@ -509,59 +523,71 @@ python3 scripts/ptui_dashboard.py
 
 ### Web UI (Gradio) Issues
 
-**Issue**: Dashboard won't start (port already in use)
+**Issue**: Can't access Grafana (connection refused)
 
 **Solution**:
 ```bash
-# Check port 7860
-lsof -i :7860
+# Check if monitoring stack is running
+docker compose ps
 
-# Change port
-export WEB_UI_PORT=8080
-python3 web-ui/app.py
+# Start monitoring stack
+cd monitoring && docker compose up -d
+
+# Check port 3000
+lsof -i :3000
+
+# Access Grafana
+echo "Grafana: http://localhost:3000 (admin/admin)"
+echo "Prometheus: http://localhost:9090"
 ```
 
-**Issue**: Historical data not persisting
+**Issue**: No metrics showing in Grafana
 
 **Solution**:
 ```bash
-# Check SQLite database
-ls -lh web-ui/dashboard.db
+# Verify Prometheus is scraping endpoints
+curl http://localhost:9090/api/v1/targets
 
-# If missing or corrupted, remove and restart
-rm web-ui/dashboard.db
-python3 web-ui/app.py
+# Check if LiteLLM metrics are enabled
+cat config/litellm-unified.yaml | grep -A5 -B5 "prometheus"
+
+# Verify metrics endpoint is accessible
+curl http://localhost:4000/metrics
 ```
 
 **Issue**: Can't access from other machines (connection refused)
 
 **Solution**:
 ```bash
-# Gradio binds to localhost by default
-# Edit web-ui/app.py and add server_name parameter:
-# demo.launch(server_name="0.0.0.0", server_port=7860)
+# By default, Grafana binds to localhost only
+# Edit monitoring/docker-compose.yml to change network binding if needed
+# WARNING: This exposes monitoring to network. Use reverse proxy for security.
 
-# WARNING: This exposes dashboard to network. Use firewall rules.
+# Check current network binding
+docker inspect grafana | grep -i ipaddr
 ```
 
 ## Performance Comparison
 
-### Benchmarks (2025-11-03)
+### Benchmarks (2025-11-07)
 
 Tested on:
 - **Hardware**: Intel i7-12700K, 32GB RAM, RTX 4070
 - **Environment**: Ubuntu 22.04, Python 3.12, Kitty terminal
 - **Workload**: Monitoring 5 services, 12 models, 5-second refresh
 
-| Metric | AI Dashboard | PTUI Dashboard | Web UI |
-|--------|-------------|----------------|--------|
-| **Memory Usage (RSS)** | 14.2 MB | 4.1 MB | 87.3 MB |
-| **CPU Usage (avg)** | 1.2% | 0.4% | 2.8% |
-| **Startup Time** | 0.8s | 0.2s | 3.1s |
-| **Refresh Latency (sync)** | 120ms | 51ms | 200ms |
-| **Refresh Latency (async)** | N/A | 42ms | N/A |
+| Metric | AI Dashboard | PTUI Dashboard | Grafana Web Dashboard |
+|--------|-------------|----------------|------------------------|
+| **Memory Usage (RSS)** | 14.2 MB | 4.1 MB | High (Grafana + Prometheus) |
+| **CPU Usage (avg)** | 1.2% | 0.4% | Medium (Prometheus scraping) |
+| **Startup Time** | 0.8s | 0.2s | ~30s (Docker containers) |
+| **Refresh Latency (sync)** | 120ms | 51ms | Real-time (WebSocket) |
+| **Refresh Latency (async)** | N/A | 42ms | N/A (backend-driven) |
 | **Async Speedup** | N/A | 1.23x | N/A |
-| **Terminal Redraws/sec** | 10 fps | 5 fps | N/A |
+| **Terminal Redraws/sec** | 10 fps | 5 fps | N/A (web browser) |
+| **Historical Data** | In-memory only | None | 30-day retention |
+| **Multi-user Support** | No | No | Yes (with auth) |
+| **Alerting** | No | No | Yes (with notification channels) |
 
 **PTUI Async Performance (Nov 2025)**:
 - **SYNC mode**: 51ms avg (sequential requests, stdlib urllib)
@@ -623,14 +649,14 @@ Tested on:
 - [ ] Export logs to file or external service
 - [ ] Plugin system for custom widgets
 
-**PTUI Dashboard (curses)**:
-- [x] Configuration loading from providers.yaml (✅ Completed 2025-11-03)
-- [x] Authentication support (LITELLM_MASTER_KEY) (✅ Completed 2025-11-03)
-- [x] Input validation for environment variables (✅ Completed 2025-11-03)
-- [x] Async architecture with graceful fallback (✅ Completed 2025-11-03)
-- [ ] Basic GPU monitoring (nvidia-smi text output)
-- [ ] Mouse support (if terminal supports it)
-- [ ] Configuration file persistence
+- **PTUI Dashboard (curses)**:
+  - [x] Configuration loading from providers.yaml (✅ Completed 2025-11-03)
+  - [x] Document optional LiteLLM authentication flow (✅ Completed 2025-11-03)
+  - [x] Input validation for environment variables (✅ Completed 2025-11-03)
+  - [x] Async architecture with graceful fallback (✅ Completed 2025-11-03)
+  - [ ] Basic GPU monitoring (nvidia-smi text output)
+  - [ ] Mouse support (if terminal supports it)
+  - [ ] Configuration file persistence
 
 **Web UI (Gradio)** - DEPRECATED:
 - [x] **DEPRECATED** - Announced November 3, 2025 ✅
@@ -643,7 +669,7 @@ Tested on:
 
 **Phase 1 (Q4 2025)**: Feature Parity ✅ COMPLETED
 - [x] Enhance PTUI Dashboard with config loading (✅ Done Nov 3, 2025)
-- [x] Add authentication to PTUI (✅ Done Nov 3, 2025)
+- [x] Document optional PTUI authentication (✅ Done Nov 3, 2025)
 - [x] Create comprehensive unit tests (✅ Done Nov 3, 2025)
 - [x] Create comprehensive documentation (✅ Done Nov 3, 2025)
 - [x] Dashboard comparison guide (✅ Done Nov 3, 2025)

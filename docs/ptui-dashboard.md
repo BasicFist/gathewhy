@@ -60,9 +60,6 @@ export PTUI_HTTP_TIMEOUT=15
 # Auto-refresh interval (default: 5s, range: 1-60s)
 export PTUI_REFRESH_SECONDS=10
 
-# LiteLLM API key (if authentication enabled)
-export LITELLM_MASTER_KEY=your-api-key-here
-
 # Launch with custom config
 PTUI_REFRESH_SECONDS=3 python3 scripts/ptui_dashboard.py
 ```
@@ -155,21 +152,9 @@ providers:
 
 **Fallback**: If YAML loading fails or file not found, uses hardcoded defaults.
 
-### Authentication Support
+### Connection Model
 
-Supports LiteLLM authentication via `LITELLM_MASTER_KEY`:
-
-```bash
-# Read from environment
-export LITELLM_MASTER_KEY=r2nnYAVIsE5DXPMmYLzKpRnu_OsS-zwu0cl8QTx8E8g
-
-# Or from direnv
-# (automatically loaded in LAB environment)
-```
-
-Dashboard passes `Authorization: Bearer sk-{key}` header to authenticated endpoints.
-
-**Note**: Uses `/health/liveliness` endpoint for LiteLLM which doesn't require auth.
+The PTUI dashboard assumes the local LiteLLM gateway is open on the loopback interface and does not require authentication headers. This keeps the CLI frictionless for air-gapped labs and local developer laptops. If you later enable LiteLLM's optional master-key security (see `docs/security-setup.md`), use the Textual dashboard or API clients that support Bearer tokens until PTUI gains pluggable auth hooks.
 
 ### Terminal Compatibility
 
@@ -316,12 +301,9 @@ nc -zv 127.0.0.1 4000   # Test LiteLLM port
 
 **Check 4**: Authentication issues
 ```bash
-# If LiteLLM shows errors, check API key
-echo $LITELLM_MASTER_KEY
-
-# Test with key
-curl -H "Authorization: Bearer sk-$LITELLM_MASTER_KEY" \
-  http://localhost:4000/v1/models
+# PTUI expects LiteLLM to run without auth.
+# If you've enabled a master key, use curl to test manually or switch to the Textual dashboard.
+curl http://localhost:4000/v1/models
 ```
 
 ### Auto-Refresh Not Working
@@ -364,10 +346,10 @@ systemctl --user status litellm.service
 curl http://localhost:4000/v1/models | jq '.data[] | .id'
 ```
 
-**Cause 3**: Authentication required but key missing
+**Cause 3**: LiteLLM secured with master key
 ```bash
-export LITELLM_MASTER_KEY=your-key-here
-python3 scripts/ptui_dashboard.py
+# Switch to the Textual dashboard or use curl with the correct Bearer token as
+# described in docs/security-setup.md. PTUI currently targets open gateways.
 ```
 
 ## Architecture
@@ -379,8 +361,7 @@ ptui_dashboard.py (720 lines)
 ├── Configuration (39 lines)
 │   ├── validate_env_float()       # Input validation
 │   ├── DEFAULT_HTTP_TIMEOUT
-│   ├── AUTO_REFRESH_SECONDS
-│   └── LITELLM_API_KEY
+│   └── AUTO_REFRESH_SECONDS
 │
 ├── Data Models (3 dataclasses)
 │   ├── Service                    # Service definition
@@ -392,7 +373,7 @@ ptui_dashboard.py (720 lines)
 │
 ├── Utilities (5 functions)
 │   ├── safe_addstr()              # Safe terminal write
-│   ├── fetch_json()               # HTTP with auth
+│   ├── fetch_json()               # HTTP helper
 │   ├── check_service()            # Health check
 │   ├── get_models()               # Fetch model list
 │   └── format_latency()           # Format timing
@@ -569,10 +550,7 @@ All services hardcoded/loaded from config point to localhost:
 
 ### Authentication
 
-Supports Bearer token authentication:
-- ✅ Reads `LITELLM_MASTER_KEY` from environment
-- ✅ Passes in `Authorization` header
-- ✅ Uses auth-free endpoints where available (`/health/liveliness`)
+The PTUI dashboard expects LiteLLM to be exposed without authentication. Securing the gateway via master keys is documented separately in `docs/security-setup.md`; once enabled, use the Textual dashboard or API scripts that attach credentials.
 
 ### Input Validation
 

@@ -48,9 +48,9 @@ class TestDashboardSyntax:
             timeout=10,
         )
 
-        assert compile_result.returncode == 0, (
-            f"Dashboard script has syntax errors:\n{compile_result.stderr}"
-        )
+        assert (
+            compile_result.returncode == 0
+        ), f"Dashboard script has syntax errors:\n{compile_result.stderr}"
 
 
 class TestDashboardDocumentation:
@@ -81,15 +81,16 @@ class TestDashboardDocumentation:
         for section in required_sections:
             assert section in content, f"Missing section: {section}"
 
-    def test_docs_mentions_authentication(self):
-        """Verify documentation covers authentication."""
+    def test_docs_mentions_connection_model(self):
+        """Verify documentation explains the authentication model."""
         docs_path = Path(__file__).parent.parent.parent / "docs" / "ptui-dashboard.md"
 
         with open(docs_path) as f:
             content = f.read()
 
-        assert "LITELLM_MASTER_KEY" in content, "Docs should mention authentication"
-        assert "authentication" in content.lower(), "Docs should cover authentication"
+        lowered = content.lower()
+        assert "connection model" in lowered, "Docs should describe connection model"
+        assert "does not require authentication" in lowered, "Docs should state auth is optional"
 
 
 class TestEnvironmentValidation:
@@ -227,7 +228,7 @@ class TestConfigLoading:
 
 
 class TestFetchJSON:
-    """Test JSON fetching with optional authentication."""
+    """Test JSON fetching from LiteLLM."""
 
     def test_fetch_json_success_no_auth(self, ptui_module):
         """Test successful JSON fetch without authentication."""
@@ -244,8 +245,8 @@ class TestFetchJSON:
         assert latency >= 0
         assert error is None
 
-    def test_fetch_json_success_with_auth(self, ptui_module):
-        """Test successful JSON fetch with authentication."""
+    def test_fetch_json_sets_user_agent_only(self, ptui_module):
+        """Test JSON fetch uses a static User-Agent without auth headers."""
         mock_response = Mock()
         mock_response.read.return_value = b'{"models": []}'
         mock_response.__enter__ = Mock(return_value=mock_response)
@@ -254,15 +255,13 @@ class TestFetchJSON:
         with patch("ptui_dashboard.urlopen", return_value=mock_response):
             with patch("ptui_dashboard.Request") as mock_request:
                 data, latency, error = ptui_module.fetch_json(
-                    "http://localhost:4000/v1/models", 10.0, api_key="test-key-123"
+                    "http://localhost:4000/v1/models", 10.0
                 )
 
-                # Verify Authorization header was added
                 call_args = mock_request.call_args
                 assert call_args is not None
                 headers = call_args[1]["headers"]
-                assert "Authorization" in headers
-                assert headers["Authorization"] == "Bearer sk-test-key-123"
+                assert headers == {"User-Agent": "ptui-dashboard"}
 
         assert data == {"models": []}
         assert error is None
@@ -341,19 +340,14 @@ class TestModelFetching:
         assert result["error"] is None
         assert result["latency"] == 0.2
 
-    def test_get_models_authentication(self, ptui_module):
-        """Test model fetching uses authentication."""
+    def test_get_models_calls_gateway_without_auth(self, ptui_module):
+        """Test model fetching hits LiteLLM without auth headers."""
         mock_data = {"data": [{"id": "model1"}]}
 
-        with (
-            patch("ptui_dashboard.LITELLM_API_KEY", "test-key"),
-            patch("ptui_dashboard.fetch_json", return_value=(mock_data, 0.1, None)) as mock_fetch,
-        ):
+        with patch("ptui_dashboard.fetch_json", return_value=(mock_data, 0.1, None)) as mock_fetch:
             ptui_module.get_models(10.0)
 
-            # Verify api_key was passed
-            call_args = mock_fetch.call_args
-            assert call_args[1]["api_key"] == "test-key"
+            mock_fetch.assert_called_once_with("http://localhost:4000/v1/models", 10.0)
 
     def test_get_models_error(self, ptui_module):
         """Test model fetching handles errors."""

@@ -1,0 +1,148 @@
+{
+  "dashboard": {
+    "title": "AI Backend - Provider Performance",
+    "tags": ["ai-backend", "performance", "providers"],
+    "timezone": "browser",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Latency Comparison (P50, P95, P99)",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(litellm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{provider}} - P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{provider}} - P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(litellm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{provider}} - P99"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {"drawStyle": "line", "lineWidth": 2}
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Throughput by Provider",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(litellm_requests_total[1m])",
+            "legendFormat": "{{provider}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Token Usage Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(litellm_tokens_total[5m])",
+            "legendFormat": "{{provider}} - {{type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "tokens/s"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Ollama Performance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket{provider=\"ollama\"}[5m]))",
+            "legendFormat": "P95 Latency"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16}
+      },
+      {
+        "id": 5,
+        "title": "vLLM Performance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket{provider=~\"vllm.*\"}[5m]))",
+            "legendFormat": "P95 Latency"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "llama.cpp Performance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket{provider=~\"llamacpp.*\"}[5m]))",
+            "legendFormat": "P95 Latency"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Ollama Cloud Performance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket{provider=\"ollama_cloud\"}[5m]))",
+            "legendFormat": "P95 Latency"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Errors by Provider",
+        "type": "bargauge",
+        "targets": [
+          {
+            "expr": "sum by (provider) (rate(litellm_requests_total{status=\"error\"}[5m]))",
+            "legendFormat": "{{provider}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Fallback Activations",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(litellm_fallback_activations_total[5m])",
+            "legendFormat": "{{from_provider}} → {{to_provider}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
+      }
+    ]
+  }
+}

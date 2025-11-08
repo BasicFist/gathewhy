@@ -130,6 +130,50 @@ get_port_process() {
     fi
 }
 
+get_port_process_name() {
+    local port=$1
+
+    if command -v lsof &> /dev/null; then
+        # Extract process name from lsof output
+        lsof -i ":${port}" 2>/dev/null | tail -n +2 | awk '{print $1}' | head -1
+    else
+        echo "unknown"
+    fi
+}
+
+is_expected_service() {
+    local port=$1
+    local service_name=$2
+    local process_name=$3
+
+    # Map service names to expected process names
+    case "$service_name" in
+        litellm)
+            [[ "$process_name" =~ (python|litellm|uvicorn) ]] && return 0
+            ;;
+        ollama)
+            [[ "$process_name" =~ (ollama|ollama_lla) ]] && return 0
+            ;;
+        redis)
+            [[ "$process_name" =~ (redis|redis-ser) ]] && return 0
+            ;;
+        llamacpp_python|llamacpp_native)
+            [[ "$process_name" =~ (python|llama) ]] && return 0
+            ;;
+        vllm*)
+            [[ "$process_name" =~ (python|vllm|ray) ]] && return 0
+            ;;
+        prometheus)
+            [[ "$process_name" =~ (prometheus) ]] && return 0
+            ;;
+        grafana)
+            [[ "$process_name" =~ (grafana) ]] && return 0
+            ;;
+    esac
+
+    return 1
+}
+
 kill_port_process() {
     local port=$1
     local service_name=$2
@@ -235,17 +279,30 @@ check_ports_from_yaml() {
 
             # Check port availability
             if check_port_available "$port" "$current_service"; then
-                log_success "Port $port available - $current_service ($description)"
+                log_success "Port $port AVAILABLE - $current_service ($description)"
             else
-                log_error "Port $port IN USE - $current_service ($description)"
-                echo "  Process info:"
-                get_port_process "$port" | sed 's/^/    /'
+                # Port is in use - determine if it's expected or a conflict
+                local process_name=$(get_port_process_name "$port")
 
-                conflicts=$((conflicts + 1))
+                if is_expected_service "$port" "$current_service" "$process_name"; then
+                    # Expected service running - this is GOOD
+                    log_success "Port $port RUNNING - $current_service ($description)"
+                    echo "  ${GREEN}→${NC} Process: $process_name (expected)"
+                else
+                    # Unexpected process - this is a CONFLICT
+                    log_error "Port $port CONFLICT - $current_service ($description)"
+                    echo "  ${RED}→${NC} Process: $process_name (unexpected)"
+                    echo "  ${YELLOW}→${NC} Expected one of: litellm, ollama, redis, python, vllm"
+                    echo ""
+                    echo "  Detailed process info:"
+                    get_port_process "$port" | sed 's/^/    /'
 
-                # Offer to fix if in fix mode
-                if [[ "$FIX_MODE" == "true" ]]; then
-                    kill_port_process "$port" "$current_service"
+                    conflicts=$((conflicts + 1))
+
+                    # Offer to fix if in fix mode
+                    if [[ "$FIX_MODE" == "true" ]]; then
+                        kill_port_process "$port" "$current_service"
+                    fi
                 fi
             fi
 
@@ -258,7 +315,13 @@ check_ports_from_yaml() {
     done < "$PORTS_FILE"
 
     echo ""
-    log_info "Checked $checked ports, found $conflicts conflicts"
+    if [[ $conflicts -eq 0 ]]; then
+        log_info "Checked $checked ports - no conflicts detected"
+        log_info "All ports are either available or running expected services"
+    else
+        log_error "Checked $checked ports - found $conflicts REAL conflicts"
+        log_warning "Conflicts are unexpected processes on required ports"
+    fi
 
     return $conflicts
 }

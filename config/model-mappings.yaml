@@ -84,6 +84,80 @@ exact_matches:
     fallback: ollama
     description: "4.6B general chat model via Ollama Cloud"
 
+  # OpenAI models
+  "gpt-4o":
+    provider: openai
+    priority: primary
+    fallback: claude-3-5-sonnet-20241022
+    description: "Latest GPT-4 Omni with vision and function calling"
+
+  "gpt-4o-mini":
+    provider: openai
+    priority: primary
+    fallback: claude-3-5-haiku-20241022
+    description: "Fast, cost-effective GPT-4 mini"
+
+  "gpt-4-turbo":
+    provider: openai
+    priority: primary
+    fallback: claude-3-opus-20240229
+    description: "GPT-4 Turbo with vision"
+
+  "gpt-4":
+    provider: openai
+    priority: primary
+    fallback: claude-3-opus-20240229
+    description: "Standard GPT-4"
+
+  "gpt-3.5-turbo":
+    provider: openai
+    priority: primary
+    fallback: llama3.1:latest
+    description: "Fast, cost-effective chat model"
+
+  "o1":
+    provider: openai
+    priority: primary
+    fallback: null
+    description: "Advanced reasoning model with extended thinking"
+
+  "o1-mini":
+    provider: openai
+    priority: primary
+    fallback: qwen2.5-coder:7b
+    description: "Fast reasoning optimized for code"
+
+  # Anthropic models
+  "claude-3-5-sonnet-20241022":
+    provider: anthropic
+    priority: primary
+    fallback: gpt-4o
+    description: "Latest Claude 3.5 Sonnet with superior coding"
+
+  "claude-3-5-haiku-20241022":
+    provider: anthropic
+    priority: primary
+    fallback: gpt-4o-mini
+    description: "Fast, cost-effective Claude"
+
+  "claude-3-opus-20240229":
+    provider: anthropic
+    priority: primary
+    fallback: gpt-4-turbo
+    description: "Most capable Claude 3 model"
+
+  "claude-3-sonnet-20240229":
+    provider: anthropic
+    priority: primary
+    fallback: gpt-4
+    description: "Balanced Claude 3 model"
+
+  "claude-3-haiku-20240307":
+    provider: anthropic
+    priority: primary
+    fallback: gpt-3.5-turbo
+    description: "Fast Claude 3 model"
+
 # ============================================================================
 # PATTERN-BASED ROUTING
 # ============================================================================
@@ -121,6 +195,28 @@ patterns:
     fallback: llama_cpp_native
     description: "GGUF quantized models"
 
+  # OpenAI model patterns
+  - pattern: "^gpt-4.*"
+    provider: openai
+    fallback: anthropic
+    description: "GPT-4 family models"
+
+  - pattern: "^gpt-3\\.5.*"
+    provider: openai
+    fallback: ollama
+    description: "GPT-3.5 family models"
+
+  - pattern: "^o1.*"
+    provider: openai
+    fallback: null
+    description: "OpenAI reasoning models"
+
+  # Anthropic model patterns
+  - pattern: "^claude-3.*"
+    provider: anthropic
+    fallback: openai
+    description: "Claude 3 family models"
+
 # ============================================================================
 # CAPABILITY-BASED ROUTING
 # ============================================================================
@@ -129,35 +225,46 @@ capabilities:
   code_generation:
     description: "Models specialized for code"
     preferred_models:
-      - qwen2.5-coder:7b
+      - o1-mini  # OpenAI reasoning for code
+      - claude-3-5-sonnet-20241022  # Anthropic coding specialist
+      - qwen2.5-coder:7b  # Local option
       - qwen3-coder:480b-cloud  # Ollama Cloud
-    provider: ollama
-    routing_strategy: load_balance
+      - gpt-4o  # OpenAI general purpose
+    provider: openai
+    routing_strategy: cost_optimized
 
   analysis:
     description: "Models tuned for structured analysis and planning"
     preferred_models:
-      - qwen2.5-coder:7b
-      - llama3.1:latest
-    provider: ollama
-    routing_strategy: usage_based
+      - claude-3-5-sonnet-20241022  # Anthropic excels at analysis
+      - gpt-4o  # OpenAI multi-modal analysis
+      - claude-3-opus-20240229  # Anthropic most capable
+      - qwen2.5-coder:7b  # Local option
+      - llama3.1:latest  # Local fallback
+    provider: anthropic
+    routing_strategy: quality_first
 
   reasoning:
     description: "Models optimized for multi-step reasoning and problem solving"
     preferred_models:
-      - llama3.1:latest
+      - o1  # OpenAI advanced reasoning
+      - claude-3-opus-20240229  # Anthropic reasoning specialist
       - deepseek-v3.1:671b-cloud  # Ollama Cloud for advanced reasoning
-      - qwen-coder-vllm
-    provider: ollama
+      - gpt-4-turbo  # OpenAI reasoning
+      - llama3.1:latest  # Local fallback
+      - qwen-coder-vllm  # Local high-throughput
+    provider: openai
     routing_strategy: direct
 
   creative_writing:
     description: "Storytelling and roleplay optimized models"
     preferred_models:
-      - mythomax-l2-13b-q5_k_m
-      - llama3.1:latest
-    provider: ollama
-    routing_strategy: usage_based
+      - claude-3-opus-20240229  # Anthropic excels at creative writing
+      - gpt-4o  # OpenAI creative capabilities
+      - mythomax-l2-13b-q5_k_m  # Local creative model
+      - llama3.1:latest  # Local fallback
+    provider: anthropic
+    routing_strategy: quality_first
 
   # uncensored:  # Disabled: vLLM runs single instance
   #   description: "Uncensored models without content filters"
@@ -169,10 +276,44 @@ capabilities:
   conversational:
     description: "Natural conversation and general assistance"
     preferred_models:
-      # - dolphin-uncensored-vllm  # Disabled: vLLM runs single instance
-      - llama3.1:latest
-      - mythomax-l2-13b-q5_k_m
-    routing_strategy: usage_based
+      - gpt-4o-mini  # OpenAI fast conversational
+      - claude-3-5-haiku-20241022  # Anthropic fast
+      - gpt-3.5-turbo  # OpenAI cost-effective
+      - llama3.1:latest  # Local option
+      - mythomax-l2-13b-q5_k_m  # Local creative option
+    provider: openai
+    routing_strategy: cost_optimized
+
+  vision:
+    description: "Multi-modal models with vision capabilities"
+    preferred_models:
+      - gpt-4o  # OpenAI vision specialist
+      - gpt-4-turbo  # OpenAI vision
+      - claude-3-5-sonnet-20241022  # Anthropic vision
+      - claude-3-opus-20240229  # Anthropic vision
+    provider: openai
+    routing_strategy: quality_first
+
+  function_calling:
+    description: "Models with advanced function/tool calling capabilities"
+    preferred_models:
+      - gpt-4o  # OpenAI function calling
+      - gpt-4-turbo  # OpenAI function calling
+      - claude-3-5-sonnet-20241022  # Anthropic tool use
+      - claude-3-opus-20240229  # Anthropic tool use
+    provider: openai
+    routing_strategy: reliability_first
+
+  extended_context:
+    description: "Models supporting very large context windows (100K+ tokens)"
+    preferred_models:
+      - claude-3-5-sonnet-20241022  # 200K context
+      - claude-3-opus-20240229  # 200K context
+      - o1  # 200K context
+      - gpt-4o  # 128K context
+      - gpt-4-turbo  # 128K context
+    provider: anthropic
+    routing_strategy: context_optimized
 
   high_throughput:
     description: "When you need to handle many concurrent requests"
@@ -277,15 +418,88 @@ fallback_chains:
   #     - qwen-coder-vllm
   #     - llama3.1:latest
 
-  default:
-    # Default fallback chain for all models
+  # OpenAI model fallbacks
+  "gpt-4o":
     chain:
+      - claude-3-5-sonnet-20241022
+      - gpt-4-turbo
+      - claude-3-opus-20240229
+
+  "gpt-4o-mini":
+    chain:
+      - claude-3-5-haiku-20241022
+      - gpt-3.5-turbo
+      - llama3.1:latest
+
+  "gpt-4-turbo":
+    chain:
+      - claude-3-opus-20240229
+      - gpt-4o
+      - qwen2.5-coder:7b
+
+  "gpt-4":
+    chain:
+      - claude-3-opus-20240229
+      - gpt-4-turbo
+
+  "gpt-3.5-turbo":
+    chain:
+      - llama3.1:latest
+      - claude-3-5-haiku-20241022
+
+  "o1":
+    chain:
+      - claude-3-opus-20240229
+      - gpt-4-turbo
+      - deepseek-v3.1:671b-cloud
+
+  "o1-mini":
+    chain:
+      - claude-3-5-sonnet-20241022
       - qwen2.5-coder:7b
       - qwen-coder-vllm
-      # - dolphin-uncensored-vllm  # Disabled: vLLM runs single instance
+
+  # Anthropic model fallbacks
+  "claude-3-5-sonnet-20241022":
+    chain:
+      - gpt-4o
+      - claude-3-opus-20240229
+      - qwen2.5-coder:7b
+
+  "claude-3-5-haiku-20241022":
+    chain:
+      - gpt-4o-mini
+      - gpt-3.5-turbo
       - llama3.1:latest
-      - gpt-oss:120b-cloud  # Ollama Cloud as final fallback
-      - gpt-oss:20b-cloud
+
+  "claude-3-opus-20240229":
+    chain:
+      - gpt-4-turbo
+      - claude-3-5-sonnet-20241022
+      - o1
+
+  "claude-3-sonnet-20240229":
+    chain:
+      - gpt-4
+      - claude-3-5-sonnet-20241022
+      - llama3.1:latest
+
+  "claude-3-haiku-20240307":
+    chain:
+      - gpt-3.5-turbo
+      - claude-3-5-haiku-20241022
+      - llama3.1:latest
+
+  default:
+    # Default fallback chain for all models with cloud and local options
+    chain:
+      - gpt-4o-mini  # Fast, cost-effective cloud fallback
+      - claude-3-5-haiku-20241022  # Alternative cloud option
+      - qwen2.5-coder:7b  # Local primary
+      - qwen-coder-vllm  # Local high-throughput
+      - llama3.1:latest  # Local general-purpose
+      - gpt-oss:120b-cloud  # Ollama Cloud
+      - gpt-oss:20b-cloud  # Ollama Cloud fallback
 
 # ============================================================================
 # ROUTING RULES
@@ -362,19 +576,25 @@ special_cases:
 # ============================================================================
 
 metadata:
-  version: "1.6"
-  last_updated: "2025-10-29"
-  total_routing_rules: 24+
+  version: "2.0"
+  last_updated: "2025-11-09"
+  total_routing_rules: 50+
   supported_routing_strategies:
     - exact_match
     - pattern_match
     - capability_based
     - load_balanced
     - fallback_chain
+    - cost_optimized
+    - quality_first
+    - context_optimized
   changes:
-    - "Added Ollama Cloud provider with DeepSeek, Qwen3, Kimi K2, GPT-OSS, and GLM models"
-    - "Updated capability routing and fallback chains to leverage cloud capacity"
-    - "Configured local vs cloud routing strategy for optimal performance"
+    - "Added OpenAI provider (GPT-4o, GPT-4 Turbo, GPT-3.5, o1 models)"
+    - "Added Anthropic provider (Claude 3.5 Sonnet, Opus, Haiku models)"
+    - "Enhanced capability routing with vision, function calling, and extended context"
+    - "Implemented cross-provider fallback chains (OpenAI ↔ Anthropic ↔ Local)"
+    - "Added new routing strategies: cost_optimized, quality_first, context_optimized"
+    - "Updated default fallback chain to prioritize cloud → local for reliability"
 
 notes: |
   This configuration is consumed by LiteLLM's router.

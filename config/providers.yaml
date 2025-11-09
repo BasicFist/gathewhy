@@ -171,30 +171,123 @@ providers:
   openai:
     type: openai
     base_url: https://api.openai.com/v1
-    status: disabled
+    status: active
     description: OpenAI cloud API (requires API key)
     requires_api_key: true
     env_var: OPENAI_API_KEY
+    features:
+      - Industry-leading language models
+      - Function calling and JSON mode
+      - Vision capabilities (GPT-4V)
+      - Advanced reasoning (o1 models)
     models:
-      - gpt-4
-      - gpt-3.5-turbo
+      - name: gpt-4o
+        size: "Unknown"
+        specialty: advanced_reasoning
+        context_length: 128000
+        supports_vision: true
+        supports_function_calling: true
+      - name: gpt-4o-mini
+        size: "Unknown"
+        specialty: general_chat
+        context_length: 128000
+        supports_vision: true
+        supports_function_calling: true
+      - name: gpt-4-turbo
+        size: "Unknown"
+        specialty: advanced_reasoning
+        context_length: 128000
+        supports_vision: true
+        supports_function_calling: true
+      - name: gpt-4
+        size: "Unknown"
+        specialty: advanced_reasoning
+        context_length: 8192
+        supports_function_calling: true
+      - name: gpt-3.5-turbo
+        size: "Unknown"
+        specialty: general_chat
+        context_length: 16385
+        supports_function_calling: true
+      - name: o1
+        size: "Unknown"
+        specialty: advanced_reasoning
+        context_length: 200000
+        notes: "Advanced reasoning model with extended thinking"
+      - name: o1-mini
+        size: "Unknown"
+        specialty: code_generation
+        context_length: 128000
+        notes: "Fast reasoning model optimized for code and STEM"
     rate_limits:
       requests_per_minute: 3500
       tokens_per_minute: 90000
     cost_per_1k_tokens:
+      gpt-4o: 0.005
+      gpt-4o-mini: 0.00015
+      gpt-4-turbo: 0.01
       gpt-4: 0.03
       gpt-3.5-turbo: 0.0015
+      o1: 0.015
+      o1-mini: 0.003
+    health_endpoint: /v1/models
+    docs: https://platform.openai.com/docs
 
   anthropic:
     type: anthropic
     base_url: https://api.anthropic.com/v1
-    status: disabled
+    status: active
     description: Anthropic Claude API (requires API key)
     requires_api_key: true
     env_var: ANTHROPIC_API_KEY
+    features:
+      - Extended context windows (200K tokens)
+      - Superior analysis and reasoning
+      - Strong safety and helpfulness
+      - Tool use and computer use capabilities
     models:
-      - claude-3-opus-20240229
-      - claude-3-sonnet-20240229
+      - name: claude-3-5-sonnet-20241022
+        size: "Unknown"
+        specialty: advanced_reasoning
+        context_length: 200000
+        supports_vision: true
+        supports_tool_use: true
+        notes: "Latest Claude 3.5 Sonnet with improved coding"
+      - name: claude-3-5-haiku-20241022
+        size: "Unknown"
+        specialty: general_chat
+        context_length: 200000
+        supports_vision: true
+        notes: "Fast, cost-effective Claude model"
+      - name: claude-3-opus-20240229
+        size: "Unknown"
+        specialty: advanced_reasoning
+        context_length: 200000
+        supports_vision: true
+        supports_tool_use: true
+        notes: "Most capable Claude 3 model"
+      - name: claude-3-sonnet-20240229
+        size: "Unknown"
+        specialty: general_chat
+        context_length: 200000
+        supports_vision: true
+        supports_tool_use: true
+      - name: claude-3-haiku-20240307
+        size: "Unknown"
+        specialty: general_chat
+        context_length: 200000
+        supports_vision: true
+    rate_limits:
+      requests_per_minute: 4000
+      tokens_per_minute: 400000
+    cost_per_1k_tokens:
+      claude-3-5-sonnet-20241022: 0.003
+      claude-3-5-haiku-20241022: 0.0008
+      claude-3-opus-20240229: 0.015
+      claude-3-sonnet-20240229: 0.003
+      claude-3-haiku-20240307: 0.00025
+    health_endpoint: /v1/messages
+    docs: https://docs.anthropic.com
 
   custom_openai_compatible:
     type: openai_compatible
@@ -213,18 +306,19 @@ providers:
 # ============================================================================
 
 metadata:
-  version: "1.4"
-  last_updated: "2025-10-30"
-  total_providers: 5  # ollama, llama_cpp_python, llama_cpp_native, vllm-qwen (active), ollama_cloud
-  total_models_available: 11  # 3 Ollama + 1 vLLM + 1 llama.cpp + 6 Ollama Cloud
-  notes: "vllm-dolphin disabled - vLLM runs single instance on port 8001"
+  version: "1.5"
+  last_updated: "2025-11-09"
+  total_providers: 7  # ollama, llama_cpp_python, llama_cpp_native, vllm-qwen, ollama_cloud, openai, anthropic
+  total_models_available: 24  # 3 Ollama + 1 vLLM + 1 llama.cpp + 6 Ollama Cloud + 7 OpenAI + 5 Anthropic + 1 llama.cpp
+  notes: "Added OpenAI and Anthropic cloud providers; vllm-dolphin disabled - vLLM runs single instance on port 8001"
 
   provider_types:
     - ollama: Simple local server
     - ollama_cloud: Managed cloud API (Ollama)
     - llama_cpp: High-performance C++ inference
     - vllm: Production-grade batched inference
-    - openai: Cloud API providers
+    - openai: OpenAI cloud API (GPT-4, GPT-3.5, o1 models)
+    - anthropic: Anthropic cloud API (Claude 3 family)
     - openai_compatible: Generic OpenAI-compatible servers
 
   selection_criteria:
@@ -247,6 +341,20 @@ metadata:
       best_for: Massive models without local GPU
       performance: Data-center grade
       resource_usage: Remote (billable)
+
+    openai:
+      best_for: Industry-leading capabilities, vision, function calling
+      performance: Very High (cloud infrastructure)
+      resource_usage: Remote (billable per token)
+      cost: Medium to High
+      context_window: Up to 200K tokens (o1)
+
+    anthropic:
+      best_for: Extended context (200K), analysis, safety-critical applications
+      performance: Very High (cloud infrastructure)
+      resource_usage: Remote (billable per token)
+      cost: Medium to High
+      context_window: 200K tokens (all models)
 
 # ============================================================================
 # HEALTH CHECK CONFIGURATION

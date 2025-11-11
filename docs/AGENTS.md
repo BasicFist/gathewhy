@@ -1,40 +1,24 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Core automation lives in `scripts/`, with validation (`validate-unified-backend.sh`), config reload (`reload-litellm-config.sh`), monitoring, and load testing helpers. Import shared bash helpers from `scripts/common.sh` when extending shell tooling.
-- Provider and routing source of truth is in `config/` (`providers.yaml`, `model-mappings.yaml`, `litellm-unified.yaml`). Keep backups in `config/backups/` intact; they are rotated by the tooling.
-- Python services, assets, and templates for the admin UI are now part of the Grafana monitoring stack under `monitoring/`. Configuration for monitoring lives in `monitoring/grafana/`.
-- Tests are grouped under `tests/` by pyramid level (`unit/`, `integration/`, `contract/`, `monitoring/`) and share fixtures via `tests/conftest.py`.
-- Documentation references live in `docs/`; operational dashboards and compose files are under `monitoring/`.
+Configuration drives the gateway: edit provider metadata in `config/providers.yaml`, routing in `config/model-mappings.yaml`, and regenerate `config/litellm-unified.yaml` when done. Operational tooling sits in `scripts/` (validation, load, profiling) and `monitoring/` (Prometheus + Grafana stack). Dashboards live in `ai-dashboard/`, and runtime helpers live in `runtime/`. Tests are separated into `tests/unit`, `tests/integration`, and `tests/contract`; co-locate fixtures with the suite they serve.
 
-## Build, Test & Development Commands
-- Bootstrap dependencies: `pip install -r requirements.txt` (Python 3.11 expected).
-- Fast validation of the gateway stack: `./scripts/validate-unified-backend.sh`.
-- Type check Python tooling: `mypy scripts/`.
-- Format and lint: `ruff format scripts tests` followed by `ruff check scripts tests`.
-- Run tests selectively:
-  - Unit: `pytest tests/unit/ -v`.
-  - Integration (providers required): `pytest tests/integration/ -m "not slow"`.
-  - Contract shell suite: `bash tests/contract/test_provider_contracts.sh --provider ollama`.
+## Build, Test, and Development Commands
+Set up Python 3.11 with `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`. Essential workflows:
+- `ruff check scripts tests` — linting + formatting validation.
+- `pytest -m unit` or `pytest -m "integration and not slow"` — targeted suites.
+- `./scripts/validate-unified-backend.sh` — end-to-end provider smoke test.
+- `python scripts/validate-config-consistency.py` — ensure routing files agree.
+- `./scripts/check-port-conflicts.sh --required` — verify LiteLLM/Ollama/vLLM ports.
 
 ## Coding Style & Naming Conventions
-- Python code targets 3.11. Use 4-space indentation, line length ≤100, and prefer double quotes (`ruff` enforces this).
-- Module names stay snake_case; pytest files follow `test_*.py`, and fixtures go in `tests/fixtures/`.
-- Keep shell scripts POSIX-compliant, sourcing `scripts/common.sh` for shared helpers. Name new scripts with hyphen-separated verbs (`sync-configs.sh`).
-- Before committing Python changes, run `ruff format`, `ruff check`, and `mypy` to match CI expectations.
+Follow Ruff defaults: 4-space indentation, double quotes, max line length 100, and modern Python 3.11 syntax (dataclasses, pattern matching, rich type hints). Use snake_case for modules, functions, and file names; reserve UPPER_SNAKE_CASE for constants. YAML keys stay lowercase-with-dashes to satisfy `CONFIG-SCHEMA.md`. CLI scripts should expose a `main()` guard and document usage near the top.
 
 ## Testing Guidelines
-- Pytest markers are defined in `pytest.ini`; apply `@pytest.mark.integration`, `@pytest.mark.requires_ollama`, etc., so suites can filter reliably.
-- Aim to accompany feature work with unit coverage; integration tests should document provider prerequisites in docstrings.
-- Contract and rollback validation use shell harnesses—ensure they remain idempotent and exit non-zero on failure.
-- Generate coverage when touching routing logic: `pytest tests/unit/ --cov=scripts --cov-report=term`.
+Pytest discovers `test_*.py` files and `test_*` functions as configured in `pytest.ini`. Place pure logic tests under `tests/unit`, multi-service flows in `tests/integration`, and API/schema guarantees in `tests/contract`. Decorate expensive cases with `@pytest.mark.slow` or provider markers (`requires_ollama`, `requires_vllm`, `requires_redis`) so CI can filter them. Any change touching routing or config must run `pytest -m "unit or contract"` plus `./scripts/validate-unified-backend.sh`.
 
 ## Commit & Pull Request Guidelines
-- Follow the Conventional Commits pattern visible in history (`type(scope): short summary`), e.g., `feat(ptui): add provider dashboard bulk actions`. Scope should match top-level directories when possible.
-- PRs should describe the change, list validation commands run, and link any tracked issues. Include configuration diffs or screenshots when touching `monitoring/` or dashboard-related changes.
-- Expect reviewers to request evidence of `./scripts/validate-unified-backend.sh` and focused pytest suites; paste the command output summary in the PR body.
+Recent history blends Conventional Commit prefixes (`docs:`, `fix(dashboard):`) with short imperative subjects (“Add llama.cpp model catalog”). Match that tone: keep subjects under ~70 characters, explain the why in the body, and group related config edits in a single commit. PRs should link issues or status entries, summarize provider impact, include screenshots for dashboard changes, and list which validation commands ran. Avoid mixing large refactors with urgent fixes so rollback stays simple.
 
-## Configuration & Deployment Safety
-- Always dry-run config changes with `./scripts/reload-litellm-config.sh --validate-only`; follow with the confirmed reload once diff review is complete.
-- Run `python3 scripts/validate-config-consistency.py` after editing provider mappings to keep routing coherent.
-- For monitoring updates, refresh the Prometheus/Grafana stack via `./scripts/test-monitoring.sh` and note any dashboard migrations in PR notes.
+## Configuration & Operational Tips
+Treat `config/litellm-unified.yaml` as generated—edit the source YAMLs and run `python scripts/generate-litellm-config.py`. Before merging runtime changes, run `./scripts/check-port-conflicts.sh --all`, `./scripts/monitor-redis-cache.sh --watch`, and, when applicable, `python scripts/profile-latency.py` to baseline performance. Keep secrets in environment variables and document any new ones in `DEPLOYMENT.md`. Capture rollback or feature-flag steps in the PR whenever touching monitoring, routing, or deployment assets.

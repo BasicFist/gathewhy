@@ -1,58 +1,69 @@
-# AI Backend Provider Command Center
+# Monitor Scripts - Archived
 
-A terminal-based dashboard for monitoring and managing AI backend providers.
+**Status**: ⚠️ Archived
+**Date**: 2025-11-09
 
-## Features
+## Notice
 
-- **Real-time monitoring**: View provider status, response times, and model counts
-- **Service control**: Start, stop, and restart providers directly from the dashboard
-- **System metrics**: Monitor CPU and memory usage with sparkline graphs
-- **Quick actions**: One-click controls for common operations
-- **Keyboard navigation**: Full keyboard support for power users
+The experimental monitor scripts (`monitor`, `monitor-enhanced`, `monitor-lite`, `monitor-unified`) have been **archived** to `scripts/archive/experimental-dashboards/`.
 
-## Requirements
+## Current Production Dashboards
 
-- Python 3.7+
-- Textual
-- Rich
-- psutil
-- requests
+Use these production-ready dashboards instead:
 
-## Usage
-
+### 1. Textual Dashboard (Local Use)
 ```bash
-./scripts/monitor
+./scripts/ai-dashboard
+# Or using alias:
+./scripts/cui
 ```
 
-## Keyboard Shortcuts
+**Features**: Full service control, GPU monitoring, real-time events
+**Use when**: Local workstation, modern terminal
 
-- `R` - Refresh all data
-- `Q` - Quit the application
-- `T` - Toggle tabs
-- `C` - Show control panel
-- `M` - Show metrics
-- `Tab` - Navigate to next element
-- `Shift+Tab` - Navigate to previous element
+### 2. PTUI Dashboard (SSH/Remote)
+```bash
+python3 scripts/ptui_dashboard.py
+# Or using alias:
+./scripts/pui
+```
 
-## Control Elements
+**Features**: Universal compatibility, lightweight, works everywhere
+**Use when**: SSH sessions, remote monitoring
 
-- **Provider Status Table**: Shows current status of all AI providers
-- **Quick Actions**: Buttons to refresh all data or restart LiteLLM
-- **Provider Controls**: Individual start/stop/restart buttons for each provider
-- **System Metrics**: Real-time CPU and memory usage graphs
+### 3. Grafana (Web Monitoring)
+```bash
+cd monitoring && docker compose up -d
+# Access: http://localhost:3000
+```
 
-## Provider Support
+**Features**: Historical metrics, alerting, professional dashboards
+**Use when**: Production monitoring, team collaboration
 
-Currently supports monitoring and control of:
-- Ollama
-- vLLM (Qwen model)
-- vLLM (Dolphin model)
-- llama.cpp Python bindings
-- llama.cpp native server
+## Complete Guide
 
-## Troubleshooting
+For a comprehensive guide on choosing the right dashboard, see:
+**`docs/DASHBOARD-GUIDE.md`**
 
-If you encounter issues with service controls not working, ensure that:
-1. You have the necessary permissions to run systemctl commands
-2. The systemd service files exist for each provider
-3. The provider endpoints are accessible
+## Archive Location
+
+Archived scripts can be found in:
+**`scripts/archive/experimental-dashboards/`**
+
+See `scripts/archive/experimental-dashboards/README.md` for details.
+
+## Migration
+
+| Old Script | Current Replacement |
+|-----------|---------------------|
+| `./scripts/monitor` | `./scripts/cui` |
+| `./scripts/monitor-enhanced` | `./scripts/ai-dashboard` |
+| `./scripts/monitor-lite` | `./scripts/pui` |
+| `./scripts/monitor-unified` | `./scripts/cui` |
+
+---
+
+**For questions**, see:
+- `docs/DASHBOARD-GUIDE.md` - Dashboard selection guide
+- `docs/DASHBOARD-CONSOLIDATION.md` - Consolidation details
+- `docs/troubleshooting.md` - Troubleshooting guide

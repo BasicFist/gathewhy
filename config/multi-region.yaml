@@ -1,0 +1,318 @@
+# Multi-Region Provider Configuration
+# Extends providers.yaml with geographic distribution and region-aware routing
+
+# ============================================================================
+# REGIONS
+# ============================================================================
+
+regions:
+  us-east:
+    name: "US East (N. Virginia)"
+    location:
+      lat: 37.478397
+      lon: -76.453077
+    timezone: "America/New_York"
+    description: "Primary US region with low latency for East Coast"
+
+  us-west:
+    name: "US West (Oregon)"
+    location:
+      lat: 45.573283
+      lon: -122.891231
+    timezone: "America/Los_Angeles"
+    description: "West Coast region for Pacific time zone users"
+
+  eu-west:
+    name: "EU West (Ireland)"
+    location:
+      lat: 53.412910
+      lon: -8.243890
+    timezone: "Europe/Dublin"
+    description: "European region with GDPR compliance"
+
+  ap-southeast:
+    name: "Asia Pacific (Singapore)"
+    location:
+      lat: 1.352083
+      lon: 103.819836
+    timezone: "Asia/Singapore"
+    description: "Asia-Pacific region for APAC users"
+
+  local:
+    name: "Local (On-Premises)"
+    location: null
+    timezone: "UTC"
+    description: "Local on-premises infrastructure"
+
+# ============================================================================
+# PROVIDER REGION MAPPINGS
+# ============================================================================
+
+provider_regions:
+  # OpenAI - Global cloud provider
+  openai:
+    primary_region: us-east
+    available_regions:
+      - us-east
+      - us-west
+      - eu-west
+      - ap-southeast
+    regional_endpoints:
+      us-east: https://api.openai.com/v1
+      us-west: https://api.openai.com/v1
+      eu-west: https://api.openai.com/v1
+      ap-southeast: https://api.openai.com/v1
+    latency_routing: true
+    data_residency_support: false
+    notes: "OpenAI uses global CDN, regional routing is optimized automatically"
+
+  # Anthropic - Global cloud provider
+  anthropic:
+    primary_region: us-east
+    available_regions:
+      - us-east
+      - us-west
+      - eu-west
+    regional_endpoints:
+      us-east: https://api.anthropic.com/v1
+      us-west: https://api.anthropic.com/v1
+      eu-west: https://api.anthropic.com/v1
+    latency_routing: true
+    data_residency_support: true
+    compliance:
+      gdpr: true
+      hipaa: true
+    notes: "Anthropic supports data residency for enterprise customers"
+
+  # Ollama Cloud - Regional deployment
+  ollama_cloud:
+    primary_region: us-east
+    available_regions:
+      - us-east
+      - eu-west
+      - ap-southeast
+    regional_endpoints:
+      us-east: https://us.ollama.com
+      eu-west: https://eu.ollama.com
+      ap-southeast: https://ap.ollama.com
+    latency_routing: true
+    data_residency_support: true
+
+  # Local providers - Single region
+  ollama:
+    primary_region: local
+    available_regions:
+      - local
+    regional_endpoints:
+      local: http://127.0.0.1:11434
+    latency_routing: false
+    data_residency_support: true
+    notes: "Local deployment, lowest latency, full data control"
+
+  llama_cpp_python:
+    primary_region: local
+    available_regions:
+      - local
+    regional_endpoints:
+      local: http://127.0.0.1:8000
+    latency_routing: false
+    data_residency_support: true
+
+  llama_cpp_native:
+    primary_region: local
+    available_regions:
+      - local
+    regional_endpoints:
+      local: http://127.0.0.1:8080
+    latency_routing: false
+    data_residency_support: true
+
+  vllm-qwen:
+    primary_region: local
+    available_regions:
+      - local
+    regional_endpoints:
+      local: http://127.0.0.1:8001
+    latency_routing: false
+    data_residency_support: true
+
+# ============================================================================
+# REGION ROUTING RULES
+# ============================================================================
+
+region_routing:
+  # Automatic region selection based on client location
+  auto_region_routing:
+    enabled: true
+    fallback_region: us-east
+    prefer_local: true  # Prefer local providers when available
+    max_latency_ms: 500  # Maximum acceptable latency
+
+  # Data residency requirements
+  data_residency_rules:
+    eu_users:
+      regions:
+        - eu-west
+        - local  # Allow local if in EU
+      strict: true  # Never route outside specified regions
+      compliant_providers:
+        - anthropic
+        - ollama_cloud
+        - ollama
+        - llama_cpp_python
+        - vllm-qwen
+
+    us_government:
+      regions:
+        - local  # Government data must stay on-premises
+      strict: true
+      compliant_providers:
+        - ollama
+        - llama_cpp_python
+        - llama_cpp_native
+        - vllm-qwen
+
+  # Latency-based routing
+  latency_routing:
+    enabled: true
+    measurement_interval: 300  # Re-measure every 5 minutes
+    provider_weights:
+      local: 1.0  # Prefer local (lowest latency)
+      us-east: 0.8
+      us-west: 0.8
+      eu-west: 0.6
+      ap-southeast: 0.6
+
+  # Cost-optimized region routing
+  cost_optimization:
+    enabled: true
+    strategies:
+      - strategy: prefer_local
+        description: "Use local providers to avoid cloud costs"
+        providers:
+          - ollama
+          - llama_cpp_python
+          - vllm-qwen
+        fallback_to_cloud: true
+
+      - strategy: prefer_cheap_region
+        description: "Route to lowest-cost cloud region"
+        region_costs:  # Relative cost multipliers
+          us-east: 1.0
+          us-west: 1.1
+          eu-west: 1.2
+          ap-southeast: 1.15
+
+# ============================================================================
+# FAILOVER STRATEGIES
+# ============================================================================
+
+regional_failover:
+  # Cross-region failover for high availability
+  cross_region_failover:
+    enabled: true
+    max_failover_hops: 2
+
+    strategies:
+      - name: "Local First"
+        description: "Try local, fallback to nearest cloud region"
+        sequence:
+          - local
+          - us-east  # Fallback to primary cloud
+          - us-west  # Alternative cloud region
+
+      - name: "Cloud Primary"
+        description: "Cloud first, local as backup"
+        sequence:
+          - us-east
+          - us-west
+          - local
+
+      - name: "EU Compliant"
+        description: "Stay within EU for data residency"
+        sequence:
+          - local  # If in EU
+          - eu-west
+          # No cross-region failover outside EU
+
+      - name: "Global Resilience"
+        description: "Maximum availability across all regions"
+        sequence:
+          - local
+          - us-east
+          - us-west
+          - eu-west
+          - ap-southeast
+
+  # Provider-specific failover within region
+  in_region_failover:
+    enabled: true
+    local:
+      - ollama
+      - llama_cpp_python
+      - vllm-qwen
+      - llama_cpp_native
+
+    us-east:
+      - openai
+      - anthropic
+      - ollama_cloud
+
+    eu-west:
+      - anthropic  # Prefer Anthropic in EU (GDPR)
+      - openai
+      - ollama_cloud
+
+# ============================================================================
+# MONITORING & HEALTH CHECKS
+# ============================================================================
+
+regional_monitoring:
+  # Health check endpoints per region
+  health_checks:
+    enabled: true
+    interval_seconds: 60
+    timeout_seconds: 5
+
+  # Latency monitoring
+  latency_monitoring:
+    enabled: true
+    percentiles:
+      - 50
+      - 95
+      - 99
+    alert_threshold_ms: 1000
+
+  # Regional metrics
+  metrics:
+    - provider_availability_by_region
+    - request_latency_by_region
+    - cost_by_region
+    - data_transfer_by_region
+
+# ============================================================================
+# METADATA
+# ============================================================================
+
+metadata:
+  version: "1.0"
+  last_updated: "2025-11-09"
+  total_regions: 5  # 4 cloud regions + 1 local
+  compliant_providers:
+    gdpr: ["anthropic", "ollama_cloud", "local"]
+    hipaa: ["anthropic", "local"]
+    fedramp: ["local"]  # Only on-premises for FedRAMP
+
+notes: |
+  Multi-region configuration enables:
+  1. Geographic load distribution
+  2. Data residency compliance (GDPR, HIPAA)
+  3. Latency optimization based on user location
+  4. High availability through cross-region failover
+  5. Cost optimization by routing to cheaper regions
+
+  Usage:
+  - Enable auto_region_routing for automatic client-based routing
+  - Configure data_residency_rules for compliance requirements
+  - Use regional_failover for high availability
+  - Monitor regional_monitoring metrics for optimization

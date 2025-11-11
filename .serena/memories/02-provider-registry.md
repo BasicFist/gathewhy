@@ -225,6 +225,117 @@ vllm serve Qwen/Qwen2.5-Coder-7B-Instruct-AWQ \
 
 ---
 
+### 5. Ollama Cloud (ollama_cloud)
+
+**Purpose**: Managed cloud API for massive models without local GPU requirements
+
+**Connection**:
+- Base URL: `https://ollama.com`
+- Health Endpoint: `/api/tags`
+- API Format: Ollama-compatible (ollama_chat prefix for LiteLLM)
+- Status: **Active** ✅ (added 2025-10-30)
+- Requires: API Key (`OLLAMA_API_KEY` environment variable)
+
+**Features**:
+- Cloud-hosted massive models (no local GPU required)
+- Data-center-grade hardware and infrastructure
+- Same API as local Ollama (seamless integration)
+- Automatic offloading for cloud-only models
+- Free preview tier with generous rate limits
+- Models up to 1 trillion parameters
+
+**Models Deployed**:
+
+1. **deepseek-v3.1:671b-cloud**
+   - Size: 671B parameters
+   - Specialty: Advanced reasoning, analysis
+   - Use Case: Complex research, multi-step problem solving
+   - Fallback Chain: kimi-k2:1t → gpt-oss:120b → llama3.1:8b
+
+2. **qwen3-coder:480b-cloud**
+   - Size: 480B parameters
+   - Specialty: Code generation, technical tasks
+   - Use Case: Complex code, architectural design
+   - Fallback Chain: gpt-oss:120b → qwen-coder-vllm → qwen2.5-coder:7b
+
+3. **kimi-k2:1t-cloud**
+   - Size: 1 Trillion parameters (largest available)
+   - Specialty: Advanced reasoning, research
+   - Use Case: Extreme complexity tasks, academic research
+   - Fallback Chain: None (fail if unavailable - quality preservation)
+
+4. **gpt-oss:120b-cloud**
+   - Size: 120B parameters
+   - Specialty: General chat, analysis
+   - Use Case: General-purpose with cloud scale
+   - Fallback Chain: gpt-oss:20b → glm-4.6 → llama3.1:8b
+
+5. **gpt-oss:20b-cloud**
+   - Size: 20B parameters
+   - Specialty: General chat
+   - Use Case: Mid-tier cloud inference
+   - Fallback Chain: glm-4.6 → llama3.1:8b
+
+6. **glm-4.6:cloud**
+   - Size: 4.6B parameters
+   - Specialty: General chat, lightweight
+   - Use Case: Fast cloud inference for simple tasks
+   - Fallback Chain: llama3.1:8b
+
+**Performance Characteristics**:
+- Latency: 150-1200ms TTFT (varies by model size)
+  - glm-4.6: ~150ms
+  - gpt-oss:20b: ~250ms
+  - gpt-oss:120b: ~400ms
+  - qwen3-coder:480b: ~600ms
+  - deepseek-v3.1:671b: ~800ms
+  - kimi-k2:1t: ~1200ms
+- Throughput: Data-center grade (high concurrency)
+- Quality: Superior to local models due to parameter count
+- Cost: Free preview (rate limits apply)
+
+**Rate Limits**:
+- Hourly limits: Yes (generous for free tier)
+- Daily limits: Yes
+- Details: "Free preview with generous limits"
+- Behavior: Returns 429 on rate limit → triggers fallback chain
+
+**Integration**:
+- API Key: Loaded from SOPS-encrypted secrets (`$OLLAMA_API_KEY`)
+- Authentication: Bearer token in Authorization header
+- Model Prefix: `ollama_chat/` for LiteLLM routing
+- Health Checks: Same as local Ollama (`/api/tags`)
+
+**Use Cases**:
+- **Complex Reasoning**: Tasks requiring 100B+ parameter models
+- **Code Architecture**: Large-scale system design, refactoring
+- **Research**: Academic analysis, literature review
+- **Fallback**: When local GPUs insufficient for task complexity
+- **Development**: Testing with massive models before local deployment
+
+**Routing Strategy** (v1.7):
+- **Cloud-first routing**: Certain tasks route directly to cloud (capability: reasoning + complexity: high)
+- **Local-first with cloud fallback**: Most tasks try local first, fall back to cloud
+- **Cloud-only**: Kimi K2 (1T) has no fallback - returns error if unavailable
+- **Quality preservation**: Cloud models fall back to other cloud models before local
+
+**Best For**:
+- Tasks requiring >13B models
+- Complex multi-step reasoning
+- Advanced code generation and architecture
+- Research and academic analysis
+- Fallback when local VRAM exhausted
+
+**Not Recommended For**:
+- Simple chat (use local llama3.1:8b)
+- Quick code snippets (use local qwen2.5-coder)
+- Privacy-sensitive data (cloud API)
+- Offline environments
+
+**Configuration Status**: ✅ Active since 2025-10-30
+
+---
+
 ## Template Providers (Disabled)
 
 ### OpenAI (openai)
@@ -428,29 +539,48 @@ curl http://localhost:4000/v1/models | jq
 
 ## Provider Metadata Summary
 
-**Total Providers**: 4 active (Ollama, llama.cpp Python, llama.cpp Native, vLLM)
-**Total Models Available**: 4 (2 Ollama, 1 vLLM, 1 llama.cpp)
-**Total Capacity**: ~70+ concurrent requests across all providers
-**Combined VRAM**: ~20GB required for all providers active (with AWQ quantization)
+**Total Providers**: 5 active (Ollama, llama.cpp Python, llama.cpp Native, vLLM, Ollama Cloud)
+**Total Models Available**: 13 (3 local Ollama, 1 vLLM, 6 Ollama Cloud, 3 llama.cpp generic)
+**Total Capacity**: ~70+ concurrent requests (local) + unlimited (cloud with rate limits)
+**Combined VRAM**: ~20GB required for all local providers active (with AWQ quantization)
 **API Compatibility**: 100% OpenAI-compatible
 
 **Provider Types**:
-- **ollama**: Simple local server
-- **llama_cpp**: High-performance C++ inference
+- **ollama**: Simple local server (3 models: llama3.1, qwen2.5-coder, mythomax-l2-13b)
+- **ollama_cloud**: Managed cloud API for massive models (6 models: up to 1T parameters)
+- **llama_cpp**: High-performance C++ inference (GGUF support)
 - **vllm**: Production-grade batched inference with AWQ quantization
-- **openai**: Cloud API providers (disabled)
+- **openai**: Cloud API providers (disabled template)
 - **openai_compatible**: Generic compatible servers (template)
 
-**Deployment Status** (2025-10-23):
-- ✅ Ollama: Active with llama3.1:latest and qwen2.5-coder:7b
+**Deployment Status** (2025-11-11):
+- ✅ Ollama: Active with llama3.1:latest, qwen2.5-coder:7b, mythomax-l2-13b-q5_k_m
 - ✅ llama.cpp Python: Active on port 8000
 - ✅ llama.cpp Native: Active on port 8080
-- ✅ vLLM: Active with Qwen2.5-Coder-7B-Instruct-AWQ on port 8001 (restored)
+- ✅ vLLM: Active with Qwen2.5-Coder-7B-Instruct-AWQ on port 8001
+- ✅ Ollama Cloud: Active with 6 models (deepseek-v3.1:671b, qwen3-coder:480b, kimi-k2:1t, gpt-oss:120b/20b, glm-4.6)
+
+**Model Distribution**:
+- Local <10B: 3 models (llama3.1:8b, qwen2.5-coder:7b, qwen-coder-vllm:7b-awq)
+- Local 10-15B: 1 model (mythomax-l2-13b-q5_k_m)
+- Cloud 1-100B: 3 models (glm-4.6, gpt-oss:20b, gpt-oss:120b)
+- Cloud 100B+: 3 models (qwen3-coder:480b, deepseek-v3.1:671b, kimi-k2:1t)
+
+**Routing Architecture**: v1.7 (quality-preserving-fallbacks)
+- Cloud fallback chains: Cloud → Cloud → Local (tier preservation)
+- Capability-based routing: 8 clear categories (code, analytical, reasoning, creative, chat, high_throughput, low_latency, large_context)
+- Load balancing: 4 strategies (weighted, complexity-based, quality-based)
+- vLLM single-instance pattern: Qwen Coder active on :8001, Dolphin disabled
 
 **Recent Changes**:
+- 2025-11-11: Added Ollama Cloud provider (6 massive cloud models)
+- 2025-11-11: Routing v1.7 - Fixed cloud fallback chains (quality-preserving)
+- 2025-11-11: Consolidated capabilities (10 → 8, eliminated overlaps)
+- 2025-11-11: Added intelligent load balancing for code generation
+- 2025-11-11: Documented vLLM single-instance pattern
+- 2025-10-30: Added mythomax-l2-13b-q5_k_m for creative writing
 - 2025-10-23: Restored vLLM provider after accidental removal
 - 2025-10-23: Standardized llama3.1 model name to `:latest`
-- 2025-10-23: Removed OpenWebUI pipeline documentation (relocated to OpenWebUI project)
 
-**Version**: 1.2
-**Last Updated**: 2025-10-23
+**Version**: 1.4
+**Last Updated**: 2025-11-11

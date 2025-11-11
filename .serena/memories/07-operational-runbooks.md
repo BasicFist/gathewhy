@@ -368,11 +368,153 @@ journalctl --user -u litellm.service -f | grep "rate_limit"
 
 ---
 
-## Runbook: Monitoring Setup
+## Runbook: Dashboard and Monitoring
 
-### Enable Prometheus Metrics
+### Available Dashboard Implementations
 
-**Already configured** in `litellm-unified.yaml`:
+The project provides two complementary dashboard solutions:
+
+1. **Enhanced Textual Dashboard (PTUI)** - Interactive TUI with real-time monitoring
+2. **WTH Dashboard Widgets** - Lightweight shell-based monitoring
+
+### Enhanced Textual Dashboard
+
+**Location**: `scripts/ai-dashboard-enhanced.py`
+
+**Features**:
+- Real-time provider health monitoring with visual indicators
+- Performance comparison widgets for latency analysis
+- Configuration editor integration
+- Request inspector with live updates
+- Auto-refreshing metrics display
+
+**Installation**:
+```bash
+# Install dependencies
+./scripts/install-wth-dashboard.sh
+
+# Or manually
+pip install textual requests psutil
+```
+
+**Usage**:
+```bash
+# Launch dashboard
+python3 scripts/ai-dashboard-enhanced.py
+
+# Keyboard shortcuts
+# q - Quit
+# r - Refresh
+# c - Toggle configuration editor
+```
+
+**Requirements**:
+- Python 3.8+
+- Textual >= 0.40.0
+- psutil, requests
+- LiteLLM running on localhost:4000
+
+**Troubleshooting**:
+```bash
+# If dashboard fails to connect
+curl http://localhost:4000/health
+
+# Check LiteLLM service
+systemctl --user status litellm.service
+
+# Enable debug mode
+python3 scripts/ai-dashboard-enhanced.py --debug  # If implemented
+```
+
+---
+
+### WTH Dashboard Widgets
+
+**Location**: `wth-widgets/litellm/`
+
+**Architecture**:
+- Modular shell-based widgets (9 specialized scripts)
+- Sticker-based layout via WTH configuration
+- Graceful degradation without optional dependencies
+
+**Available Widgets**:
+1. **health-status.sh** - Service health overview
+2. **providers-overview.sh** - Provider status matrix
+3. **litellm-metrics.sh** - Prometheus-style metrics sampler
+4. **cache-performance.sh** - Redis cache hit rates
+5. **provider-score.sh** - Provider performance scoring
+6. **litellm-logs.sh** - Recent LiteLLM proxy logs
+7. **litellm-status.sh** - Detailed service status
+8. **common.sh** - Shared helper functions
+
+**Installation**:
+```bash
+# Method 1: Using install script
+./scripts/install-wth-dashboard.sh
+
+# Method 2: Manual installation
+# Install WTH (https://github.com/mrusme/wth)
+go install github.com/mrusme/wth@latest
+
+# Install Gum (optional, for styled output)
+brew install gum  # macOS
+# or
+sudo apt install gum  # Ubuntu/Debian
+
+# Copy widgets to PATH
+sudo cp wth-widgets/litellm/bin/* /usr/local/bin/
+sudo chmod +x /usr/local/bin/litellm-*.sh /usr/local/bin/health-status.sh
+
+# Copy WTH config
+mkdir -p ~/.config/wth
+cp wth-widgets/litellm/config/wth-lite-dashboard.yaml ~/.config/wth/wth.yaml
+```
+
+**Usage**:
+```bash
+# Start WTH dashboard
+wth run --config ~/.config/wth/wth.yaml
+
+# Run individual widgets
+litellm-status.sh
+providers-overview.sh
+cache-performance.sh
+```
+
+**Configuration**:
+```bash
+# Environment variables
+export LITELLM_HOST="http://127.0.0.1:4000"  # LiteLLM base URL
+export LITELLM_LOG_SOURCE="journalctl --user -u litellm.service -n 40"
+export WTH_WIDGET_REFRESH=5  # Refresh interval in seconds
+```
+
+**Extending**:
+```bash
+# Add custom widget
+vim wth-widgets/litellm/bin/custom-widget.sh
+
+# Source common helpers
+source "$(dirname "$0")/common.sh"
+
+# Use helper functions
+check_litellm_health
+get_prometheus_metric "litellm_requests_total"
+
+# Reference from WTH config
+# In wth-lite-dashboard.yaml:
+stickers:
+  - command: custom-widget.sh
+    refresh: 10s
+```
+
+---
+
+### Monitoring Stack Setup
+
+**Prometheus Metrics**
+
+Already configured in `litellm-unified.yaml`:
 ```yaml
 server_settings:
   prometheus:
@@ -380,20 +522,124 @@ server_settings:
     port: 9090
 ```
 
-### Add Grafana Dashboard
+**Grafana Dashboard**
 
-**Step 1: Import dashboard**
+**Step 1: Start monitoring stack** (if using Docker Compose)
 ```bash
-# Use monitoring/grafana/litellm-dashboard.json (Phase 4)
+cd monitoring
+docker compose up -d
 ```
 
-**Step 2: Configure data source**
+**Step 2: Access Grafana**
+- URL: http://localhost:3000
+- Default credentials: admin/admin
+
+**Step 3: Configure data source**
 - Add Prometheus at `http://localhost:9090`
 
-**Step 3: Set up alerts**
+**Step 4: Import dashboard**
+```bash
+# Use monitoring/grafana/litellm-dashboard.json
+# Or create custom dashboard
+```
+
+**Step 5: Set up alerts**
 - High latency: P95 > 2s
 - High error rate: > 5%
 - Provider unavailability
+
+---
+
+### Testing Dashboard Integration
+
+**Test Kimi K2 Routing** (validates load balancing):
+
+**Location**: `test_kimi_routing.sh`
+
+**Usage**:
+```bash
+# Test direct Kimi K2 requests
+./test_kimi_routing.sh
+
+# Expected output:
+# Test 1: Direct request to kimi-k2:1t-cloud
+# [Response content]
+#
+# Test 2: Reasoning capability request (load balanced)
+# [Response content]
+```
+
+**What it tests**:
+- Direct model routing to Ollama Cloud
+- Capability-based routing (reasoning → model pool)
+- Load balancing across multiple providers
+- Fallback chain integrity
+
+**Troubleshooting**:
+```bash
+# If FAILED - Check OLLAMA_API_KEY
+echo $OLLAMA_API_KEY  # Should be set in environment
+
+# Check Ollama Cloud connectivity
+curl https://ollama.com/api/tags \
+  -H "Authorization: Bearer $OLLAMA_API_KEY"
+
+# Verify routing configuration
+grep -A 5 "kimi-k2:1t-cloud" config/model-mappings.yaml
+```
+
+---
+
+### Dashboard Selection Guide
+
+**Use Enhanced Textual Dashboard when**:
+- Interactive exploration needed
+- Real-time visual feedback required
+- Debugging provider issues
+- Learning system behavior
+
+**Use WTH Dashboard when**:
+- Lightweight monitoring preferred
+- Shell-based workflow
+- Terminal multiplexer integration (tmux/screen)
+- Low resource overhead critical
+- Scripting/automation needed
+
+**Use Both**:
+- WTH for persistent monitoring in tmux pane
+- Textual for deep-dive troubleshooting sessions
+
+---
+
+### Monitoring Checklist
+
+**Initial Setup**:
+- [ ] Install dashboard dependencies
+- [ ] Configure environment variables
+- [ ] Verify LiteLLM accessibility
+- [ ] Test dashboard launch
+- [ ] Validate metrics collection
+
+**Daily Operations**:
+- [ ] Check provider health indicators
+- [ ] Review cache performance
+- [ ] Monitor request latency (P95/P99)
+- [ ] Verify fallback chains active
+- [ ] Check for error spikes
+
+**Performance Analysis**:
+- [ ] Compare provider latencies
+- [ ] Analyze routing distribution
+- [ ] Review cache hit rates
+- [ ] Identify slow models
+- [ ] Validate load balancing
+
+**Incident Response**:
+- [ ] Launch dashboard for real-time view
+- [ ] Check provider health status
+- [ ] Review recent logs
+- [ ] Verify fallback activation
+- [ ] Document anomalies
 
 ---
 

@@ -53,6 +53,14 @@ providers:
       n_ctx: 8192
       n_parallel: 4
       threads: 6
+    models:
+      - name: llama-cpp-default
+        description: "GGUF model via llama.cpp Python bindings"
+        context_length: 8192
+        tags:
+          - local
+          - gguf
+          - cuda_optimized
     health_endpoint: /v1/models
     service_file: ~/.config/systemd/user/llamacpp-python.service
     location: ../openwebui/backends/llama.cpp
@@ -67,6 +75,15 @@ providers:
       - No Python overhead
       - Maximum throughput
       - CUDA-optimized
+    models:
+      - name: llama-cpp-native
+        description: "GGUF model via llama.cpp native C++ server"
+        context_length: 8192
+        tags:
+          - local
+          - gguf
+          - native
+          - fastest
     health_endpoint: /v1/models
     location: ../openwebui/backends/llama.cpp
 

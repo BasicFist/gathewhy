@@ -195,6 +195,9 @@ Standard OpenAI API format works across all providers.
 - **VLLM Deployment**: `docs/VLLM-DEPLOYMENT-REQUIREMENTS.md` - vLLM-specific requirements
 - **Agent System**: `docs/AGENTS.md` - Agent architecture documentation
 
+### Release Documentation
+- **Routing v1.7.1**: `docs/ROUTING_V1.7.1_RELEASE.md` - Multi-provider diversity release (deployment, hotfix, testing)
+
 ### Model-Specific Guides
 - **Qwen Models**: `docs/models/qwen.md` - Qwen2.5-Coder configuration and usage
 

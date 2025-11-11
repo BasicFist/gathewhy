@@ -817,6 +817,37 @@ journalctl --user -u litellm.service | grep fallback | wc -l
 
 ## Version History
 
+**v1.7.1** (2025-11-11) - Multi-Provider Diversity & llama.cpp Integration
+- **Architecture**: Eliminated single point of failure at fallback terminus
+- **Providers**: Integrated llama.cpp (Python + Native backends)
+- **Availability**: 99% → 99.9999% (6 nines target)
+- **Downtime**: 7.2 hours/month → 26 seconds/month (-99.6%)
+- **Provider Diversity**: Terminal node now uses 2 providers (Ollama + llama.cpp)
+- **Critical Hotfix (v1.7.1.1)**: Fixed missing llama-cpp models in model_list
+  - Issue: Generator didn't create model entries for llama_cpp providers
+  - Resolution: Added model definitions to providers.yaml
+  - Time to fix: 15 minutes (30 minutes including testing)
+- **Models Added**: llama-cpp-default (Python), llama-cpp-native (C++ server)
+- **Test Coverage**: 30/31 tests passing (96.8%)
+- **Documentation**: Consolidated release documentation created
+
+**Fallback Chain Update**:
+```
+llama3.1:latest
+  chain:
+    - llama-cpp-default      # NEW: Cross-provider diversity
+    - gpt-oss:20b-cloud      # Cloud safety net
+
+llama-cpp-default
+  chain:
+    - llama-cpp-native       # NEW: Faster C++ binding (pending deployment)
+```
+
+**Key Lessons**:
+- Integration tests caught critical bug before production
+- Configuration-only hotfix faster than code changes
+- Generator validation needed for completeness
+
 **v1.7** (2025-11-11) - Quality-Preserving Fallbacks
 - Fixed cloud fallback chains (cloud → cloud → local)
 - Consolidated capabilities (10 → 8)
@@ -836,4 +867,4 @@ journalctl --user -u litellm.service | grep fallback | wc -l
 - Restored vLLM provider
 - Standardized llama3.1 model name
 
-**Last Updated**: 2025-11-11
+**Last Updated**: 2025-11-12

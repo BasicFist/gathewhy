@@ -82,8 +82,14 @@ exact_matches:
   "llama-cpp-default":
     provider: llama_cpp_python
     priority: primary
-    fallback: llama_cpp_native
-    description: "GGUF model via llama.cpp Python bindings"
+    fallback: null
+    description: "GGUF model via llama.cpp Python bindings (CUDA-optimized, 8K context)"
+
+  "llama-cpp-native":
+    provider: llama_cpp_native
+    priority: primary
+    fallback: null
+    description: "GGUF model via llama.cpp native C++ server (maximum performance, fastest TTFB)"
 
   # Ollama Cloud models (large models not available locally)
   "deepseek-v3.1:671b-cloud":
@@ -324,29 +330,42 @@ fallback_chains:
     description: "Local code model fallback: same capability, alternative providers"
     chain:
       - qwen-coder-vllm              # Same model, higher throughput provider
-      - llama3.1:latest              # General fallback
+      - qwen3-coder:480b-cloud       # Upgrade to cloud for complex tasks
     tier: local
 
   "llama3.1:latest":
-    description: "Primary local chat model fallback"
+    description: "Primary local chat model fallback with cross-provider diversity"
     chain:
-      - mythomax-l2-13b-q5_k_m       # Alternative local model
-      - gpt-oss:20b-cloud            # Cloud fallback if local exhausted
+      - llama-cpp-default        # Cross-provider diversity (llama_cpp_python)
+      - gpt-oss:20b-cloud        # Cloud safety net
     tier: local
 
   "mythomax-l2-13b-q5_k_m":
     description: "Creative model fallback chain"
     chain:
-      - llama3.1:latest              # Local general fallback
-      - gpt-oss:120b-cloud           # Cloud creative fallback
+      - gpt-oss:20b-cloud            # Cloud fallback
     tier: local
 
   "qwen-coder-vllm":
     description: "vLLM code model fallback"
     chain:
-      - qwen2.5-coder:7b             # Same capability, different provider
       - qwen3-coder:480b-cloud       # Upgrade to cloud if local fails
+      - llama3.1:latest              # General local fallback
     tier: local
+
+  # llama.cpp provider chains (NEW: Provider diversity)
+  "llama-cpp-default":
+    description: "llama.cpp Python bindings fallback chain"
+    chain:
+      - llama-cpp-native             # Same provider, different binding (faster)
+    tier: local
+    notes: "llama_cpp_python provider on port 8000, CUDA-optimized, 8K context"
+
+  "llama-cpp-native":
+    description: "llama.cpp native C++ server (terminal node)"
+    chain: []                        # True terminal - fastest local option
+    tier: local
+    notes: "Maximum performance terminal node, port 8080, pure C++ implementation"
 
   # --------------------------------------------------------------------------
   # CLOUD MODEL FALLBACK CHAINS (FIXED: Quality-Preserving)
@@ -355,8 +374,8 @@ fallback_chains:
   "deepseek-v3.1:671b-cloud":
     description: "Advanced reasoning: cloud-first, maintain quality tier"
     chain:
-      - kimi-k2:1t-cloud             # Same tier: 1T param reasoning model
       - gpt-oss:120b-cloud           # Step down: 120B general model
+      - gpt-oss:20b-cloud            # Further step down: 20B model
       - llama3.1:latest              # Local fallback only as last resort
     tier: cloud_premium
     notes: "Preserves reasoning capability through cloud alternatives before local degradation"
@@ -364,8 +383,8 @@ fallback_chains:
   "kimi-k2:1t-cloud":
     description: "1T param model: largest available, gradual degradation"
     chain:
-      - deepseek-v3.1:671b-cloud     # Same tier: 671B reasoning specialist
       - gpt-oss:120b-cloud           # Step down: 120B general model
+      - gpt-oss:20b-cloud            # Further step down: 20B model
       - llama3.1:latest              # Local fallback (extreme degradation)
     tier: cloud_premium
     notes: "Maintains cloud-grade quality before falling back to 8B local"
@@ -374,8 +393,7 @@ fallback_chains:
     description: "Advanced code model: cloud-first code specialists"
     chain:
       - gpt-oss:120b-cloud           # Same tier: 120B cloud model (general coding)
-      - qwen-coder-vllm              # Step down: 7B vLLM code specialist
-      - qwen2.5-coder:7b             # Final: 7B Ollama code model
+      - llama3.1:latest              # Local general fallback (terminal node)
     tier: cloud_standard
     notes: "Preserves code capability through cloud then local code specialists"
 
@@ -383,22 +401,21 @@ fallback_chains:
     description: "120B cloud model: mid-tier cloud fallback"
     chain:
       - gpt-oss:20b-cloud            # Step down: 20B cloud model
-      - llama3.1:latest              # Local fallback
-      - mythomax-l2-13b-q5_k_m       # Alternative local model
+      - llama3.1:latest              # Local fallback (terminal node)
     tier: cloud_standard
 
   "gpt-oss:20b-cloud":
     description: "20B cloud model: entry-level cloud fallback"
     chain:
-      - glm-4.6:cloud                # Alternative cloud model
-      - llama3.1:latest              # Local 8B fallback
+      - llama-cpp-default            # Avoid circular with llama3.1
+      - llama-cpp-native             # Ultimate local fallback (terminal)
     tier: cloud_entry
 
   "glm-4.6:cloud":
     description: "Smallest cloud model: direct to local fallback"
     chain:
-      - llama3.1:latest              # Local 8B
-      - mythomax-l2-13b-q5_k_m       # Alternative local 13B
+      - llama3.1:latest              # Local 8B general model
+      - mythomax-l2-13b-q5_k_m       # Alternative local 13B creative model
     tier: cloud_entry
 
   # --------------------------------------------------------------------------

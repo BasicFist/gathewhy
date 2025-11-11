@@ -79,9 +79,11 @@ class ConfigValidator:
         print(f"{Colors.YELLOW}[WARN]{Colors.NC} {message}")
         self.warnings.append(message)
 
-    def log_error(self, message: str):
-        """Print error message"""
+    def log_error(self, message: str, hint: str | None = None):
+        """Print error message with optional hint"""
         print(f"{Colors.RED}[ERROR]{Colors.NC} {message}")
+        if hint:
+            print(f"{Colors.YELLOW}[HINT]{Colors.NC} {hint}")
         self.errors.append(message)
 
     def load_configurations(self) -> bool:

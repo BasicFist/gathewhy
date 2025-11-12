@@ -833,12 +833,42 @@ Source files (`providers.yaml`, `model-mappings.yaml`) are edited by humans. The
 ### Validation Layers
 
 1. **Pre-commit hooks**: Local validation before commits
-2. **Configuration schema**: Pydantic validation of structure and types
-3. **Consistency validation**: Cross-file model name verification
-4. **Port conflict detection**: Ensure no port collisions
-5. **Provider health checks**: Endpoints actually respond
-6. **CI/CD pipeline**: Full validation on every push
-7. **Integration tests**: End-to-end routing verification
+2. **Auto-generated config protection**: Blocks manual edits to litellm-unified.yaml
+3. **Configuration schema**: Pydantic validation of structure and types
+4. **Consistency validation**: Cross-file model name verification
+5. **Port conflict detection**: Ensure no port collisions
+6. **Provider health checks**: Endpoints actually respond
+7. **CI/CD pipeline**: Full validation on every push
+8. **Integration tests**: End-to-end routing verification
+
+### Auto-Generated Config Protection
+
+The `config/litellm-unified.yaml` file is **strictly auto-generated** and manual edits are blocked by pre-commit hooks:
+
+**Protection Mechanisms**:
+1. **Pre-commit hook**: `scripts/check-generated-configs.sh` verifies AUTO-GENERATED marker
+2. **Generator validation**: `generate-litellm-config.py` checks for manual edits before overwriting
+3. **Version tracking**: `.litellm-version` file tracks generation timestamp and source files
+
+**Emergency Override** (use only when absolutely necessary):
+```bash
+# Bypass auto-generated check (dangerous - use with caution)
+SKIP_AUTOGEN_CHECK=1 git commit -m "emergency fix"
+```
+
+**Proper Workflow**:
+```bash
+# 1. Edit source files
+vim config/providers.yaml
+vim config/model-mappings.yaml
+
+# 2. Regenerate config
+python3 scripts/generate-litellm-config.py
+
+# 3. Commit both source and generated files
+git add config/providers.yaml config/model-mappings.yaml config/litellm-unified.yaml
+git commit -m "feat: update provider configuration"
+```
 
 ### Observability
 

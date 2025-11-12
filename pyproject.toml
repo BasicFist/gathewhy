@@ -51,8 +51,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Test files can have longer names and fixtures
-"tests/**/*.py" = ["N802", "N803"]
+# Test files can have longer names, fixtures, and path manipulation
+"tests/**/*.py" = ["N802", "N803", "E402", "SIM117", "B023", "UP038", "RET505"]
 
 [tool.ruff.format]
 # Formatting style

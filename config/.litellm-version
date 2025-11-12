@@ -1,5 +1,5 @@
 mappings_file: config/model-mappings.yaml
 output_file: config/litellm-unified.yaml
 providers_file: config/providers.yaml
-timestamp: '2025-11-11T23:33:00.877948'
-version: git-f7230a0
+timestamp: '2025-11-12T09:26:08.418190'
+version: git-2646054

@@ -113,7 +113,7 @@ check_yaml_syntax() {
         return 0
     fi
 
-    log_info "Check 1/7: YAML syntax validation"
+    log_info "Check 1/9: YAML syntax validation"
 
     local configs=(
         "$PROJECT_ROOT/config/providers.yaml"
@@ -160,7 +160,7 @@ check_model_consistency() {
         return 0
     fi
 
-    log_info "Check 2/7: Model ID consistency"
+    log_info "Check 2/9: Model ID consistency"
 
     if [[ -f "$SCRIPT_DIR/validate-config-consistency.py" ]]; then
         if python3 "$SCRIPT_DIR/validate-config-consistency.py" > /dev/null 2>&1; then
@@ -190,7 +190,7 @@ check_model_consistency() {
 # ============================================================================
 
 check_port_availability() {
-    log_info "Check 3/7: Port availability (required ports)"
+    log_info "Check 3/9: Port availability (required ports)"
 
     if [[ -f "$SCRIPT_DIR/check-port-conflicts.sh" ]]; then
         # Check required ports only for comprehensive check
@@ -220,13 +220,14 @@ check_port_availability() {
 # ============================================================================
 
 check_provider_reachability() {
-    log_info "Check 4/7: Provider reachability"
+    log_info "Check 4/9: Provider reachability"
 
     local providers_healthy=0
     local providers_down=0
 
     # LiteLLM Gateway (most critical)
-    if curl -sf http://localhost:4000/health > /dev/null 2>&1; then
+    # Use /health/liveliness endpoint which doesn't require authentication
+    if curl -sf http://localhost:4000/health/liveliness > /dev/null 2>&1; then
         log_success "  LiteLLM Gateway (4000) - responding"
         providers_healthy=$((providers_healthy + 1))
     else
@@ -275,7 +276,7 @@ check_provider_reachability() {
 # ============================================================================
 
 check_redis_connectivity() {
-    log_info "Check 5/7: Redis connectivity"
+    log_info "Check 5/9: Redis connectivity"
 
     if command -v redis-cli &> /dev/null; then
         if redis-cli -h 127.0.0.1 -p 6379 ping > /dev/null 2>&1; then
@@ -306,7 +307,7 @@ check_schema_compliance() {
         return 0
     fi
 
-    log_info "Check 6/7: Configuration schema compliance"
+    log_info "Check 6/9: Configuration schema compliance"
 
     # Check required fields in litellm-unified.yaml
     local config="$PROJECT_ROOT/config/litellm-unified.yaml"
@@ -362,7 +363,7 @@ check_backup_integrity() {
         return 0
     fi
 
-    log_info "Check 7/7: Backup integrity"
+    log_info "Check 7/9: Backup integrity"
 
     if [[ -f "$SCRIPT_DIR/verify-backup.sh" ]]; then
         # Check latest backup
@@ -376,6 +377,136 @@ check_backup_integrity() {
     else
         log_warn "Backup verification script not found"
         record_result "backup_integrity" "warn" "Verifier script missing"
+    fi
+
+    echo ""
+}
+
+# ============================================================================
+# CHECK 8: Configuration Staleness
+# ============================================================================
+
+check_config_staleness() {
+    if [[ "$CRITICAL_ONLY" == "true" ]]; then
+        return 0
+    fi
+
+    log_info "Check 8/9: Configuration staleness"
+
+    local providers_config="$PROJECT_ROOT/config/providers.yaml"
+    local mappings_config="$PROJECT_ROOT/config/model-mappings.yaml"
+    local generated_config="$PROJECT_ROOT/config/litellm-unified.yaml"
+
+    # Check if all files exist
+    if [[ ! -f "$providers_config" ]] || [[ ! -f "$mappings_config" ]] || [[ ! -f "$generated_config" ]]; then
+        log_error "One or more config files missing"
+        record_result "config_staleness" "fail" "Config files missing"
+        echo ""
+        return
+    fi
+
+    # Get modification times (seconds since epoch)
+    local providers_mtime=$(stat -c %Y "$providers_config" 2>/dev/null || stat -f %m "$providers_config" 2>/dev/null)
+    local mappings_mtime=$(stat -c %Y "$mappings_config" 2>/dev/null || stat -f %m "$mappings_config" 2>/dev/null)
+    local generated_mtime=$(stat -c %Y "$generated_config" 2>/dev/null || stat -f %m "$generated_config" 2>/dev/null)
+
+    # Check if generated config is older than source configs
+    local is_stale=false
+    local stale_reason=""
+
+    if [[ $generated_mtime -lt $providers_mtime ]]; then
+        is_stale=true
+        stale_reason="providers.yaml modified after litellm-unified.yaml"
+        log_warn "  litellm-unified.yaml is older than providers.yaml"
+    fi
+
+    if [[ $generated_mtime -lt $mappings_mtime ]]; then
+        is_stale=true
+        if [[ -n "$stale_reason" ]]; then
+            stale_reason="$stale_reason; model-mappings.yaml modified after litellm-unified.yaml"
+        else
+            stale_reason="model-mappings.yaml modified after litellm-unified.yaml"
+        fi
+        log_warn "  litellm-unified.yaml is older than model-mappings.yaml"
+    fi
+
+    if [[ "$is_stale" == "true" ]]; then
+        log_warn "Configuration is STALE - regenerate with: python3 scripts/generate-litellm-config.py"
+        record_result "config_staleness" "warn" "$stale_reason"
+    else
+        log_success "Configuration is up-to-date"
+        record_result "config_staleness" "pass" "Generated config is fresh"
+    fi
+
+    echo ""
+}
+
+# ============================================================================
+# CHECK 9: Environment Variables for Cloud Providers
+# ============================================================================
+
+check_environment_variables() {
+    if [[ "$CRITICAL_ONLY" == "true" ]]; then
+        return 0
+    fi
+
+    log_info "Check 9/9: Environment variables for cloud providers"
+
+    local all_env_valid=true
+
+    # Parse providers.yaml to find active cloud providers
+    local providers_config="$PROJECT_ROOT/config/providers.yaml"
+
+    if [[ ! -f "$providers_config" ]]; then
+        log_error "providers.yaml not found"
+        record_result "env_variables" "fail" "Provider config missing"
+        echo ""
+        return
+    fi
+
+    # Check Ollama Cloud provider
+    if grep -A10 "ollama_cloud:" "$providers_config" | grep -q "status: active"; then
+        if [[ -z "${OLLAMA_API_KEY:-}" ]]; then
+            log_error "  ollama_cloud is active but OLLAMA_API_KEY not set"
+            record_result "env_ollama_api_key" "fail" "Required environment variable missing"
+            all_env_valid=false
+        else
+            log_success "  OLLAMA_API_KEY is set (${#OLLAMA_API_KEY} chars)"
+            record_result "env_ollama_api_key" "pass" "Environment variable present"
+        fi
+    else
+        log_info "  ollama_cloud is disabled - OLLAMA_API_KEY not required"
+        record_result "env_ollama_api_key" "pass" "Provider disabled, key not required"
+    fi
+
+    # Check OpenAI provider (if active)
+    if grep -A5 "^  openai:" "$providers_config" | grep -q "status: active"; then
+        if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            log_error "  openai is active but OPENAI_API_KEY not set"
+            record_result "env_openai_api_key" "fail" "Required environment variable missing"
+            all_env_valid=false
+        else
+            log_success "  OPENAI_API_KEY is set"
+            record_result "env_openai_api_key" "pass" "Environment variable present"
+        fi
+    fi
+
+    # Check Anthropic provider (if active)
+    if grep -A5 "^  anthropic:" "$providers_config" | grep -q "status: active"; then
+        if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+            log_error "  anthropic is active but ANTHROPIC_API_KEY not set"
+            record_result "env_anthropic_api_key" "fail" "Required environment variable missing"
+            all_env_valid=false
+        else
+            log_success "  ANTHROPIC_API_KEY is set"
+            record_result "env_anthropic_api_key" "pass" "Environment variable present"
+        fi
+    fi
+
+    if [[ "$all_env_valid" == "true" ]]; then
+        log_success "All required environment variables present"
+    else
+        log_error "Some required environment variables missing"
     fi
 
     echo ""
@@ -473,6 +604,8 @@ main() {
     check_redis_connectivity
     check_schema_compliance
     check_backup_integrity
+    check_config_staleness
+    check_environment_variables
 
     # Output results
     output_summary

@@ -151,9 +151,9 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ### llama.cpp Models
 
-#### llama-cpp-python
+#### llama-cpp-default (llama_cpp_python)
 ```yaml
-Client Name: "llama-cpp-python"
+Client Name: "llama-cpp-default"
 Aliases: ["llamacpp", "llama-cpp"]
 Provider: llama_cpp_python
 Backend Path: "openai/local-model"
@@ -163,12 +163,19 @@ Capabilities:
   - low_latency
   - cuda_optimized
   - large_context
+  - provider_diversity  # NEW: Integrated into fallback chains
 
 Tags: ["gguf", "cuda", "high-performance"]
 Context Window: 8192 tokens (configured)
 Concurrency: 4 parallel requests
+TTFB: ~80ms (CUDA-optimized)
 Notes: "Python bindings, n_parallel=4, n_ctx=8192"
+
+Fallback Chain (v1.7.1):
+  - llama-cpp-native       # Same provider, faster C++ binding
 ```
+
+**NEW in v1.7.1**: Now integrated into fallback chains for provider diversity!
 
 #### llama-cpp-native
 ```yaml
@@ -182,10 +189,17 @@ Capabilities:
   - maximum_performance
   - low_latency
   - cuda_optimized
+  - terminal_node  # NEW: Serves as fallback terminus
 
-Tags: ["gguf", "cuda", "maximum-performance"]
-Notes: "Pure C++ server, no Python overhead"
+Tags: ["gguf", "cuda", "maximum-performance", "terminal"]
+TTFB: ~50ms (Fastest local option - pure C++)
+Notes: "Pure C++ server, no Python overhead, TERMINAL NODE"
+
+Fallback Chain (v1.7.1):
+  - []  # Terminal node - fastest local fallback terminus
 ```
+
+**NEW in v1.7.1**: Serves as terminal node (fastest local option) for fallback chains!
 
 ---
 
@@ -777,5 +791,7 @@ exact_matches:
     fallback: existing_model
 ```
 
-**Version**: 1.0
-**Last Updated**: 2025-10-19
+**Version**: 1.7 (quality-preserving-fallbacks)
+**Last Updated**: 2025-11-11
+**Architecture**: Multi-tier cloud preservation with complexity-aware routing
+**Deployed**: 2025-11-11 (10 models active, 9 healthy endpoints)

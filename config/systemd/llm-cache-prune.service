@@ -1,0 +1,8 @@
+[Unit]
+Description=Prune llama.cpp and vLLM cache directories
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/LAB/ai/backend/ai-backend-unified/scripts/maintenance/prune_llm_caches.sh
+Environment=CACHE_MAX_DAYS=7

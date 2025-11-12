@@ -20,6 +20,7 @@ Usage:
     python3 scripts/config-audit.py --focus security  # Security focus
 """
 
+import importlib.util
 import json
 import sys
 from datetime import datetime
@@ -98,29 +99,43 @@ class SecurityAudit(AuditCategory):
     def check_exposed_credentials(self):
         """Check for exposed credentials in configs"""
         try:
+            sensitive_keys = {"password", "api_key", "apikey", "secret", "token"}
+            safe_values = {"not-needed", "none", "null", ""}
+
+            def contains_plaintext_secret(data) -> bool:
+                if isinstance(data, dict):
+                    for key, value in data.items():
+                        key_lower = str(key).lower()
+                        if key_lower in sensitive_keys:
+                            if isinstance(value, str):
+                                stripped = value.strip()
+                                if (
+                                    stripped
+                                    and not stripped.startswith("${")
+                                    and stripped.lower() not in safe_values
+                                ):
+                                    return True
+                            elif value is not None:
+                                return True
+                        if contains_plaintext_secret(value):
+                            return True
+                elif isinstance(data, list):
+                    return any(contains_plaintext_secret(item) for item in data)
+                return False
+
             for config_file in self.config_dir.glob("*.yaml"):
                 with open(config_file) as f:
-                    content = f.read()
+                    try:
+                        parsed = yaml.safe_load(f) or {}
+                    except yaml.YAMLError:
+                        parsed = f.read()
 
-                # Check for common credential patterns
-                if (
-                    any(
-                        keyword in content.lower()
-                        for keyword in [
-                            "password:",
-                            "api_key:",
-                            "secret:",
-                            "token:",
-                            "apikey:",
-                        ]
-                    )
-                    and "base_url" not in content
-                ):  # URLs OK, but not credentials
+                if contains_plaintext_secret(parsed):
                     self.add_finding(
                         "critical",
                         "Potential exposed credentials",
-                        f"File {config_file.name} may contain credentials",
-                        "Move sensitive data to environment variables or .env file",
+                        f"File {config_file.name} may contain embedded credentials",
+                        "Move sensitive data to environment variables or secret stores",
                     )
         except Exception as e:
             logger.error(f"Error in credential check: {e}")
@@ -133,13 +148,12 @@ class SecurityAudit(AuditCategory):
                 with open(litellm_file) as f:
                     config = yaml.safe_load(f)
 
-                # Check if auth is configured
-                if not config.get("require_auth") and not config.get("api_key"):
+                if config.get("require_auth") is False:
                     self.add_finding(
-                        "high",
-                        "Authentication not enforced",
-                        "Gateway may be accessible without authentication",
-                        "Set require_auth: true and configure API keys",
+                        "medium",
+                        "Authentication explicitly disabled",
+                        "Gateway is configured without authentication",
+                        "Enable require_auth when deploying to shared environments",
                     )
         except Exception as e:
             logger.error(f"Error in auth check: {e}")
@@ -177,25 +191,33 @@ class SecurityAudit(AuditCategory):
     def check_data_validation(self):
         """Check data validation rules"""
         try:
-            import sys
+            scripts_dir = self.config_dir.parent / "scripts"
+            schema_path = scripts_dir / "validate-config-schema.py"
 
-            sys.path.insert(0, str(self.config_dir.parent / "scripts"))
-            from validate_config_schema import ProvidersYAML
+            if not schema_path.exists():
+                logger.debug("Schema validator not found", path=str(schema_path))
+                return
+
+            spec = importlib.util.spec_from_file_location("validate_config_schema", schema_path)
+            if spec is None or spec.loader is None:
+                logger.debug("Unable to load schema validator", path=str(schema_path))
+                return
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)  # type: ignore[union-attr]
+            ProvidersYAML = module.ProvidersYAML
 
             providers_file = self.config_dir / "providers.yaml"
             with open(providers_file) as f:
                 config = yaml.safe_load(f)
 
-            try:
-                ProvidersYAML(**config)
-                self.add_finding(
-                    "info",
-                    "Schema validation enabled",
-                    "Configuration uses Pydantic validation",
-                    "",
-                )
-            except Exception:
-                pass
+            ProvidersYAML(**config)
+            self.add_finding(
+                "info",
+                "Schema validation enabled",
+                "Configuration uses Pydantic validation",
+                "",
+            )
 
         except Exception as e:
             logger.debug(f"Error in data validation check: {e}")

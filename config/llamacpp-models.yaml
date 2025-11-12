@@ -1,0 +1,78 @@
+models:
+  - alias: llama-cpp-llama3.1
+    display: "Meta Llama 3.1 8B Instruct"
+    repo_id: bartowski/Meta-Llama-3.1-8B-Instruct-GGUF
+    filename: Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+    storage_dir: Meta-Llama-3.1-8B-Instruct-Q4_K_M
+    backend_model: Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+    size: "8B"
+    quantization: Q4_K_M
+    context_length: 131072
+    specialty: general_chat
+    recommended_gpu_layers: 40
+    notes: "Default Meta Llama 3.1 8B instruct model served through llama.cpp Python bindings."
+
+  - alias: llama-cpp-mistral-nemo
+    display: "Mistral Nemo Instruct 12B (2407)"
+    repo_id: QuantFactory/Mistral-Nemo-Instruct-2407-GGUF
+    filename: Mistral-Nemo-Instruct-2407.Q4_K_M.gguf
+    storage_dir: Mistral-Nemo-Instruct-2407-Q4_K_M
+    backend_model: Mistral-Nemo-Instruct-2407.Q4_K_M.gguf
+    size: "12B"
+    quantization: Q4_K_M
+    context_length: 131072
+    specialty: reasoning
+    recommended_gpu_layers: 48
+    notes: "Analytical reasoning tuned release. Requires partial GPU offload on 16 GB cards."
+
+  - alias: llama-cpp-deepseek-coder-lite
+    display: "DeepSeek Coder v2 Lite Instruct"
+    repo_id: QuantFactory/DeepSeek-Coder-V2-Lite-Instruct-GGUF
+    filename: DeepSeek-Coder-V2-Lite-Instruct.Q4_K_M.gguf
+    storage_dir: DeepSeek-Coder-V2-Lite-Q4_K_M
+    backend_model: DeepSeek-Coder-V2-Lite-Instruct.Q4_K_M.gguf
+    size: "16B"
+    quantization: Q4_K_M
+    context_length: 16384
+    specialty: code_generation
+    recommended_gpu_layers: 52
+    notes: "Deterministic code generation stack; prefers lower temperatures."
+
+  - alias: llama-cpp-openhermes-2.5
+    display: "OpenHermes 2.5 Mistral"
+    repo_id: TheBloke/OpenHermes-2.5-Mistral-7B-GGUF
+    filename: openhermes-2.5-mistral-7b.Q5_K_M.gguf
+    storage_dir: OpenHermes-2.5-Mistral-Q5_K_M
+    backend_model: openhermes-2.5-mistral-7b.Q5_K_M.gguf
+    size: "7B"
+    quantization: Q5_K_M
+    context_length: 8192
+    specialty: creative_writing
+    recommended_gpu_layers: 48
+    notes: "Conversational/creative tuning with balanced creativity and stability."
+
+  - alias: llama-cpp-phi3-medium
+    display: "Phi-3 Medium 4K Instruct"
+    repo_id: ssmits/Phi-3-medium-4k-instruct-Q4_K_M-GGUF
+    filename: phi-3-medium-4k-instruct.Q4_K_M.gguf
+    storage_dir: Phi-3-medium-4k-instruct-Q4_K_M
+    backend_model: phi-3-medium-4k-instruct.Q4_K_M.gguf
+    size: "14B"
+    quantization: Q4_K_M
+    context_length: 4096
+    specialty: knowledge_retrieval
+    recommended_gpu_layers: 40
+    notes: "Great factual recall with low-latency footprint."
+
+  - alias: llama-cpp-mixtral-8x7b
+    display: "Mixtral 8x7B Instruct v0.1"
+    repo_id: TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF
+    filename: mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
+    storage_dir: Mixtral-8x7B-Instruct-v0.1-Q4_K_M
+    backend_model: mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf
+    size: "46B"
+    quantization: Q4_K_M
+    context_length: 32768
+    specialty: advanced_reasoning
+    recommended_gpu_layers: 40
+    notes: "MoE reasoning model; requires aggressive offload but delivers stronger depth."

@@ -1,0 +1,153 @@
+# AI Backend Routing Architecture v1.7
+# Quality-Preserving Fallback Chains
+
+## Cloud Premium Tier (671B-1T)
+
+deepseek-v3.1:671b-cloud [REASONING SPECIALIST]
+    ↓ (failure)
+    ├─→ kimi-k2:1t-cloud [1T REASONING] ............... +49% params (UPGRADE)
+    │   ↓ (failure)
+    │   └─→ gpt-oss:120b-cloud [GENERAL 120B] ......... -88% params (acceptable)
+    │       ↓ (failure)
+    │       └─→ llama3.1:latest [LOCAL 8B] ............ -93% params (last resort)
+    │
+kimi-k2:1t-cloud [LARGEST MODEL]
+    ↓ (failure)
+    ├─→ deepseek-v3.1:671b-cloud [REASONING 671B] ..... -33% params (acceptable)
+    │   ↓ (failure)
+    │   └─→ gpt-oss:120b-cloud [GENERAL 120B] ......... -82% params (acceptable)
+    │       ↓ (failure)
+    │       └─→ llama3.1:latest [LOCAL 8B] ............ -99% params (last resort)
+
+## Cloud Standard Tier (120B-480B)
+
+qwen3-coder:480b-cloud [CODE SPECIALIST]
+    ↓ (failure)
+    ├─→ gpt-oss:120b-cloud [GENERAL 120B] ............ -75% params (acceptable)
+    │   ↓ (failure)
+    │   └─→ qwen-coder-vllm [LOCAL CODE 7B] ........... -98% params (maintain code capability)
+    │       ↓ (failure)
+    │       └─→ qwen2.5-coder:7b [LOCAL CODE 7B] ...... -98% params (final code fallback)
+    │
+gpt-oss:120b-cloud [GENERAL PURPOSE]
+    ↓ (failure)
+    ├─→ gpt-oss:20b-cloud [GENERAL 20B] .............. -83% params (step down)
+    │   ↓ (failure)
+    │   └─→ llama3.1:latest [LOCAL 8B] ................ -93% params (local fallback)
+    │       ↓ (failure)
+    │       └─→ mythomax-l2-13b [LOCAL 13B] ........... alternative local
+
+## Cloud Entry Tier (4.6B-20B)
+
+gpt-oss:20b-cloud [STANDARD CHAT]
+    ↓ (failure)
+    ├─→ glm-4.6:cloud [LIGHTWEIGHT 4.6B] ............. -77% params (cloud alternative)
+    │   ↓ (failure)
+    │   └─→ llama3.1:latest [LOCAL 8B] ................ local fallback
+    │
+glm-4.6:cloud [LIGHTWEIGHT]
+    ↓ (failure)
+    ├─→ llama3.1:latest [LOCAL 8B] ................... +74% params (UPGRADE to local)
+    │   ↓ (failure)
+    │   └─→ mythomax-l2-13b [LOCAL 13B] ............... +183% params (alternative)
+
+## Local Model Tier (7B-13B)
+
+qwen2.5-coder:7b [CODE LOCAL]
+    ↓ (failure)
+    ├─→ qwen-coder-vllm [VLLM CODE 7B] ............... same capability, high throughput
+    │   ↓ (failure)
+    │   └─→ llama3.1:latest [GENERAL 8B] .............. general fallback
+    │
+llama3.1:latest [GENERAL LOCAL]
+    ↓ (failure)
+    ├─→ mythomax-l2-13b [LOCAL 13B] .................. +63% params (local alternative)
+    │   ↓ (failure)
+    │   └─→ gpt-oss:20b-cloud [CLOUD 20B] ............ +150% params (cloud upgrade)
+    │
+mythomax-l2-13b [CREATIVE LOCAL]
+    ↓ (failure)
+    ├─→ llama3.1:latest [GENERAL 8B] ................. -38% params (local fallback)
+    │   ↓ (failure)
+    │   └─→ gpt-oss:120b-cloud [CLOUD 120B] ........... +1400% params (cloud creative)
+
+## Load Balancing Architecture
+
+CODE GENERATION (Adaptive Weighted):
+┌─────────────────────────────────────────────────────┐
+│ Request → Complexity Detection (token_count)       │
+└─────────────────────────────────────────────────────┘
+                    ↓
+    ┌───────────────┼───────────────┐
+    ↓               ↓               ↓
+Simple (<50)   Medium (50-100)  Complex (>100)
+ollama (30%)   vllm-qwen (50%)  ollama_cloud (20%)
+qwen2.5-coder  qwen-coder-vllm  qwen3-coder:480b
+
+Saturation: 80% capacity → overflow to cloud
+
+CREATIVE TASKS (Quality Based):
+┌─────────────────────────────────────────────────────┐
+│ Request → Quality/Length Detection                 │
+└─────────────────────────────────────────────────────┘
+                    ↓
+        ┌───────────┼───────────┐
+        ↓                       ↓
+Standard (<1K)          High Quality/Long (>1K)
+ollama (70%)            ollama_cloud (30%)
+mythomax-l2-13b         gpt-oss:120b-cloud
+
+## Capability Routing (Consolidated)
+
+PRIMARY USE CASES:
+  code ──────────→ complexity_based → [qwen3-coder:480b, qwen-coder-vllm, qwen2.5-coder:7b]
+  analytical ────→ context_based ───→ [deepseek-v3.1:671b, kimi-k2:1t, qwen2.5-coder:7b]
+  reasoning ─────→ direct ──────────→ [deepseek-v3.1:671b, kimi-k2:1t, llama3.1:latest]
+  creative ──────→ usage_based ─────→ [mythomax-l2-13b, llama3.1:latest, gpt-oss:120b]
+  chat ──────────→ usage_based ─────→ [llama3.1:latest, gpt-oss:120b, gpt-oss:20b, glm-4.6]
+
+PERFORMANCE-ORIENTED:
+  high_throughput ──→ least_loaded ───→ vllm-qwen (single instance, Qwen model only)
+  low_latency ──────→ fastest_response → llama_cpp_native → llama_cpp_python
+  large_context ────→ most_capacity ───→ [kimi-k2:1t, llama_cpp_python]
+
+## Architecture Principles v1.7
+
+1. GRACEFUL DEGRADATION
+   Cloud Premium → Cloud Standard → Cloud Entry → Local
+   (Maintain quality tier 2+ hops before degrading)
+
+2. QUALITY PRESERVATION
+   671B → 1T → 120B → 8B (cloud alternatives before local cliff)
+   NOT: 671B → 8B (98.8% quality cliff)
+
+3. COMPLEXITY AWARENESS
+   Simple tasks → Local (fast, cheap)
+   Complex tasks → Cloud (high quality, appropriate)
+   Saturation → Cloud overflow (80% threshold)
+
+4. CAPABILITY PRESERVATION
+   Code fallback → Code specialists (qwen3-coder → gpt-oss → vllm → ollama)
+   NOT: Code → General chat (capability mismatch)
+
+## vLLM Single-Instance Constraint
+
+Port 8001: vllm-qwen (Qwen2.5-Coder-7B-AWQ) [ACTIVE]
+Port 8002: vllm-dolphin (Dolphin-2.8-Mistral-7B-AWQ) [DISABLED]
+
+Switch models: ./scripts/vllm-model-switch.sh {qwen|dolphin}
+
+Implications:
+  - Only ONE vLLM model active at a time
+  - Load balancing uses only active model
+  - High throughput routing → active model only
+
+## System Metrics
+
+Capabilities:        10 → 8 (-20%)
+Load Balancing:      2 → 4 (+100%)
+Fallback Chains:     9 → 11 (+22%)
+Cloud Hops:          1-2 → 2-4 (+100-200%)
+Routing Strategies:  5 → 8 (+60%)
+
+Quality Improvement: 98.8% → 49% first-hop degradation (MASSIVE)

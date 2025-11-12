@@ -53,6 +53,14 @@ providers:
       n_ctx: 8192
       n_parallel: 4
       threads: 6
+    models:
+      - name: llama-cpp-default
+        description: "GGUF model via llama.cpp Python bindings"
+        context_length: 8192
+        tags:
+          - local
+          - gguf
+          - cuda_optimized
     health_endpoint: /v1/models
     service_file: ~/.config/systemd/user/llamacpp-python.service
     location: ../openwebui/backends/llama.cpp
@@ -67,6 +75,15 @@ providers:
       - No Python overhead
       - Maximum throughput
       - CUDA-optimized
+    models:
+      - name: llama-cpp-native
+        description: "GGUF model via llama.cpp native C++ server"
+        context_length: 8192
+        tags:
+          - local
+          - gguf
+          - native
+          - fastest
     health_endpoint: /v1/models
     location: ../openwebui/backends/llama.cpp
 
@@ -102,7 +119,7 @@ providers:
   vllm-dolphin:
     type: vllm
     base_url: http://127.0.0.1:8002
-    status: active
+    status: disabled  # vLLM runs single instance - use vllm-model-switch.sh to enable
     description: vLLM high-throughput inference with AWQ quantization (Dolphin model)
     features:
       - Continuous batching
@@ -125,6 +142,44 @@ providers:
       gpu_vram_gb: 16
       gpu_model: "Quadro RTX 5000"
       compute_capability: "7.5"
+
+  ollama_cloud:
+    type: ollama
+    base_url: https://ollama.com
+    status: active
+    description: Ollama Cloud API for large models without local GPU
+    requires_api_key: true
+    env_var: OLLAMA_API_KEY
+    features:
+      - Cloud-hosted large models (no local GPU required)
+      - Data-center-grade hardware
+      - Same API as local Ollama
+      - Automatic offloading for cloud models
+    models:
+      - name: deepseek-v3.1:671b-cloud
+        size: "671B"
+        specialty: advanced_reasoning
+      - name: qwen3-coder:480b-cloud
+        size: "480B"
+        specialty: code_generation
+      - name: kimi-k2:1t-cloud
+        size: "1T"
+        specialty: advanced_reasoning
+      - name: gpt-oss:120b-cloud
+        size: "120B"
+        specialty: general_chat
+      - name: gpt-oss:20b-cloud
+        size: "20B"
+        specialty: general_chat
+      - name: glm-4.6:cloud
+        size: "4.6B"
+        specialty: general_chat
+    health_endpoint: /api/tags
+    docs: https://docs.ollama.com/cloud
+    rate_limits:
+      hourly: true
+      daily: true
+      details: "Free preview with generous limits"
 
   # ============================================================================
   # TEMPLATE PROVIDERS (Disabled, for reference)
@@ -175,13 +230,15 @@ providers:
 # ============================================================================
 
 metadata:
-  version: "1.2"
-  last_updated: "2025-10-23"
-  total_providers: 4  # ollama, llama_cpp_python, llama_cpp_native, vllm
-  total_models_available: 5  # 3 Ollama + 1 vLLM + 1 llama.cpp
+  version: "1.4"
+  last_updated: "2025-10-30"
+  total_providers: 5  # ollama, llama_cpp_python, llama_cpp_native, vllm-qwen (active), ollama_cloud
+  total_models_available: 11  # 3 Ollama + 1 vLLM + 1 llama.cpp + 6 Ollama Cloud
+  notes: "vllm-dolphin disabled - vLLM runs single instance on port 8001"
 
   provider_types:
     - ollama: Simple local server
+    - ollama_cloud: Managed cloud API (Ollama)
     - llama_cpp: High-performance C++ inference
     - vllm: Production-grade batched inference
     - openai: Cloud API providers
@@ -202,6 +259,11 @@ metadata:
       best_for: High concurrency, production workloads
       performance: Very High (batched)
       resource_usage: High (requires GPU)
+
+    ollama_cloud:
+      best_for: Massive models without local GPU
+      performance: Data-center grade
+      resource_usage: Remote (billable)
 
 # ============================================================================
 # HEALTH CHECK CONFIGURATION

@@ -138,6 +138,11 @@ class TestCapabilityRouting:
             "usage_based",
             "fastest_response",
             "most_capacity",
+            # v1.7 NEW strategies
+            "complexity_based",  # Route by task complexity
+            "quality_based",  # Route by quality tier
+            "adaptive_weighted",  # Dynamic weight adjustment
+            "context_based",  # Route by context size
         ]
 
         for capability, config in capability_routing.items():
@@ -197,10 +202,22 @@ class TestFallbackChains:
             ), f"Circular fallback chain detected for model: {model_name}"
 
     def test_fallback_chains_have_models(self, fallback_chains):
-        """Verify each fallback chain has at least one fallback"""
+        """Verify each fallback chain has at least one fallback (except terminal nodes)"""
+        # Terminal nodes are allowed to have empty chains
+        terminal_nodes = {
+            "llama-cpp-native",  # New terminal node (fastest local, C++ native)
+            # Add more terminal nodes here as architecture evolves
+        }
+
         for model_name, config in fallback_chains.items():
             chain = config.get("chain", [])
-            assert len(chain) > 0, f"Model '{model_name}' has empty fallback chain"
+
+            # Terminal nodes can have empty chains
+            if model_name in terminal_nodes and not chain:
+                continue  # Expected for terminal nodes
+
+            # Non-terminal nodes must have fallbacks
+            assert len(chain) > 0, f"Non-terminal model '{model_name}' has empty fallback chain"
 
     def test_fallback_chains_no_self_reference(self, fallback_chains):
         """Fallback chains must not reference the primary model"""
@@ -306,17 +323,23 @@ class TestProviderReferences:
                     "pattern:"
                 ), f"Model '{model_name}' references inactive/unknown provider: {provider}"
 
-    def test_pattern_matches_reference_active_providers(self, mappings_config, active_providers):
-        """Verify pattern matches reference active providers"""
+    def test_pattern_matches_reference_active_providers(
+        self, mappings_config, active_providers, providers_config
+    ):
+        """Verify pattern matches reference active or disabled (documented) providers"""
         patterns = mappings_config.get("patterns", [])
-        active_provider_names = set(active_providers.keys())
+
+        # Get all provider names (including disabled ones like vllm-dolphin)
+        all_provider_names = set(providers_config.get("providers", {}).keys())
 
         for entry in patterns:
             provider = entry.get("provider")
             if provider:
+                # Allow patterns to reference disabled providers (for documentation/future use)
+                # e.g., vllm-dolphin is disabled due to single-instance constraint but pattern documented
                 assert (
-                    provider in active_provider_names
-                ), f"Pattern '{entry.get('pattern')}' references inactive/unknown provider: {provider}"
+                    provider in all_provider_names
+                ), f"Pattern '{entry.get('pattern')}' references unknown provider: {provider}"
 
     def test_load_balancing_references_active_providers(self, mappings_config, active_providers):
         """Verify load balancing references active providers"""

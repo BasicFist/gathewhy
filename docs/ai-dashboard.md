@@ -76,7 +76,15 @@ Monitors all configured LLM providers with live status updates:
 - 🔒 **Enable**: Enable service at boot
 - 🔓 **Disable**: Disable service at boot
 
-### 5. Event Logging
+### 5. Global Service Controls
+
+**Control Bar** (beneath search):
+- Quick access Start/Stop/Restart buttons for the selected provider
+- Status message that reflects which service is armed for control
+- Buttons stay disabled until a service row is selected
+- Honors provider-level restrictions (disabled when controls are unavailable)
+
+### 6. Event Logging
 
 **Event Log** (bottom-right):
 - Real-time dashboard events

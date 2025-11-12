@@ -74,10 +74,9 @@ Comprehensive checklist for deploying the AI Backend Unified Infrastructure to p
   grep -A 5 "rpm\|tpm" config/litellm-unified.yaml
   ```
 
-- [ ] Master key authentication enabled (production)
+- [ ] Authentication configured (optional, only for shared deployments)
   ```bash
-  # Ensure LITELLM_MASTER_KEY is set in environment
-  env | grep LITELLM_MASTER_KEY
+  # Defaults require no master key; follow docs/security-setup.md to enable one if needed
   ```
 
 - [ ] Redis password configured (if applicable)
@@ -260,6 +259,20 @@ curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .l
 - [ ] Prometheus targets healthy
 - [ ] Grafana accessible
 - [ ] Dashboard imported
+
+### Optional: WTH Terminal Dashboard
+
+Set up the sticker-based dashboard for operators who prefer WTH/Gum:
+
+```bash
+./scripts/install-wth-dashboard.sh
+export WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets
+wth run --config $HOME/.config/wth/wth.yaml
+```
+
+- [ ] WTH installed on jump hosts
+- [ ] Widgets copied via `install-wth-dashboard.sh`
+- [ ] Operators briefed on [docs/wth-dashboard.md](docs/wth-dashboard.md)
 
 ## Post-Deployment Verification
 

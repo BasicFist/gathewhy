@@ -1,0 +1,47 @@
+# Dashboard Configuration for AI Backend Unified
+# Global settings for monitoring and UI components
+
+# Dashboard refresh interval (seconds)
+DASH_REFRESH_INTERVAL: 5
+
+# LiteLLM gateway settings
+LITELLM_GATEWAY:
+  base_url: "http://localhost:4000"
+  health_endpoint: "/health"
+  models_endpoint: "/v1/models"
+
+# Provider endpoints to monitor
+PROVIDER_ENDPOINTS:
+  - name: "Ollama"
+    url: "http://localhost:11434"
+    health_endpoint: "/api/tags"
+  - name: "llama.cpp Python"
+    url: "http://localhost:8000"
+    health_endpoint: "/v1/models"
+  - name: "llama.cpp Native"
+    url: "http://localhost:8080"
+    health_endpoint: "/v1/models"
+  - name: "vLLM"
+    url: "http://localhost:8001"
+    health_endpoint: "/v1/models"
+
+# Default settings for dashboard
+DASHBOARD_SETTINGS:
+  show_provider_latencies: true
+  show_model_counts: true
+  show_request_rates: true
+  show_error_rates: true
+  show_gpu_utilization: true  # Requires nvidia-ml-py3
+
+# Configuration paths for editor
+CONFIG_PATHS:
+  providers: "/home/miko/LAB/ai/backend/ai-backend-unified/config/providers.yaml"
+  mappings: "/home/miko/LAB/ai/backend/ai-backend-unified/config/model-mappings.yaml"
+  unified: "/home/miko/LAB/ai/backend/ai-backend-unified/config/litellm-unified.yaml"
+
+# Logging settings
+LOGGING:
+  level: "INFO"
+  file: "/var/log/litellm/dashboard.log"
+  max_size: "10MB"
+  backup_count: 3

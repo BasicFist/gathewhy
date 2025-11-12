@@ -4,10 +4,39 @@ Tests for security features, configuration loading, and validation logic.
 These tests verify key dashboard functionality without requiring full Textual import.
 """
 
+import importlib
 import subprocess
+import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+dashboard_package = importlib.import_module("dashboard")
+DashboardApp = importlib.import_module("dashboard.app").DashboardApp
+config_module = importlib.import_module("dashboard.config")
+load_env_config = config_module.load_env_config
+load_providers_config = config_module.load_providers_config
+models_module = importlib.import_module("dashboard.models")
+ServiceMetrics = models_module.ServiceMetrics
+GPUOverview = models_module.GPUOverview
+provider_module = importlib.import_module("dashboard.monitors.provider")
+GPUMonitor = importlib.import_module("dashboard.monitors.gpu").GPUMonitor
+state_module = importlib.import_module("dashboard.state")
+STATE_DIR = state_module.STATE_DIR
+STATE_FILE = state_module.STATE_FILE
+load_dashboard_state = state_module.load_dashboard_state
+save_dashboard_state = state_module.save_dashboard_state
+DetailPanel = importlib.import_module("dashboard.widgets.detail").DetailPanel
+GPUCard = importlib.import_module("dashboard.widgets.gpu_card").GPUCard
+OverviewPanel = importlib.import_module("dashboard.widgets.overview").OverviewPanel
+ServiceTable = importlib.import_module("dashboard.widgets.table").ServiceTable
 
 
 class TestDashboardSyntax:
@@ -98,39 +127,20 @@ class TestDashboardSecurityFeatures:
 
     def test_allowed_services_hardcoded(self):
         """Verify ALLOWED_SERVICES uses allowlist pattern."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        # Check for ALLOWED_SERVICES definition
-        assert "ALLOWED_SERVICES" in content, "Should have ALLOWED_SERVICES allowlist"
-        assert '"ollama"' in content, "Should whitelist ollama service"
-        assert "litellm" in content, "Should whitelist litellm services"
+        services = provider_module.ALLOWED_SERVICES
+        assert "ollama" in services
+        assert "litellm_gateway" in services
 
     def test_allowed_actions_hardcoded(self):
         """Verify ALLOWED_ACTIONS uses allowlist pattern."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        # Check for ALLOWED_ACTIONS definition
-        assert "ALLOWED_ACTIONS" in content, "Should have ALLOWED_ACTIONS allowlist"
-        assert '"start"' in content, "Should allow start action"
-        assert '"stop"' in content, "Should allow stop action"
+        actions = provider_module.ALLOWED_ACTIONS
+        assert {"start", "stop", "restart"}.issubset(actions)
 
     def test_localhost_validation(self):
         """Verify endpoint validation is present."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        # Check for security-related patterns
-        assert "ALLOWED_HOSTS" in content, "Should validate allowed hosts"
-        assert "127.0.0.1" in content, "Should restrict to localhost"
-        assert "_validate_endpoints" in content, "Should validate endpoints"
+        assert "127.0.0.1" in provider_module.ProviderMonitor.ALLOWED_HOSTS
+        assert "localhost" in provider_module.ProviderMonitor.ALLOWED_HOSTS
+        assert 11434 in provider_module.ProviderMonitor.ALLOWED_PORTS
 
 
 class TestDashboardErrorHandling:
@@ -138,27 +148,14 @@ class TestDashboardErrorHandling:
 
     def test_error_handling_present(self):
         """Verify comprehensive error handling exists."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        # Check for error handling patterns
-        assert "try:" in content, "Should use try/except blocks"
-        assert "except" in content, "Should have exception handlers"
-        assert "logger" in content, "Should use logging"
+        monitor = provider_module.ProviderMonitor(http_timeout=0.01)
+        metrics, gpu_info = monitor.collect_snapshot()
+        assert isinstance(metrics, list) and metrics, "Should return provider metrics"
+        assert isinstance(gpu_info.detected, bool)
 
     def test_logging_configured(self):
         """Verify logging is configured."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        # Check for logging setup
-        assert "import logging" in content, "Should import logging"
-        assert "logger.debug" in content, "Should use debug logging"
-        assert "logger.error" in content, "Should use error logging"
+        assert provider_module.logger.name == "dashboard.monitors.provider"
 
 
 class TestStatePersistence:
@@ -166,23 +163,13 @@ class TestStatePersistence:
 
     def test_state_persistence_functions_exist(self):
         """Verify state persistence functions are defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "save_dashboard_state" in content, "Should have save_dashboard_state function"
-        assert "load_dashboard_state" in content, "Should have load_dashboard_state function"
+        assert callable(save_dashboard_state)
+        assert callable(load_dashboard_state)
 
     def test_state_file_location_defined(self):
         """Verify state file location is defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "STATE_DIR" in content, "Should define STATE_DIR"
-        assert "STATE_FILE" in content, "Should define STATE_FILE"
+        assert STATE_DIR.is_absolute()
+        assert STATE_FILE.parent == STATE_DIR
 
 
 class TestDashboardComponents:
@@ -190,48 +177,23 @@ class TestDashboardComponents:
 
     def test_provider_monitor_defined(self):
         """Verify ProviderMonitor class is defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "class ProviderMonitor" in content, "Should define ProviderMonitor class"
+        assert hasattr(provider_module, "ProviderMonitor")
 
     def test_gpu_monitor_defined(self):
         """Verify GPUMonitor class is defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "class GPUMonitor" in content, "Should define GPUMonitor class"
+        assert GPUMonitor.__name__ == "GPUMonitor"
 
     def test_dashboard_app_defined(self):
         """Verify DashboardApp class is defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "class DashboardApp" in content, "Should define DashboardApp class"
+        assert DashboardApp.__name__ == "DashboardApp"
 
     def test_service_metrics_defined(self):
         """Verify ServiceMetrics dataclass is defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "class ServiceMetrics" in content, "Should define ServiceMetrics dataclass"
+        assert ServiceMetrics.__name__ == "ServiceMetrics"
 
     def test_gpu_overview_defined(self):
         """Verify GPUOverview dataclass is defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "class GPUOverview" in content, "Should define GPUOverview dataclass"
+        assert GPUOverview.__name__ == "GPUOverview"
 
 
 class TestDashboardKeyFeatures:
@@ -239,51 +201,37 @@ class TestDashboardKeyFeatures:
 
     def test_configuration_loading(self):
         """Verify configuration loading functionality."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "_load_config" in content, "Should have config loading function"
-        assert "_load_providers_config" in content, "Should load provider config from YAML"
+        timeout, refresh, log_height = load_env_config()
+        assert 0.5 <= timeout <= 30
+        assert 1 <= refresh <= 60
+        assert 5 <= log_height <= 50
+        providers = load_providers_config()
+        assert isinstance(providers, dict)
 
     def test_service_control(self):
         """Verify service control functionality."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "systemctl" in content, "Should support systemctl control"
-        assert "action_toggle_auto" in content, "Should support auto-refresh toggle"
+        monitor = provider_module.ProviderMonitor(http_timeout=0.01)
+        assert hasattr(monitor, "systemctl")
+        assert any(binding.key == "a" for binding in DashboardApp.BINDINGS)
 
     def test_event_handling(self):
         """Verify event handling is implemented."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "handle_service_action" in content, "Should handle service actions"
-        assert "handle_row_selected" in content, "Should handle row selection"
-        assert "on_mount" in content, "Should have mount event handler"
+        detail = DetailPanel()
+        assert hasattr(detail, "handle_button")
+        app = DashboardApp()
+        assert hasattr(app, "handle_service_action")
+        assert hasattr(app, "handle_row_selected")
 
     def test_ui_components(self):
         """Verify UI components are implemented."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        components = [
-            "OverviewPanel",
-            "ServiceTable",
-            "GPUCard",
-            "DetailPanel",
-        ]
-
-        for component in components:
-            assert f"class {component}" in content, f"Should have {component} UI component"
+        assert OverviewPanel.__name__ == "OverviewPanel"
+        assert ServiceTable.__name__ == "ServiceTable"
+        assert GPUCard.__name__ == "GPUCard"
+        assert DetailPanel.__name__ == "DetailPanel"
+        service_controls = importlib.import_module(
+            "dashboard.widgets.service_controls"
+        ).ServiceControls
+        assert service_controls.__name__ == "ServiceControls"
 
 
 class TestDashboardBindings:
@@ -291,15 +239,8 @@ class TestDashboardBindings:
 
     def test_key_bindings_defined(self):
         """Verify key bindings are defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "BINDINGS" in content, "Should define key bindings"
-        assert '"r"' in content, "Should have 'r' for refresh"
-        assert '"q"' in content, "Should have 'q' for quit"
-        assert '"a"' in content, "Should have 'a' for auto-refresh toggle"
+        keys = {binding.key for binding in DashboardApp.BINDINGS}
+        assert {"r", "ctrl+q", "a"}.issubset(keys)
 
 
 class TestDashboardMetricsCollection:
@@ -307,32 +248,23 @@ class TestDashboardMetricsCollection:
 
     def test_health_check_endpoints(self):
         """Verify health check endpoints are defined."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
         endpoints = [
-            "11434",  # Ollama
-            "8000",  # llama.cpp Python
-            "8001",  # vLLM
-            "8080",  # llama.cpp Native
-            "4000",  # LiteLLM
+            provider_module.ProviderMonitor.DEFAULT_PROVIDERS["ollama"]["endpoint"],
+            provider_module.ProviderMonitor.DEFAULT_PROVIDERS["llama_cpp_python"]["endpoint"],
+            provider_module.ProviderMonitor.DEFAULT_PROVIDERS["vllm"]["endpoint"],
+            provider_module.ProviderMonitor.DEFAULT_PROVIDERS["llama_cpp_native"]["endpoint"],
+            provider_module.ProviderMonitor.DEFAULT_PROVIDERS["litellm_gateway"]["endpoint"],
         ]
-
-        for endpoint in endpoints:
-            assert endpoint in content, f"Should monitor port {endpoint}"
+        ports = {urlparse(str(endpoint)).port for endpoint in endpoints}
+        assert {11434, 8000, 8001, 8080, 4000}.issubset(ports)
 
     def test_metrics_parsing(self):
         """Verify metrics parsing is implemented."""
-        dashboard_path = Path(__file__).parent.parent.parent / "scripts" / "ai-dashboard"
-
-        with open(dashboard_path) as f:
-            content = f.read()
-
-        assert "_parse_models" in content, "Should parse model count from responses"
-        assert "cpu_percent" in content, "Should collect CPU metrics"
-        assert "memory_mb" in content, "Should collect memory metrics"
+        monitor = provider_module.ProviderMonitor(http_timeout=0.01)
+        sample_response = {"models": [{"name": "a"}, {"name": "b"}]}
+        assert monitor._parse_models("ollama", sample_response) == 2
+        sample_response_llm = {"data": [{"id": "x"}]}
+        assert monitor._parse_models("vllm", sample_response_llm) == 1
 
 
 if __name__ == "__main__":

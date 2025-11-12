@@ -1,0 +1,13 @@
+[Unit]
+Description=HTTP service controller for AI backend
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/LAB/ai/backend/ai-backend-unified/scripts/service_control_server.py
+Environment=SERVICE_CONTROL_PORT=8070
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

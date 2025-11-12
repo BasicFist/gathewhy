@@ -6,23 +6,33 @@ The routing configuration defines how LiteLLM routes incoming requests to the ap
 
 ## Routing Decision Hierarchy
 
+**Current Version**: v1.7 (quality-preserving-fallbacks)
+**Deployed**: 2025-11-11
+**Architecture**: Multi-tier cloud preservation with complexity-aware load balancing
+
 LiteLLM evaluates routing in this priority order:
 
 ```
-1. Exact Model Name Match
+1. Exact Model Name Match (13 models)
    ↓ (if no match)
-2. Pattern Matching (regex)
+2. Pattern Matching (regex - 6 patterns)
    ↓ (if no match)
-3. Capability-Based Routing
+3. Capability-Based Routing (8 capabilities)
    ↓ (if no match)
-4. Load Balancing (if multiple providers)
+4. Load Balancing (4 strategies - complexity/quality-aware)
    ↓ (if no providers)
-5. Default Provider
+5. Default Provider (ollama)
    ↓ (if default fails)
-6. Fallback Chain
+6. Fallback Chain (11 chains - cloud→cloud→local)
    ↓ (if all fail)
 7. Error Response
 ```
+
+**v1.7 Key Improvements**:
+- Cloud fallback chains preserve quality (cloud → cloud → local, not cloud → local)
+- Capability consolidation (10 → 8, zero overlap)
+- Intelligent load balancing (adaptive code routing, quality-based creative)
+- Documented vLLM single-instance constraint
 
 ---
 

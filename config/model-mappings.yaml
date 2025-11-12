@@ -2,6 +2,44 @@
 # Defines how LiteLLM routes model requests to providers
 
 # ============================================================================
+# ARCHITECTURAL CONSTRAINTS AND PATTERNS
+# ============================================================================
+#
+# vLLM Single-Instance Pattern:
+#   vLLM can only run ONE model at a time per GPU. Current setup:
+#   - Port 8001: vllm-qwen (Qwen/Qwen2.5-Coder-7B-Instruct-AWQ) [ACTIVE]
+#   - Port 8002: vllm-dolphin (solidrust/dolphin-2.8-mistral-7b-v02-AWQ) [DISABLED]
+#
+#   To switch models:
+#     ./scripts/vllm-model-switch.sh dolphin  # Switch to Dolphin
+#     ./scripts/vllm-model-switch.sh qwen     # Switch back to Qwen
+#
+#   Design Implications:
+#   - Only vllm-qwen routes are active in this configuration
+#   - vllm-dolphin references are commented out throughout
+#   - Load balancing cannot distribute across both vLLM models
+#   - High-throughput routing uses only the active vLLM model
+#
+# Cloud Model Fallback Strategy (NEW - v1.7):
+#   Cloud models now fall back to OTHER CLOUD MODELS first to preserve quality:
+#     Tier 1 (Premium):   671B/1T → 120B cloud → local (only as last resort)
+#     Tier 2 (Standard):  480B/120B → 20B cloud → local code specialists
+#     Tier 3 (Entry):     20B/4.6B → local
+#
+#   This prevents quality cliffs (e.g., 671B → 8B was 98.8% param reduction)
+#
+# Capability Consolidation (NEW - v1.7):
+#   Reduced from 10 overlapping capabilities to 8 clear categories:
+#     Primary: code, analytical, reasoning, creative, chat
+#     Performance: high_throughput, low_latency, large_context
+#
+# Load Balancing Expansion (NEW - v1.7):
+#   Added intelligent routing for code generation and creative tasks:
+#     - Complexity-based: Route by estimated task complexity
+#     - Saturation-aware: Overflow to cloud when local saturated
+#     - Quality-based: Route by requested quality tier
+#
+# ============================================================================
 # EXACT MODEL NAME ROUTING
 # ============================================================================
 
@@ -31,20 +69,64 @@ exact_matches:
     description: "AWQ-quantized 7B code generation model via vLLM"
     backend_model: "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
 
-  # Dolphin Uncensored (Mistral-based)
-  "dolphin-uncensored-vllm":
-    provider: vllm-dolphin
-    priority: primary
-    fallback: ollama
-    description: "7B uncensored Mistral-based model via vLLM (AWQ quantized)"
-    backend_model: "solidrust/dolphin-2.8-mistral-7b-v02-AWQ"
+  # Dolphin Uncensored (Mistral-based) - vLLM Dolphin disabled (single instance mode)
+  # "dolphin-uncensored-vllm":
+  #   provider: vllm-dolphin
+  #   priority: primary
+  #   fallback: ollama
+  #   description: "7B uncensored Mistral-based model via vLLM (AWQ quantized) - DISABLED: use vllm-model-switch.sh to enable"
+  #   backend_model: "solidrust/dolphin-2.8-mistral-7b-v02-AWQ"
+  # Note: vLLM runs single instance. Enable Dolphin with: ./scripts/vllm-model-switch.sh dolphin
 
   # llama.cpp models
   "llama-cpp-default":
     provider: llama_cpp_python
     priority: primary
-    fallback: llama_cpp_native
-    description: "GGUF model via llama.cpp Python bindings"
+    fallback: null
+    description: "GGUF model via llama.cpp Python bindings (CUDA-optimized, 8K context)"
+
+  "llama-cpp-native":
+    provider: llama_cpp_native
+    priority: primary
+    fallback: null
+    description: "GGUF model via llama.cpp native C++ server (maximum performance, fastest TTFB)"
+
+  # Ollama Cloud models (large models not available locally)
+  "deepseek-v3.1:671b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: null
+    description: "671B advanced reasoning model via Ollama Cloud"
+
+  "qwen3-coder:480b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "480B code generation model via Ollama Cloud"
+
+  "kimi-k2:1t-cloud":
+    provider: ollama_cloud
+    priority: secondary
+    fallback: null
+    description: "1 trillion parameter model via Ollama Cloud (requires valid cloud API key; falls back via default chain)"
+
+  "gpt-oss:120b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "120B open-source GPT via Ollama Cloud"
+
+  "gpt-oss:20b-cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "20B general chat model via Ollama Cloud"
+
+  "glm-4.6:cloud":
+    provider: ollama_cloud
+    priority: primary
+    fallback: ollama
+    description: "4.6B general chat model via Ollama Cloud"
 
 # ============================================================================
 # PATTERN-BASED ROUTING
@@ -86,96 +168,106 @@ patterns:
 # ============================================================================
 # CAPABILITY-BASED ROUTING
 # ============================================================================
+# Consolidated capabilities with clear separation of concerns
+# Priority: Semantic routing by use case, not implementation details
 
 capabilities:
-  code_generation:
-    description: "Models specialized for code"
-    preferred_models:
-      - qwen2.5-coder:7b
-      - deepseek-coder-v2  # If pulled
-    provider: ollama
-    routing_strategy: load_balance
+  # --------------------------------------------------------------------------
+  # PRIMARY CAPABILITIES (Use Case Driven)
+  # --------------------------------------------------------------------------
 
-  analysis:
-    description: "Models tuned for structured analysis and planning"
+  code:
+    description: "Code generation, analysis, and debugging"
     preferred_models:
-      - qwen2.5-coder:7b
-      - llama3.1:latest
-    provider: ollama
-    routing_strategy: usage_based
+      - qwen3-coder:480b-cloud      # Cloud: High complexity tasks
+      - qwen-coder-vllm             # Local: Medium complexity, high throughput
+      - qwen2.5-coder:7b            # Local: Simple tasks, fast response
+    routing_strategy: complexity_based
+    complexity_thresholds:
+      high: qwen3-coder:480b-cloud   # > 100 tokens, multiple files
+      medium: qwen-coder-vllm        # 50-100 tokens, single file
+      low: qwen2.5-coder:7b          # < 50 tokens, snippet generation
+
+  analytical:
+    description: "Technical analysis, structured problem-solving, planning"
+    preferred_models:
+      - deepseek-v3.1:671b-cloud    # Cloud: Complex reasoning chains
+      - kimi-k2:1t-cloud            # Cloud: Large context analysis
+      - qwen2.5-coder:7b            # Local: Quick analysis
+    routing_strategy: context_based
+    context_thresholds:
+      large: kimi-k2:1t-cloud        # > 4K tokens context
+      complex: deepseek-v3.1:671b-cloud  # Multi-step reasoning
+      standard: qwen2.5-coder:7b     # < 4K tokens
 
   reasoning:
-    description: "Models optimized for multi-step reasoning and problem solving"
+    description: "Multi-step logical reasoning and inference"
     preferred_models:
-      - llama3.1:latest
-      - qwen-coder-vllm
-    provider: ollama
+      - deepseek-v3.1:671b-cloud    # Cloud: Advanced reasoning
+      - kimi-k2:1t-cloud            # Cloud: Long-form reasoning
+      - llama3.1:latest             # Local: Standard reasoning
     routing_strategy: direct
 
-  creative_writing:
-    description: "Storytelling and roleplay optimized models"
+  creative:
+    description: "Creative writing, storytelling, roleplay"
     preferred_models:
-      - mythomax-l2-13b-q5_k_m
-      - llama3.1:latest
-    provider: ollama
+      - mythomax-l2-13b-q5_k_m      # Local: Creative writing specialist
+      - llama3.1:latest             # Local: General creative tasks
+      - gpt-oss:120b-cloud          # Cloud: Advanced creative tasks
     routing_strategy: usage_based
 
-  uncensored:
-    description: "Uncensored models without content filters"
+  chat:
+    description: "Conversational AI and general assistance"
     preferred_models:
-      - dolphin-uncensored-vllm
-    provider: vllm-dolphin
-    routing_strategy: direct
-
-  conversational:
-    description: "Natural conversation and general assistance"
-    preferred_models:
-      - dolphin-uncensored-vllm
-      - llama3.1:latest
-      - mythomax-l2-13b-q5_k_m
+      - llama3.1:latest             # Local: Primary conversational
+      - gpt-oss:120b-cloud          # Cloud: Enhanced conversation
+      - gpt-oss:20b-cloud           # Cloud: Standard conversation
+      - glm-4.6:cloud               # Cloud: Lightweight conversation
     routing_strategy: usage_based
+
+  # --------------------------------------------------------------------------
+  # PERFORMANCE-ORIENTED CAPABILITIES
+  # --------------------------------------------------------------------------
 
   high_throughput:
-    description: "When you need to handle many concurrent requests"
+    description: "Batch processing and concurrent request handling"
     min_model_size: "13B"
     provider: vllm-qwen
     routing_strategy: least_loaded
+    notes: "vLLM single-instance: only Qwen model available for throughput optimization"
 
   low_latency:
-    description: "Single-request speed priority"
+    description: "Single-request speed priority (TTFB optimization)"
     provider: llama_cpp_native
     fallback: llama_cpp_python
     routing_strategy: fastest_response
 
-  general_chat:
-    description: "General conversational AI"
-    preferred_models:
-      - llama3.1:latest
-      - mythomax-l2-13b-q5_k_m
-    routing_strategy: usage_based
-
   large_context:
-    description: "Models that can handle large context windows"
+    description: "Large context window processing (> 8K tokens)"
     min_context: 8192
-    providers:
-      - llama_cpp_python  # Configured for 8192 context
-      - vllm  # Supports up to 4096 by default
+    preferred_models:
+      - kimi-k2:1t-cloud            # Cloud: 1T param, massive context
+      - llama_cpp_python            # Local: 8192 context configured
     routing_strategy: most_capacity
 
 # ============================================================================
 # LOAD BALANCING CONFIGURATION
 # ============================================================================
-# Same model available on multiple providers with weighted distribution
+# Intelligent distribution across providers with complexity-aware routing
 
 load_balancing:
+  # --------------------------------------------------------------------------
+  # CONVERSATIONAL LOAD BALANCING
+  # --------------------------------------------------------------------------
+
   "llama3.1:latest":
     providers:
       - provider: ollama
-        weight: 0.7  # Primary
+        weight: 0.7  # Primary: Best for streaming and general chat
       - provider: llama_cpp_python
-        weight: 0.3  # Backup
+        weight: 0.3  # Secondary: CUDA-optimized fallback
     strategy: weighted_round_robin
-    description: "Distribute requests with 70% to Ollama, 30% to llama.cpp"
+    description: "Distribute general chat: 70% Ollama, 30% llama.cpp"
 
   "general-chat":
     providers:
@@ -184,44 +276,162 @@ load_balancing:
       - provider: vllm-qwen
         weight: 0.4
     strategy: least_loaded
-    description: "Load balance general chat across multiple providers"
+    description: "Dynamic load balancing based on current provider load"
+
+  # --------------------------------------------------------------------------
+  # CODE GENERATION LOAD BALANCING (NEW)
+  # --------------------------------------------------------------------------
+
+  "code-generation":
+    providers:
+      - provider: vllm-qwen          # High throughput for batched requests
+        weight: 0.5
+        condition: "request_count > 5 OR batch_mode"
+      - provider: ollama             # Fast single requests
+        weight: 0.3
+        condition: "request_count <= 5"
+      - provider: ollama_cloud       # Overflow to cloud for complex tasks
+        weight: 0.2
+        condition: "local_saturated OR complexity == 'high'"
+    strategy: adaptive_weighted
+    description: "Intelligent code routing: local for simple/medium, cloud for complex/overflow"
+    parameters:
+      saturation_threshold: 0.8  # 80% capacity triggers cloud routing
+      complexity_detection: token_count  # Estimate complexity from prompt length
+
+  # --------------------------------------------------------------------------
+  # CREATIVE WRITING LOAD BALANCING (NEW)
+  # --------------------------------------------------------------------------
+
+  "creative-tasks":
+    providers:
+      - provider: ollama
+        weight: 0.7
+        preferred_model: mythomax-l2-13b-q5_k_m
+      - provider: ollama_cloud
+        weight: 0.3
+        preferred_model: gpt-oss:120b-cloud
+        condition: "length > 1000 OR quality_tier == 'high'"
+    strategy: quality_based
+    description: "Creative writing: local for standard, cloud for high-quality or long-form"
 
 # ============================================================================
 # FALLBACK CHAINS
 # ============================================================================
-# Defines fallback order when primary provider fails
+# Quality-preserving fallback chains with tier-based degradation
+# Design principle: Maintain capability tier, degrade model size gradually
 
 fallback_chains:
-  "llama3.1:latest":
-    # Prefer other capable models if llama3.1 is unavailable
-    chain:
-      - qwen2.5-coder:7b
-      - qwen-coder-vllm
-      - dolphin-uncensored-vllm
+  # --------------------------------------------------------------------------
+  # LOCAL MODEL FALLBACK CHAINS
+  # --------------------------------------------------------------------------
 
   "qwen2.5-coder:7b":
-    # Ollama code model can fall back to higher throughput or creative options
+    description: "Local code model fallback: same capability, alternative providers"
     chain:
-      - qwen-coder-vllm
-      - dolphin-uncensored-vllm
+      - qwen-coder-vllm              # Same model, higher throughput provider
+      - qwen3-coder:480b-cloud       # Upgrade to cloud for complex tasks
+    tier: local
+
+  "llama3.1:latest":
+    description: "Primary local chat model fallback with cross-provider diversity"
+    chain:
+      - llama-cpp-default        # Cross-provider diversity (llama_cpp_python)
+      - gpt-oss:20b-cloud        # Cloud safety net
+    tier: local
 
   "mythomax-l2-13b-q5_k_m":
+    description: "Creative model fallback chain"
     chain:
-      - llama3.1:latest
-      - qwen-coder-vllm
-      - dolphin-uncensored-vllm
+      - gpt-oss:20b-cloud            # Cloud fallback
+    tier: local
 
   "qwen-coder-vllm":
+    description: "vLLM code model fallback"
     chain:
-      - dolphin-uncensored-vllm
+      - qwen3-coder:480b-cloud       # Upgrade to cloud if local fails
+      - llama3.1:latest              # General local fallback
+    tier: local
+
+  # llama.cpp provider chains (NEW: Provider diversity)
+  "llama-cpp-default":
+    description: "llama.cpp Python bindings fallback chain"
+    chain:
+      - llama-cpp-native             # Same provider, different binding (faster)
+    tier: local
+    notes: "llama_cpp_python provider on port 8000, CUDA-optimized, 8K context"
+
+  "llama-cpp-native":
+    description: "llama.cpp native C++ server (terminal node)"
+    chain: []                        # True terminal - fastest local option
+    tier: local
+    notes: "Maximum performance terminal node, port 8080, pure C++ implementation"
+
+  # --------------------------------------------------------------------------
+  # CLOUD MODEL FALLBACK CHAINS (FIXED: Quality-Preserving)
+  # --------------------------------------------------------------------------
+
+  "deepseek-v3.1:671b-cloud":
+    description: "Advanced reasoning: cloud-first, maintain quality tier"
+    chain:
+      - gpt-oss:120b-cloud           # Step down: 120B general model
+      - gpt-oss:20b-cloud            # Further step down: 20B model
+      - llama3.1:latest              # Local fallback only as last resort
+    tier: cloud_premium
+    notes: "Preserves reasoning capability through cloud alternatives before local degradation"
+
+  "kimi-k2:1t-cloud":
+    description: "1T param model: largest available, gradual degradation"
+    chain:
+      - gpt-oss:120b-cloud           # Step down: 120B general model
+      - gpt-oss:20b-cloud            # Further step down: 20B model
+      - llama3.1:latest              # Local fallback (extreme degradation)
+    tier: cloud_premium
+    notes: "Maintains cloud-grade quality before falling back to 8B local"
+
+  "qwen3-coder:480b-cloud":
+    description: "Advanced code model: cloud-first code specialists"
+    chain:
+      - gpt-oss:120b-cloud           # Same tier: 120B cloud model (general coding)
+      - llama3.1:latest              # Local general fallback (terminal node)
+    tier: cloud_standard
+    notes: "Preserves code capability through cloud then local code specialists"
+
+  "gpt-oss:120b-cloud":
+    description: "120B cloud model: mid-tier cloud fallback"
+    chain:
+      - gpt-oss:20b-cloud            # Step down: 20B cloud model
+      - llama3.1:latest              # Local fallback (terminal node)
+    tier: cloud_standard
+
+  "gpt-oss:20b-cloud":
+    description: "20B cloud model: entry-level cloud fallback"
+    chain:
+      - llama-cpp-default            # Avoid circular with llama3.1
+      - llama-cpp-native             # Ultimate local fallback (terminal)
+    tier: cloud_entry
+
+  "glm-4.6:cloud":
+    description: "Smallest cloud model: direct to local fallback"
+    chain:
+      - llama3.1:latest              # Local 8B general model
+      - mythomax-l2-13b-q5_k_m       # Alternative local 13B creative model
+    tier: cloud_entry
+
+  # --------------------------------------------------------------------------
+  # DEFAULT FALLBACK CHAIN
+  # --------------------------------------------------------------------------
 
   default:
-    # Default fallback chain for all models
+    description: "Universal fallback: cloud capability preservation then local"
     chain:
-      - llama3.1:latest
-      - qwen2.5-coder:7b
-      - qwen-coder-vllm
-      - dolphin-uncensored-vllm
+      - gpt-oss:120b-cloud           # Cloud: 120B general capability
+      - gpt-oss:20b-cloud            # Cloud: 20B standard capability
+      - llama3.1:latest              # Local: 8B general fallback
+      - qwen2.5-coder:7b             # Local: 7B code fallback
+      - qwen-coder-vllm              # Local: vLLM high-throughput fallback
+    tier: universal
+    notes: "Cloud-first for unknown models, gradual degradation to local"
 
 # ============================================================================
 # ROUTING RULES
@@ -298,33 +508,73 @@ special_cases:
 # ============================================================================
 
 metadata:
-  version: "1.4"
-  last_updated: "2025-10-23"
-  total_routing_rules: 18+
+  version: "1.7"
+  last_updated: "2025-11-11"
+  total_routing_rules: 30+
+  architecture_version: "quality-preserving-fallbacks"
+
   supported_routing_strategies:
     - exact_match
     - pattern_match
     - capability_based
     - load_balanced
     - fallback_chain
+    - complexity_based       # NEW: Route by task complexity
+    - quality_based          # NEW: Route by quality tier
+    - adaptive_weighted      # NEW: Dynamic weight adjustment
+
+  capability_categories:
+    primary_use_cases: 5     # code, analytical, reasoning, creative, chat
+    performance_oriented: 3  # high_throughput, low_latency, large_context
+    deprecated: 2            # code_generation, analysis (merged into 'code' and 'analytical')
+
+  load_balancing_configs:
+    conversational: 2        # llama3.1:latest, general-chat
+    code_generation: 1       # NEW: code-generation (adaptive)
+    creative_writing: 1      # NEW: creative-tasks (quality-based)
+
+  fallback_chain_architecture:
+    local_models: 4          # Fallback within local infrastructure
+    cloud_models: 6          # Cloud-first quality preservation
+    quality_tiers:
+      cloud_premium: 2       # 671B, 1T (deepseek, kimi)
+      cloud_standard: 2      # 480B, 120B (qwen3-coder, gpt-oss:120b)
+      cloud_entry: 2         # 20B, 4.6B (gpt-oss:20b, glm)
+      local: 4               # 7-13B (qwen, llama3.1, mythomax, vllm)
+
   changes:
-    - "Replaced DeepSeek-R1 with Dolphin 2.8 Mistral AWQ (uncensored, fits 16GB VRAM)"
-    - "Added solidrust/dolphin-2.8-mistral-7b-v02-AWQ model"
-    - "Updated uncensored and conversational capability routing"
-    - "Added Dolphin AWQ pattern matching"
-    - "Optimized for 16GB VRAM constraint with AWQ quantization"
+    v1.7:
+      - "FIXED: Cloud model fallback chains now preserve quality tiers"
+      - "Example: deepseek-v3.1:671b → kimi-k2:1t → gpt-oss:120b → local"
+      - "Prevents quality cliffs (671B → 8B was 98.8% param reduction)"
+      - "CONSOLIDATED: Merged 10 overlapping capabilities into 8 clear categories"
+      - "ADDED: Complexity-based code routing (simple→local, complex→cloud)"
+      - "ADDED: Quality-based creative routing with saturation overflow"
+      - "DOCUMENTED: vLLM single-instance pattern with model switching instructions"
+    v1.6:
+      - "Added Ollama Cloud provider with DeepSeek, Qwen3, Kimi K2, GPT-OSS, and GLM models"
+      - "Updated capability routing and fallback chains to leverage cloud capacity"
+      - "Configured local vs cloud routing strategy for optimal performance"
 
 notes: |
   This configuration is consumed by LiteLLM's router.
 
+  Architecture Principles (v1.7):
+  - Graceful Degradation: Fallbacks preserve capability tier before degrading size
+  - Quality Preservation: Cloud models stay in cloud tier before falling to local
+  - Complexity Awareness: Route by estimated task complexity (token count, batch size)
+  - Explicit Constraints: vLLM single-instance limitation documented prominently
+
   When adding new models:
   1. Add exact match entry if it has a canonical name
-  2. Consider which capability category it belongs to
-  3. Define fallback chain for reliability
-  4. Test routing with validation script
+  2. Assign to appropriate capability category (5 primary + 3 performance)
+  3. Define fallback chain with quality tier preservation
+  4. Consider load balancing if multiple providers offer same capability
+  5. Test routing with validation script
 
   When adding new providers:
-  1. Update providers.yaml first
-  2. Add routing rules here
-  3. Update litellm-unified.yaml
-  4. Test end-to-end
+  1. Update providers.yaml first (provider registry)
+  2. Add routing rules here (model-mappings.yaml)
+  3. Regenerate litellm-unified.yaml (scripts/generate-litellm-config.py)
+  4. Validate all configs (scripts/validate-all-configs.sh)
+  5. Test end-to-end (scripts/validate-unified-backend.sh)

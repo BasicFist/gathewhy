@@ -45,7 +45,7 @@ ai-backend-unified/
 │   ├── unit/                   # Unit tests (30+ tests)
 │   ├── integration/            # Integration tests (25+ tests)
 │   └── contract/               # Provider contract tests
-├── web-ui/                     # Gradio-based model testing interface
+
 ├── .serena/                    # Serena project configuration
 └── various configuration and documentation files
 ```
@@ -97,11 +97,7 @@ pre-commit install
    docker compose up -d
    ```
 
-4. **Start Web UI** (optional):
-   ```bash
-   cd web-ui
-   python3 app.py
-   ```
+
 
 ### Testing
 
@@ -178,14 +174,7 @@ The system includes comprehensive monitoring with:
 - Performance profiling tools
 - Load testing suite with Locust and k6
 
-## Web UI Interface
 
-A Gradio-based interface for testing and comparing models:
-- Chat interface with multiple models
-- Side-by-side model comparison
-- Analytics and request history
-- Request logging to SQLite database
-- Available at http://localhost:5001
 
 ## Troubleshooting
 

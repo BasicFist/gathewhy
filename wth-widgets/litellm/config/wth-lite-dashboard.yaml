@@ -1,0 +1,66 @@
+options:
+  refresh_interval: 2s
+
+stickers:
+  - name: litellm-status
+    top: 0
+    left: 0
+    width: 25%
+    height: 6
+    module: command
+    command: ${WTH_WIDGET_DIR:-$HOME/.local/share/wth-widgets}/litellm/bin/litellm-status.sh
+    refresh: 10s
+
+  - name: providers-overview
+    top: 0
+    left: 25%
+    width: 25%
+    height: 6
+    module: command
+    command: ${WTH_WIDGET_DIR:-$HOME/.local/share/wth-widgets}/litellm/bin/providers-overview.sh
+    refresh: 15s
+
+  - name: health-status
+    top: 0
+    left: 50%
+    width: 25%
+    height: 6
+    module: command
+    command: ${WTH_WIDGET_DIR:-$HOME/.local/share/wth-widgets}/litellm/bin/health-status.sh
+    refresh: 15s
+
+  - name: provider-score
+    top: 0
+    left: 75%
+    width: 25%
+    height: 6
+    module: command
+    command: ${WTH_WIDGET_DIR:-$HOME/.local/share/wth-widgets}/litellm/bin/provider-score.sh
+    refresh: 20s
+
+  - name: litellm-metrics
+    top: 6
+    left: 0
+    width: 50%
+    height: 8
+    module: command
+    command: ${WTH_WIDGET_DIR:-$HOME/.local/share/wth-widgets}/litellm/bin/litellm-metrics.sh
+    refresh: 15s
+
+  - name: cache-performance
+    top: 6
+    left: 50%
+    width: 50%
+    height: 8
+    module: command
+    command: ${WTH_WIDGET_DIR:-$HOME/.local/share/wth-widgets}/litellm/bin/cache-performance.sh
+    refresh: 30s
+
+  - name: litellm-logs
+    top: 14
+    left: 0
+    width: 100%
+    height: 10
+    module: command
+    command: ${WTH_WIDGET_DIR:-$HOME/.local/share/wth-widgets}/litellm/bin/litellm-logs.sh
+    refresh: 5s

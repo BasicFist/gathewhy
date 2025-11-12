@@ -98,10 +98,9 @@ The AI Unified Backend provides a single API endpoint that routes requests to mu
 #### 3. vLLM
 - **Port**: 8001
 - **Type**: Production-grade batched inference
-- **Models**: meta-llama/Llama-2-13b-chat-hf
-- **Best For**: High concurrency, large models (13B+)
-- **Location**: `../CRUSHVLLM`
-- **Special**: MCP integration for advanced features
+- **Models**: Qwen/Qwen2.5-Coder-7B-Instruct-AWQ, solidrust/dolphin-2.8-mistral-7b-v02-AWQ
+- **Best For**: High concurrency, code generation
+- **Location**: Managed via systemd services
 
 ## Request Flow
 
@@ -275,43 +274,179 @@ Recovery: Gradual traffic increase
 
 ## Monitoring & Observability
 
+### Dashboard Infrastructure
+
+The system provides **dual dashboard implementations** for comprehensive real-time monitoring:
+
+#### Enhanced Textual Dashboard (PTUI)
+**File**: `scripts/ai-dashboard-enhanced.py`
+**Framework**: Textual (Python TUI)
+
+**Features**:
+- Real-time provider health with visual indicators (🟢/🔴)
+- Performance comparison widgets for latency analysis
+- Request inspector with live updates
+- Configuration editor integration
+- Auto-refreshing metrics display
+
+**Usage**:
+```bash
+python3 scripts/ai-dashboard-enhanced.py
+# q=quit, r=refresh, c=config_editor
+```
+
+**Best For**: Interactive troubleshooting, development workflows, visual exploration
+
+#### WTH Dashboard Widgets
+**Location**: `wth-widgets/litellm/`
+**Framework**: Shell-based modular widgets
+
+**Available Widgets**:
+1. `health-status.sh` - Service health overview
+2. `providers-overview.sh` - Provider status matrix
+3. `litellm-metrics.sh` - Prometheus metrics sampler
+4. `cache-performance.sh` - Redis cache statistics
+5. `provider-score.sh` - Performance scoring
+6. `litellm-logs.sh` - Recent proxy logs
+7. `litellm-status.sh` - Detailed service status
+8. `common.sh` - Shared helper functions
+
+**Usage**:
+```bash
+# Install and configure
+./scripts/install-wth-dashboard.sh
+
+# Run WTH dashboard
+wth run --config ~/.config/wth/wth.yaml
+```
+
+**Best For**: Persistent monitoring, tmux/screen integration, low resource overhead
+
+**Dashboard Selection**:
+- **Development**: Enhanced Textual for rich interactivity
+- **Production**: WTH for lightweight persistent monitoring
+- **Incident Response**: Both - WTH for baseline, Textual for deep dive
+- **Performance Tuning**: WTH widgets for scripted before/after comparison
+
+See `09-monitoring-dashboards.md` for complete dashboard documentation.
+
+---
+
 ### Metrics (Prometheus)
 
+**Endpoint**: `http://localhost:9090/metrics`
+**Scrape Interval**: 15 seconds
+
 **Provider Metrics**:
-- `provider_requests_total{provider="ollama"}`
-- `provider_latency_seconds{provider="vllm", quantile="0.95"}`
-- `provider_errors_total{provider="llama_cpp"}`
+- `provider_requests_total{provider="ollama"}` - Request counter by provider
+- `provider_latency_seconds{provider="vllm", quantile="0.95"}` - P95 latency
+- `provider_errors_total{provider="llama_cpp"}` - Error counter
+- `provider_availability{provider="ollama"}` - Health status (0/1)
 
 **Router Metrics**:
-- `router_routing_decisions{strategy="pattern_match"}`
-- `router_fallback_triggered{original_provider="vllm"}`
-- `cache_hit_rate{}`
+- `router_routing_decisions{strategy="pattern_match"}` - Routing strategy usage
+- `router_fallback_triggered{original_provider="vllm"}` - Fallback activations
+- `cache_hit_rate{}` - Cache effectiveness ratio
+- `router_load_balance_distribution{provider="ollama"}` - Traffic distribution
 
 **System Metrics**:
-- `active_connections`
-- `request_queue_size`
-- `total_throughput_tokens_per_second`
+- `active_connections` - Current concurrent connections
+- `request_queue_size` - Pending request count
+- `total_throughput_tokens_per_second` - System-wide token throughput
+
+**Example PromQL Queries** (used by dashboards):
+```promql
+# Request rate (last 5 minutes)
+rate(litellm_requests_total[5m])
+
+# P95 latency by provider
+histogram_quantile(0.95, rate(litellm_request_duration_seconds_bucket[5m]))
+
+# Error rate
+rate(litellm_requests_total{status="error"}[5m]) /
+rate(litellm_requests_total[5m])
+
+# Cache effectiveness
+litellm_cache_hits / (litellm_cache_hits + litellm_cache_misses)
+```
+
+---
 
 ### Logging
+
+**Log Destination**:
+- systemd journal: `journalctl --user -u litellm.service`
+- File-based: `/var/log/litellm/litellm.log` (if configured)
 
 **Structured JSON Logs**:
 ```json
 {
-  "timestamp": "2025-10-19T09:00:00Z",
+  "timestamp": "2025-11-11T14:30:00Z",
   "level": "INFO",
   "event": "request_routed",
   "model": "llama3.1:8b",
   "provider": "ollama",
   "latency_ms": 127,
-  "cache_hit": false
+  "cache_hit": false,
+  "request_id": "req_abc123"
 }
 ```
 
 **Log Levels**:
-- `DEBUG`: Routing decisions, cache lookups
-- `INFO`: Successful requests, provider switches
-- `WARN`: Fallback triggers, high latency
-- `ERROR`: Provider failures, timeout errors
+- `DEBUG`: Routing decisions, cache lookups, health check details
+- `INFO`: Successful requests, provider switches, configuration reloads
+- `WARN`: Fallback triggers, high latency, degraded performance
+- `ERROR`: Provider failures, timeout errors, configuration errors
+
+**Log Analysis Tools**:
+```bash
+# Real-time monitoring
+./wth-widgets/litellm/bin/litellm-logs.sh
+
+# Error tracking
+journalctl --user -u litellm.service | grep ERROR
+
+# Performance analysis
+journalctl --user -u litellm.service --since "1 hour ago" | \
+  grep latency_ms | jq '.latency_ms' | \
+  awk '{sum+=$1; count++} END {print "Avg:", sum/count "ms"}'
+```
+
+---
+
+### Testing Infrastructure
+
+**Kimi K2 Routing Test** - `test_kimi_routing.sh`
+
+Validates routing, load balancing, and fallback chains:
+
+**Test Cases**:
+1. **Direct Model Request** - Exact match routing to `ollama_cloud`
+2. **Capability-Based Routing** - Load balancing across reasoning model pool
+
+**Usage**:
+```bash
+./test_kimi_routing.sh
+
+# Expected output:
+# Test 1: Direct request to kimi-k2:1t-cloud
+# [Response from Kimi K2]
+#
+# Test 2: Reasoning capability request
+# [Response from load-balanced model]
+```
+
+**Troubleshooting**:
+```bash
+# FAILED - Check OLLAMA_API_KEY
+echo $OLLAMA_API_KEY
+
+# Verify routing
+grep "kimi-k2:1t-cloud" config/model-mappings.yaml
+
+# Test LiteLLM routing
+curl http://localhost:4000/v1/models | jq '.data[] | select(.id == "kimi-k2:1t-cloud")'
+```
 
 ## Extensibility
 
@@ -364,19 +499,6 @@ custom_strategies:
 
 ## Integration Points
 
-### MCP Protocol (vLLM)
-
-vLLM provider exposes MCP tools:
-- `generate_text`: Text completion
-- `chat_completion`: Chat interface
-- `stream_completion`: Streaming generation
-- `server_status`: Health and metrics
-- `server_metrics`: Performance data
-
-**Access**: Through CrushVLLM MCP server
-**Port**: Integrated in vLLM :8001
-**Benefit**: Advanced control beyond standard API
-
 ### Future: GraphQL Interface
 
 Planned enhancement for complex queries:
@@ -402,4 +524,3 @@ query {
 - **Model Mappings**: See `04-model-mappings.md`
 - **Integration Guide**: See `05-integration-guide.md`
 - **OpenWebUI CLAUDE.md**: Full OpenWebUI architecture details
-- **CrushVLLM Architecture**: `../CRUSHVLLM/docs/architecture/`

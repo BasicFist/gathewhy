@@ -7,18 +7,17 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    jsonData:
+      timeInterval: "5s"
     profiles:
       - enterprise
 
-  # Alternative datasource for free mode - uses mock data
-  - name: LiteLLM-Logs
-    type: grafana-simple-json-datasource
+  # Loki datasource for log aggregation
+  - name: Loki
+    type: loki
     access: proxy
-    url: http://localhost:4222
+    url: http://loki:3100
     database: logs
-    jsonData:
-      timestampField: timestamp
-      timeInterval: "1s"
     isDefault: false
     editable: true
     basicAuth: false

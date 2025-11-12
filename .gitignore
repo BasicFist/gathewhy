@@ -79,6 +79,9 @@ secrets.yaml
 Thumbs.db
 .DS_Store
 
+# Runtime virtual environments
+runtime/
+
 # Work-in-progress / problematic files
 config/litellm-working.yaml
 archive/troubleshooting-sessions/AI-DASHBOARD-EXAMINATION-2025-10-26.md

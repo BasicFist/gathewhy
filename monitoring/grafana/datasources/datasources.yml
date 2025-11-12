@@ -10,15 +10,3 @@ datasources:
     editable: false
     jsonData:
       timeInterval: "5s"
-    profiles:
-      - grafana
-
-  # Enterprise mode datasource - real Prometheus
-  - name: Prometheus-Enterprise
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: false
-    editable: false
-    profiles:
-      - enterprise

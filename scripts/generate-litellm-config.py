@@ -652,8 +652,8 @@ class ConfigGenerator:
             },
             "rate_limit_settings": self.build_rate_limit_settings(),
             "general_settings": {
-                "background_health_checks": False,
-                "health_check_interval": 300,
+                "background_health_checks": True,  # Enabled for accurate health reporting
+                "health_check_interval": 60,  # Check every minute
                 "health_check_details": False,
                 "# Authentication disabled intentionally": None,
                 "# Set master_key in this section only if you need request signing": None,
@@ -665,6 +665,38 @@ class ConfigGenerator:
 
         print("  ✓ Configuration built successfully")
         return config
+
+    def check_manual_edits(self) -> bool:
+        """Check if existing config was manually edited (missing AUTO-GENERATED marker)"""
+        if not OUTPUT_FILE.exists():
+            return True  # No file, safe to generate
+
+        print("\n🔍 Checking for manual edits...")
+
+        try:
+            with open(OUTPUT_FILE) as f:
+                first_lines = [f.readline() for _ in range(15)]
+
+            # Check for AUTO-GENERATED marker
+            has_marker = any(
+                "AUTO-GENERATED FILE - DO NOT EDIT MANUALLY" in line for line in first_lines
+            )
+
+            if not has_marker:
+                print("  ⚠️  WARNING: Existing config appears to be manually edited")
+                print("     (Missing AUTO-GENERATED marker)")
+                print("")
+                response = input("  Continue and overwrite? (yes/no): ").strip().lower()
+                if response not in ("yes", "y"):
+                    print("\n❌ Generation cancelled by user")
+                    return False
+
+            print("  ✓ No manual edits detected")
+            return True
+
+        except Exception as e:
+            print(f"  ⚠️  Could not check for manual edits: {e}")
+            return True  # Proceed anyway
 
     def backup_existing(self):
         """Backup existing configuration before overwriting"""
@@ -799,6 +831,10 @@ class ConfigGenerator:
 
         # Generate version
         self.version = self.generate_version()
+
+        # Check for manual edits before proceeding
+        if not self.check_manual_edits():
+            return False
 
         # Backup existing
         self.backup_existing()

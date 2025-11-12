@@ -26,6 +26,7 @@ Exit codes:
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -53,9 +54,9 @@ class ConfigValidator:
         self.litellm_file = self.config_dir / "litellm-unified.yaml"
 
         # Loaded configurations
-        self.providers_config = None
-        self.mappings_config = None
-        self.litellm_config = None
+        self.providers_config: dict[str, Any] | None = None
+        self.mappings_config: dict[str, Any] | None = None
+        self.litellm_config: dict[str, Any] | None = None
 
         # Extracted model names
         self.provider_models: dict[str, set[str]] = {}
@@ -124,9 +125,13 @@ class ConfigValidator:
             self.log_error(f"Error loading configurations: {e}")
             return False
 
-    def extract_provider_models(self):
+    def extract_provider_models(self) -> None:
         """Extract model names from providers.yaml"""
         self.log_info("Extracting model names from providers.yaml...")
+
+        if self.providers_config is None:
+            self.log_error("Providers config not loaded. Call load_configurations() first.")
+            return
 
         providers = self.providers_config.get("providers", {})
 
@@ -149,9 +154,13 @@ class ConfigValidator:
                 self.provider_models[provider_name] = model_names
                 self.log_success(f"  {provider_name}: {len(model_names)} models")
 
-    def extract_mapping_models(self):
+    def extract_mapping_models(self) -> None:
         """Extract model names from model-mappings.yaml"""
         self.log_info("Extracting model names from model-mappings.yaml...")
+
+        if self.mappings_config is None:
+            self.log_error("Mappings config not loaded. Call load_configurations() first.")
+            return
 
         # Exact matches
         exact_matches = self.mappings_config.get("exact_matches", {})
@@ -175,9 +184,13 @@ class ConfigValidator:
 
         self.log_success(f"  Found {len(self.mapping_models)} model definitions")
 
-    def extract_litellm_models(self):
+    def extract_litellm_models(self) -> None:
         """Extract model names from litellm-unified.yaml"""
         self.log_info("Extracting model names from litellm-unified.yaml...")
+
+        if self.litellm_config is None:
+            self.log_error("LiteLLM config not loaded. Call load_configurations() first.")
+            return
 
         model_list = self.litellm_config.get("model_list", [])
 
@@ -219,9 +232,13 @@ class ConfigValidator:
         if not inconsistencies_found:
             self.log_success("All provider models have routing definitions")
 
-    def validate_mapping_to_provider_consistency(self):
+    def validate_mapping_to_provider_consistency(self) -> None:
         """Validate that model routes target existing providers"""
         self.log_info("Validating mappings → providers consistency...")
+
+        if self.providers_config is None or self.mappings_config is None:
+            self.log_error("Configs not loaded. Call load_configurations() first.")
+            return
 
         active_providers = {
             name
@@ -248,9 +265,13 @@ class ConfigValidator:
         if not self.errors:
             self.log_success("All routing targets reference existing providers")
 
-    def validate_litellm_consistency(self):
+    def validate_litellm_consistency(self) -> None:
         """Validate LiteLLM model definitions match provider models"""
         self.log_info("Validating LiteLLM model definitions...")
+
+        if self.litellm_config is None:
+            self.log_error("LiteLLM config not loaded. Call load_configurations() first.")
+            return
 
         model_list = self.litellm_config.get("model_list", [])
 
@@ -291,9 +312,13 @@ class ConfigValidator:
                     f"which is not defined in providers.yaml"
                 )
 
-    def validate_circular_fallback_chains(self):
+    def validate_circular_fallback_chains(self) -> None:
         """Detect circular dependencies in fallback chains"""
         self.log_info("Detecting circular dependencies in fallback chains...")
+
+        if self.mappings_config is None:
+            self.log_error("Mappings config not loaded. Call load_configurations() first.")
+            return
 
         fallback_chains = self.mappings_config.get("fallback_chains", {})
         if not fallback_chains:
@@ -327,7 +352,7 @@ class ConfigValidator:
             return None
 
         # Check each fallback chain for cycles
-        visited = set()
+        visited: set[str] = set()
         cycles_found = []
 
         for model, chain in fallback_chains.items():
@@ -384,9 +409,13 @@ class ConfigValidator:
         else:
             self.log_success("No obvious naming inconsistencies detected")
 
-    def validate_backend_model_references(self):
+    def validate_backend_model_references(self) -> None:
         """Validate backend_model references in model-mappings.yaml"""
         self.log_info("Validating backend_model references...")
+
+        if self.mappings_config is None:
+            self.log_error("Mappings config not loaded. Call load_configurations() first.")
+            return
 
         exact_matches = self.mappings_config.get("exact_matches", {})
 
@@ -408,9 +437,13 @@ class ConfigValidator:
         if not self.warnings[-1:] or "backend_model" not in self.warnings[-1]:
             self.log_success("All backend_model references are valid")
 
-    def validate_fallback_chain_integrity(self):
+    def validate_fallback_chain_integrity(self) -> None:
         """Validate fallback chains for duplicates, self references, and cycles"""
         self.log_info("Validating fallback chain integrity...")
+
+        if self.mappings_config is None:
+            self.log_error("Mappings config not loaded. Call load_configurations() first.")
+            return
 
         fallback_chains = self.mappings_config.get("fallback_chains", {})
         errors_found = False

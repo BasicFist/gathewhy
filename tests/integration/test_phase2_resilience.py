@@ -17,7 +17,6 @@ Requires:
 
 import os
 import time
-from typing import Any
 
 import pytest
 import redis
@@ -58,9 +57,7 @@ class TestCloudModelAuthentication:
             "temperature": 0,
         }
 
-        response = requests.post(
-            f"{litellm_url}/v1/chat/completions", json=payload, timeout=60
-        )
+        response = requests.post(f"{litellm_url}/v1/chat/completions", json=payload, timeout=60)
 
         # Verify successful authentication
         assert response.status_code == 200, f"Cloud model request failed: {response.text}"
@@ -246,9 +243,7 @@ class TestRateLimiting:
         # Check cloud models have rate limits
         model_list = litellm_config.get("model_list", [])
         cloud_models = [
-            model["model_name"]
-            for model in model_list
-            if "cloud" in model["model_name"].lower()
+            model["model_name"] for model in model_list if "cloud" in model["model_name"].lower()
         ]
 
         for cloud_model in cloud_models:

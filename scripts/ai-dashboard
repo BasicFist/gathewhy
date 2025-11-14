@@ -1,48 +1,154 @@
 #!/usr/bin/env python3
-"""Interactive AI backend command center built with Textual.
+"""Launch the Bubble Tea (WTH) AI dashboard.
 
-This is the entry point script for the AI Backend Dashboard. The dashboard
-provides a comprehensive terminal-based interface for monitoring and managing
-AI backend LLM provider services including Ollama, vLLM, and llama.cpp.
-
-Example:
-    Run the dashboard interactively:
-
-        ./ai-dashboard
-
-    Or with Python:
-
-        python3 scripts/ai-dashboard
-
-Key Bindings:
-    - 'r': Manual refresh
-    - 'q': Quit
-    - 'a': Toggle auto-refresh
-    - 'ctrl+l': Clear event log
-
-Environment Variables:
-    AI_DASH_HTTP_TIMEOUT: HTTP request timeout in seconds (0.5-30, default: 3.0)
-    AI_DASH_REFRESH_INTERVAL: Refresh interval in seconds (1-60, default: 5)
-    AI_DASH_LOG_HEIGHT: Event log height in lines (5-50, default: 12)
-
-For more information, see: docs/ai-dashboard.md
+This script wraps `wth run` so operators can access the sticker-based
+command center without remembering installation paths or environment
+variables. It automatically discovers the preferred configuration,
+falls back to the in-repo widgets when nothing is installed, and can
+optionally bootstrap the assets via `scripts/install-wth-dashboard.sh`.
 """
 
-import logging
-import sys
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
-# Add parent directory to path to allow importing dashboard package
-sys.path.insert(0, str(Path(__file__).parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install-wth-dashboard.sh"
+REPO_WIDGET_DIR = REPO_ROOT / "wth-widgets"
+REPO_CONFIG = REPO_WIDGET_DIR / "litellm" / "config" / "wth-lite-dashboard.yaml"
+INSTALLED_WIDGET_DIR = Path.home() / ".local" / "share" / "wth-widgets"
+INSTALLED_CONFIG = Path.home() / ".config" / "wth" / "wth.yaml"
 
-from dashboard.app import DashboardApp
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments."""
+
+    parser = argparse.ArgumentParser(
+        description="Launch the Bubble Tea / WTH AI dashboard wrapper."
+    )
+    parser.add_argument(
+        "--config",
+        help="Path to the WTH config file. Auto-detects installed or in-repo copies.",
+    )
+    parser.add_argument(
+        "--widgets",
+        help="Directory containing the litellm widgets. Defaults to installed widgets if present",
+    )
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Install widgets/config into the current home directory before launching.",
+    )
+    parser.add_argument(
+        "--use-repo",
+        action="store_true",
+        help="Force usage of in-repo widgets even if installed copies exist.",
+    )
+    parser.add_argument(
+        "--wth-binary",
+        default=os.environ.get("WTH_BINARY", "wth"),
+        help="Binary used to launch WTH (default: %(default)s).",
+    )
+    parser.add_argument(
+        "wth_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to `wth run`. Prefix with `--` before custom args.",
+    )
+    return parser.parse_args()
+
+
+def ensure_wth_available(binary: str) -> None:
+    """Ensure the requested WTH binary exists on PATH."""
+
+    if shutil.which(binary) is None:
+        raise SystemExit(
+            "WTH binary not found. Install https://github.com/mrusme/wth or set --wth-binary."
+        )
+
+
+def run_install() -> None:
+    """Invoke the helper script that copies widgets/config to $HOME."""
+
+    if not INSTALL_SCRIPT.exists():
+        raise SystemExit(f"Install helper missing at {INSTALL_SCRIPT}")
+    subprocess.run([str(INSTALL_SCRIPT)], check=True)
+
+
+def resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
+    """Determine which config and widget directory should be used."""
+
+    config_override = Path(os.path.expanduser(args.config)).resolve() if args.config else None
+    widgets_override = Path(os.path.expanduser(args.widgets)).resolve() if args.widgets else None
+
+    candidates: list[Path] = []
+    if config_override:
+        candidates.append(config_override)
+    else:
+        if not args.use_repo:
+            candidates.append(INSTALLED_CONFIG)
+        candidates.append(REPO_CONFIG)
+
+    config_path: Path | None = None
+    for candidate in candidates:
+        if candidate.exists():
+            config_path = candidate
+            break
+
+    if not config_path:
+        raise SystemExit(
+            "No WTH config found. Run with --install or provide --config pointing to a valid file."
+        )
+
+    if widgets_override:
+        widget_dir = widgets_override
+    else:
+        if config_path == REPO_CONFIG or args.use_repo:
+            widget_dir = REPO_WIDGET_DIR
+        elif config_path == INSTALLED_CONFIG and INSTALLED_WIDGET_DIR.exists():
+            widget_dir = INSTALLED_WIDGET_DIR
+        else:
+            widget_dir = INSTALLED_WIDGET_DIR if INSTALLED_WIDGET_DIR.exists() else REPO_WIDGET_DIR
+
+    if not widget_dir.exists():
+        raise SystemExit(
+            f"Widget directory {widget_dir} does not exist. Run --install or provide --widgets."
+        )
+
+    return config_path, widget_dir
+
+
+def launch_dashboard(binary: str, config: Path, widget_dir: Path, wth_args: list[str]) -> None:
+    """Execute the WTH dashboard command."""
+
+    env = os.environ.copy()
+    env.setdefault("WTH_WIDGET_DIR", str(widget_dir))
+
+    forwarded = wth_args or []
+    if forwarded and forwarded[0] == "--":
+        forwarded = forwarded[1:]
+
+    cmd = [binary, "run", "--config", str(config)] + forwarded
+    print(f"Launching WTH dashboard using config {config} (widgets: {widget_dir})")
+    subprocess.run(cmd, check=True, env=env)
+
+
+def main() -> None:
+    args = parse_args()
+    ensure_wth_available(args.wth_binary)
+
+    if args.install:
+        run_install()
+
+    config_path, widget_dir = resolve_paths(args)
+    launch_dashboard(args.wth_binary, config_path, widget_dir, args.wth_args)
+
 
 if __name__ == "__main__":
-    app = DashboardApp()
-    app.run()
+    try:
+        main()
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(exc.returncode) from exc

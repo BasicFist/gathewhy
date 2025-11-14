@@ -352,18 +352,21 @@ Explicit port registry and automated conflict detection:
 Launch the interactive TUI dashboard for real-time monitoring:
 
 ```bash
-# Start the AI Dashboard
-python3 scripts/ai-dashboard
+# Install Bubble Tea widgets into $HOME (one-time)
+./scripts/install-wth-dashboard.sh
 
-# Or with custom settings
-AI_DASH_REFRESH_INTERVAL=3 python3 scripts/ai-dashboard
+# Launch with the helper wrapper (uses installed config if present)
+./ai-dashboard
+
+# Run directly from the repo without installing assets
+python3 scripts/ai-dashboard --use-repo
 ```
 
 **Dashboard Features**:
 - Real-time provider status (active/degraded/inactive)
-- CPU, memory, and GPU utilization
-- Service control (start/stop/restart/enable/disable)
-- Event logging and alerts
+- Provider/model inventory from LiteLLM
+- Prometheus-powered metrics (latency, throughput, cache hits)
+- Live LiteLLM logs and service health summaries
 
 See **[AI Dashboard Documentation](docs/ai-dashboard.md)** for complete guide.
 
@@ -371,24 +374,24 @@ See **[AI Dashboard Documentation](docs/ai-dashboard.md)** for complete guide.
 
 This project provides **three dashboard implementations** for different use cases:
 
-| Feature | **AI Dashboard** (Textual) | **PTUI Dashboard** (curses) | **Grafana** (Web Monitoring) |
+| Feature | **AI Dashboard** (Bubble Tea / WTH) | **PTUI Dashboard** (curses) | **Grafana** (Web Monitoring) |
 |---------|---------------------------|----------------------------|---------------------|
-| **Technology** | Textual (modern TUI framework) | Python curses (stdlib) | Grafana (web interface) |
+| **Technology** | WTH stickers + Bubble Tea (Go) | Python curses (stdlib) | Grafana (web interface) |
 | **Target Use Case** | **Primary monitoring tool** | **Remote SSH sessions** | **Web-based monitoring** |
-| **Installation** | `pip install textual` | No dependencies | Docker Compose |
-| **Terminal Support** | Modern terminals (Kitty, iTerm2, Alacritty) | Universal (fallback to basic) | Any web browser |
-| **Resource Usage** | Medium (10-15MB) | Minimal (<5MB) | High (Prometheus+Grafana) |
-| **Real-time Updates** | ✅ Auto-refresh (5s) | ✅ Auto-refresh (5s) | ✅ Real-time via WebSocket |
+| **Installation** | `./scripts/install-wth-dashboard.sh` | No dependencies | Docker Compose |
+| **Terminal Support** | 256-color terminals (Kitty, iTerm2, wezterm, etc.) | Universal (fallback to basic) | Any web browser |
+| **Resource Usage** | Minimal (<5MB + widget commands) | Minimal (<5MB) | High (Prometheus+Grafana) |
+| **Real-time Updates** | ✅ Sticker refresh (2–20s per widget) | ✅ Auto-refresh (5s) | ✅ Real-time via WebSocket |
 | **Service Health** | ✅ Detailed status with latency | ✅ Status with latency | ✅ Professional dashboards |
 | **Model Discovery** | ✅ LiteLLM model catalog | ✅ LiteLLM model catalog | ✅ Model list |
-| **Quick Actions** | ✅ Refresh, health probe, validation | ✅ Refresh, health probe, validation | ⚠️ Limited actions |
-| **Service Control** | ✅ Start/stop/restart via systemctl | ❌ Read-only | ❌ Read-only |
-| **GPU Monitoring** | ✅ GPU utilization graphs | ❌ Not supported | ⚠️ Basic |
-| **Event Logging** | ✅ Real-time event stream | ❌ Not supported | ⚠️ Basic logs |
-| **Keyboard Navigation** | ✅ Full keyboard support | ✅ Arrows, Tab, Enter | ⚠️ Mouse/keyboard |
-| **Configuration** | Dynamic from `providers.yaml` | Dynamic from `providers.yaml` | Hardcoded services |
+| **Quick Actions** | ✅ Curl-based validation + summaries | ✅ Refresh, health probe, validation | ⚠️ Limited actions |
+| **Service Control** | ⚠️ Planned via plugins (monitor-only today) | ❌ Read-only | ❌ Read-only |
+| **GPU Monitoring** | ⚠️ Planned widget | ❌ Not supported | ⚠️ Basic |
+| **Event Logging** | ✅ Recent LiteLLM logs | ❌ Not supported | ⚠️ Basic logs |
+| **Keyboard Navigation** | ✅ Bubble Tea bindings (hjkl/arrow keys) | ✅ Arrows, Tab, Enter | ⚠️ Mouse/keyboard |
+| **Configuration** | Sticker layout via YAML (`wth-widgets/...`) | Dynamic from `providers.yaml` | Hardcoded services |
 | **Authentication** | ❌ Not required | ❌ Not required | ❌ Not required |
-| **Remote Access** | SSH with terminal support | SSH (universal compatibility) | HTTP (network exposed) |
+| **Remote Access** | SSH with 256-color terminal | SSH (universal compatibility) | HTTP (network exposed) |
 | **Documentation** | `docs/ai-dashboard.md` | `docs/ptui-dashboard.md` | `web-ui/README.md` |
 
 > **⚠️ Web UI Removal Notice**
@@ -401,11 +404,11 @@ This project provides **three dashboard implementations** for different use case
 
 #### When to Use Each Dashboard
 
-**Use AI Dashboard (Textual)** when:
-- ✅ You need **full-featured monitoring** with service control
-- ✅ Running on **local machine** or SSH with modern terminal
-- ✅ You want **GPU utilization** monitoring
-- ✅ You need **event logging** and rich UI
+**Use AI Dashboard (Bubble Tea / WTH)** when:
+- ✅ You want a **responsive sticker layout** powered by Bubble Tea
+- ✅ Running locally or via SSH with a 256-color terminal
+- ✅ You need **LiteLLM provider, metrics, and log visibility** with minimal deps
+- ✅ You prefer shell/Gum scripts that can be customized quickly
 - ✅ **Recommended for primary monitoring**
 
 **Use PTUI Dashboard (curses)** when:
@@ -423,46 +426,35 @@ This project provides **three dashboard implementations** for different use case
 #### Quick Start Commands
 
 ```bash
-# Textual Dashboard (Recommended for local monitoring)
-python3 scripts/ai-dashboard
+# Bubble Tea Dashboard (Recommended for local monitoring)
+./scripts/install-wth-dashboard.sh  # one-time asset install
+./ai-dashboard                      # launches WTH with detected config
 
 # Curses Dashboard (Recommended for SSH)
 python3 scripts/ptui_dashboard.py
-
-# WTH Dashboard (Responsive stickers, beta)
-./scripts/install-wth-dashboard.sh
-export WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets
-wth run --config $HOME/.config/wth/wth.yaml
-# After installation, use the auto-created alias (default: wth-lite)
-wth-lite
 
 # Grafana Dashboard (Web-based Monitoring)
 # cd monitoring && docker compose up -d
 # Access at http://localhost:3000 (admin/admin)
 ```
 
-#### WTH Dashboard (Beta)
+#### Bubble Tea Dashboard (WTH)
 
-WTH offers a sticker-based layout that resizes automatically and loads widgets from shell scripts. See [docs/wth-dashboard.md](docs/wth-dashboard.md) for installation details.
+WTH offers a sticker-based layout that resizes automatically and loads widgets from shell scripts. See [docs/wth-dashboard.md](docs/wth-dashboard.md) for advanced customization tips and widget authoring guidelines.
 
 #### Configuration
 
 All dashboards support configuration via environment variables:
 
 ```bash
-# Textual Dashboard
-export AI_DASH_REFRESH_INTERVAL=3  # Refresh interval (seconds)
+# Bubble Tea Dashboard
+export LITELLM_HOST=http://127.0.0.1:4000
+export LITELLM_LOG_SOURCE="journalctl --user -u litellm.service -n 40 --no-pager"
+export WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets
 
 # PTUI Dashboard
-export PTUI_HTTP_TIMEOUT=10        # HTTP request timeout (seconds)
-export PTUI_REFRESH_SECONDS=5      # Auto-refresh interval (seconds)
-
-# WTH Dashboard (optional)
-export LITELLM_HOST="http://127.0.0.1:4000"
-export LITELLM_LOG_SOURCE="journalctl --user -u litellm.service -n 40 --no-pager"
-export WTH_WIDGET_DIR="$HOME/.local/share/wth-widgets"
-# Alias created by installer (override via WTH_ALIAS_NAME)
-alias wth-lite='WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets wth run --config $HOME/.config/wth/wth.yaml'
+export PTUI_HTTP_TIMEOUT=10
+export PTUI_REFRESH_SECONDS=5
 
 # Web UI - DEPRECATED (see web-ui/DEPRECATION.md)
 # export WEB_UI_PORT=7860          # ⚠️ Use Grafana instead

@@ -1,181 +1,189 @@
 # AI Backend Unified - Command Reference
 
-## Dashboard Commands
+> All commands assume you are in the repository root with dependencies installed.
 
-### Standard Dashboard
+## Dashboards & Visual Monitoring
+
+### Textual dashboard (standard)
 ```bash
-# Run the original production dashboard
-python3 scripts/ai-dashboard
-
-# Or run via executable
 ./scripts/ai-dashboard
+# or
+python3 scripts/ai-dashboard
 ```
+- Real-time provider status, request log, routing insights.
+- Key bindings documented inline (`r` refresh, `a` auto-refresh, `q` quit).
 
-### Enhanced Dashboard (Real - Current Production)
+### Enhanced dashboard (multi-panel)
 ```bash
-# Run the enhanced dashboard with REAL API connections (Production Dashboard)
-python3 scripts/ai-dashboard-enhanced.py
-
-# This dashboard features:
-# - 4-panel layout (providers, request inspector, performance, routing)
-# - Real connection to provider endpoints (Ollama, llama.cpp, vLLM)
-# - Live request monitoring from actual API calls
-# - Dynamic provider health checks
-# - Proper error handling for unreachable services
-# - Model count from actual providers
-# - No simulated data - all requests connect to real endpoints
-
-# Environment variable override:
-LITELLM_GATEWAY_URL=http://localhost:4000 python3 scripts/ai-dashboard-enhanced.py
-
-# The file scripts/ai-dashboard-enhanced-real.py was consolidated into the main enhanced dashboard
-# as of November 7, 2025, eliminating all simulated data components
+LITELLM_GATEWAY_URL=http://localhost:4000 \
+  python3 scripts/ai-dashboard-enhanced.py
 ```
-```
+- Connects to live LiteLLM + providers.
+- Adds request inspector, performance panel, and routing breakdown.
 
-## Health Check Commands
+### PTUI dashboard
 ```bash
-# Check all providers status
-./scripts/validate-unified-backend.sh
-
-# Check individual providers
-curl http://localhost:4000/health  # LiteLLM gateway
-curl http://localhost:11434/api/tags  # Ollama
-curl http://localhost:8000/v1/models  # llama.cpp
-curl http://localhost:8001/v1/models  # vLLM
-
-# Check system health
-./scripts/check-system-health.sh
+python3 scripts/ptui_dashboard.py
 ```
+- Textual CLI focused on fast status checks.
+- Ideal for SSH sessions or air-gapped hosts.
 
-## Configuration Management
+### Redis and routing monitors
 ```bash
-# Reload configuration with validation
-./scripts/reload-litellm-config.sh
-
-# Validate configuration before deploying
-./scripts/reload-litellm-config.sh --validate-only
-
-# Check config consistency
-python3 scripts/validate-config-consistency.py
-
-# Generate config from source files
-python3 scripts/generate-litellm-config.py
-```
-
-## Port Management
-```bash
-# Check all registered ports
-./scripts/check-port-conflicts.sh
-
-# Check only required ports
-./scripts/check-port-conflicts.sh --required
-
-# Attempt to fix port conflicts
-./scripts/check-port-conflicts.sh --fix
-```
-
-## Redis Cache Management
-```bash
-# Monitor Redis cache
-./scripts/monitor-redis-cache.sh
-
-# View cache keys
-./scripts/monitor-redis-cache.sh --keys
-
-# Monitor continuously
 ./scripts/monitor-redis-cache.sh --watch
-
-# Flush cache (requires confirmation)
-./scripts/monitor-redis-cache.sh --flush
+./scripts/monitor-routing-v1.7.1.sh
 ```
+- Inspect cache hit rates / keys.
+- Watch routing diversity and fallback execution.
 
-## Testing Commands
+---
+
+## Health & Validation
+
+### Full stack validation
 ```bash
-# Run all tests
-pytest
+./scripts/validate-unified-backend.sh
+```
+- Runs provider health checks, smoke tests, and routing probes.
 
-# Run specific test categories
-pytest -m unit              # Fast unit tests
-pytest -m integration       # Integration tests (requires providers)
-pytest -m contract          # Provider contract tests
-
-# Run with coverage
-pytest --cov=config --cov-report=html
-
-# Test configuration validation
+### Configuration validation bundle
+```bash
 ./scripts/validate-all-configs.sh
+python3 scripts/validate-config-consistency.py
+python3 scripts/validate-config-schema.py
 ```
+- Ensures YAML syntax, schema conformance, and providers/models stay in sync.
 
-## Model Routing Visualization
+### Observability stack validation
 ```bash
-# Visualize model routing (ASCII format)
-python3 scripts/model-routing-visualizer.py
-
-# Generate DOT graph for Graphviz
-python3 scripts/model-routing-visualizer.py --dot --output=model-routing.dot
-
-# Output in JSON format
-python3 scripts/model-routing-visualizer.py --json
+./scripts/validate-observability.sh
 ```
+- Verifies Prometheus/Grafana containers, datasources, and dashboards.
+
+### Port + service readiness
+```bash
+./scripts/check-port-conflicts.sh --required
+./scripts/wait-for-service.sh "LiteLLM" http://localhost:4000/health 60
+```
+- Confirms gateway + providers have the ports they expect.
+
+---
+
+## Configuration & Deployment Workflow
+
+### Generate + back up LiteLLM config
+```bash
+python3 scripts/generate-litellm-config.py
+python3 scripts/generate-litellm-config.py --list-backups
+python3 scripts/generate-litellm-config.py --rollback 20251030_153000
+```
+- Creates `config/litellm-unified.yaml`, keeps timestamped backups, supports restores.
+
+### Deploy validated configuration
+```bash
+./scripts/reload-litellm-config.sh --validate-only
+./scripts/reload-litellm-config.sh
+```
+- Dry-run validates diff; full run copies config into OpenWebUI and restarts LiteLLM with backups.
+
+### Provider/model toggles
+```bash
+python3 scripts/manage-providers.py list
+python3 scripts/manage-providers.py enable-model llama3.1:8b
+python3 scripts/manage-providers.py disable-provider ollama
+```
+- Quickly toggle availability without hand-editing YAML.
+
+### Configuration audits
+```bash
+python3 scripts/config-audit.py --quick
+python3 scripts/schema_versioning.py --check-version
+```
+- Security/compliance checks plus schema evolution tracking.
+
+---
+
+## Routing, Debugging & Profiling
+
+### Inspect routing graphically
+```bash
+python3 scripts/model-routing-visualizer.py --dot --output routing.dot
+```
+- Generates ASCII, DOT, or JSON summaries of router decisions.
+
+### Debug individual requests
+```bash
+python3 scripts/debugging/test-request.py --model llama3.1:8b
+python3 scripts/debugging/test-request.py --test-routing
+./scripts/debugging/tail-requests.py --level ERROR
+./scripts/debugging/analyze-logs.py --last 1h --model qwen
+```
+- Health check, routing validation, and live/error log streaming.
+
+### Performance profiling
+```bash
+python3 scripts/profiling/profile-latency.py --model qwen2.5-coder:7b
+python3 scripts/profiling/profile-throughput.py --sweep --model llama3.1:8b
+python3 scripts/profiling/compare-providers.py --summary
+```
+- Measure latency, concurrency limits, and tokens/sec per provider.
+
+### Load testing suites
+```bash
+k6 run scripts/loadtesting/k6/smoke-test.js
+locust -f scripts/loadtesting/locust/litellm_locustfile.py
+```
+- Generate synthetic traffic to validate SLOs.
+
+---
 
 ## Monitoring Stack
 ```bash
-# Start monitoring stack (Prometheus + Grafana)
-cd monitoring
-docker compose up -d
-
-# Check monitoring health
-curl http://localhost:9090  # Prometheus
-curl http://localhost:3000  # Grafana (admin/admin)
-
-# Monitor requests live
-./scripts/debugging/tail-requests.py
-
-# Profile performance
-./scripts/profiling/profile-latency.py
-./scripts/profiling/profile-throughput.py
-./scripts/profiling/compare-providers.py
-
-# Run load tests
-k6 run scripts/loadtesting/k6/smoke-test.js
+./scripts/setup-monitoring.sh
+cd monitoring && docker compose up -d
+./scripts/test-monitoring.sh
 ```
+- Bootstraps Prometheus + Grafana, seeds datasources, and performs verification checks.
 
-## Production Commands
+---
+
+## Backup & Recovery
 ```bash
-# Deploy to production (with validation)
-./scripts/deploy-production.sh
-
-# Backup configuration before changes
-./scripts/backup-config.sh
-
-# Test rollback capability
+python3 scripts/generate-litellm-config.py --list-backups
+python3 scripts/generate-litellm-config.py --rollback <timestamp>
+./scripts/verify-backup.sh --all
+./scripts/test-backup-rotation.sh
 ./scripts/test-rollback.sh
-
-# Rollback to previous version
-./scripts/rollback-config.sh
 ```
+- Enumerate backups, restore specific versions, and dry-run the full rollback workflow.
 
-## Quick Checks
+---
+
+## Testing & Quality Gates
 ```bash
-# Verify system status
-./scripts/health-check.sh
-
-# Check if all required services are running
-systemctl --user list-units --state=running | grep -E "(ollama|litellm|vllm|llamacpp)"
-
-# View recent logs
-journalctl --user -u litellm.service -n 20
+pytest                 # Full test suite
+pytest -m unit
+pytest -m "integration and not slow"
+./scripts/test-monitoring.sh
 ```
+- Match CI filters locally before committing.
+
+---
+
+## Service Management & Logs
+```bash
+systemctl --user status litellm.service
+systemctl --user restart litellm.service
+systemctl --user restart ollama.service
+journalctl --user -u litellm.service -n 50
+```
+- Control services managed by systemd user units and inspect logs.
+
+---
 
 ## Security & Access Checks
 ```bash
-# Validate API key configuration
-./scripts/validate-api-keys.sh
-
-# Check authentication settings
-./scripts/check-authentication.sh
-
-# Audit configuration for security issues
-python3 scripts/security-audit.py
+python3 scripts/config-audit.py --focus security
+python3 scripts/config-audit.py --focus compliance
 ```
+- Validates authentication settings, secret handling, and compliance controls described in `docs/security-setup.md`.

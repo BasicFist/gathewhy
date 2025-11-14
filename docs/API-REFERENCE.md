@@ -582,7 +582,7 @@ curl http://localhost:8001/v1/models  # vLLM
 
 ```bash
 # Test which provider a model routes to
-./scripts/debugging/test-routing.sh llama3.1:latest
+python3 scripts/debugging/test-request.py --test-routing
 ```
 
 ---
@@ -596,7 +596,7 @@ curl http://localhost:8001/v1/models  # vLLM
 ### Cloud Models (Ollama Cloud)
 - **Rate limits**: Applied by Ollama (check at https://ollama.com/settings/usage)
 - **Fallback**: Automatically routes to local models if rate limited
-- **Monitoring**: Track usage with `./scripts/profiling/analyze-token-usage.py`
+- **Monitoring**: Track usage with `python3 scripts/profiling/compare-providers.py --summary`
 
 ---
 

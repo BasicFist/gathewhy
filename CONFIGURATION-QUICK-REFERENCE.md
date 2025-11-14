@@ -293,7 +293,7 @@ systemctl --user restart vllm-qwen.service
 
 **Test routing:**
 ```bash
-./scripts/debugging/test-routing.sh model-name
+python3 scripts/debugging/test-request.py --test-routing
 ```
 
 **Check routing config:**
@@ -387,22 +387,30 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ### Backup Configuration
 ```bash
-# Automatic (on restart)
-cp config/litellm-unified.yaml config/litellm-unified.yaml.backup_$(date +%Y%m%d_%H%M%S)
+# Automatic snapshot during generation
+python3 scripts/generate-litellm-config.py
 
-# Manual
-./scripts/backup-config.sh
+# Manual snapshot
+mkdir -p config/backups
+cp config/litellm-unified.yaml config/backups/litellm-unified.manual-$(date +%Y%m%d_%H%M%S).yaml
+
+# Inspect history
+python3 scripts/generate-litellm-config.py --list-backups
 ```
 
 ### Rollback
 ```bash
-# Stop service
+# Stop service while restoring
 systemctl --user stop litellm.service
 
-# Restore from backup
-cp config/litellm-unified.yaml.backup_TIMESTAMP config/litellm-unified.yaml
+# Roll back to a known timestamp
+python3 scripts/generate-litellm-config.py --rollback 20251030_153000
 
-# Restart
+# (Optional) Validate backup state
+./scripts/verify-backup.sh
+./scripts/test-rollback.sh
+
+# Restart gateway
 systemctl --user start litellm.service
 ```
 
@@ -427,7 +435,7 @@ curl http://localhost:4000/health
 
 ### Check Model Usage
 ```bash
-./scripts/profiling/analyze-token-usage.py
+python3 scripts/profiling/compare-providers.py --summary
 ```
 
 ---

@@ -106,7 +106,7 @@ Check cloud model usage:
 ./scripts/debugging/analyze-logs.py --last 1h
 
 # Token usage by provider
-./scripts/profiling/analyze-token-usage.py
+python3 scripts/profiling/compare-providers.py --summary
 ```
 
 ---

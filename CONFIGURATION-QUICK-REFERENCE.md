@@ -317,7 +317,6 @@ export OLLAMA_API_KEY="your-api-key"  # For Ollama Cloud models
 
 ### Optional
 ```bash
-export LITELLM_MASTER_KEY="sk-..."  # For authentication (production)
 export REDIS_HOST="localhost"        # Redis cache
 export REDIS_PORT="6379"
 ```

@@ -4,7 +4,6 @@ set -euo pipefail
 : "${LITELLM_HOST:=http://127.0.0.1:4000}"
 : "${LITELLM_HEALTH_ENDPOINT:=/health/liveliness}"
 : "${PROM_HOST:=http://127.0.0.1:9090}"
-: "${LITELLM_API_KEY:=${LITELLM_MASTER_KEY:-}}"
 : "${GUM_BIN:=$(command -v gum || true)}"
 
 have_gum() {
@@ -65,11 +64,7 @@ render_logs() {
 
 _litellm_curl() {
     local url="$1"
-    local args=(-sSL "$url")
-    if [[ -n "$LITELLM_API_KEY" ]]; then
-        args=(-sSL -H "Authorization: Bearer $LITELLM_API_KEY" "$url")
-    fi
-    curl "${args[@]}"
+    curl -sSL "$url"
 }
 
 http_get_json() {

@@ -170,7 +170,7 @@ b88e01e docs(research): add comprehensive LLM gateway comparison and analysis
 
 ### Low Priority
 - [ ] Optimize routing_strategy to "simple-shuffle" (research finding)
-- [ ] Enable master key authentication for production
+- [ ] Front LiteLLM with an authenticated reverse proxy for production
 - [ ] Create Grafana dashboard for vLLM metrics
 
 ---

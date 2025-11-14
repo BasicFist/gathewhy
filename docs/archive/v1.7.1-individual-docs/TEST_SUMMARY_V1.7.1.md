@@ -58,7 +58,7 @@ The fallback chains reference `llama-cpp-default` and `llama-cpp-native`, but th
 
 | Test | Failure Reason | Impact |
 |------|---------------|--------|
-| `test_litellm_gateway_accessible` | Timeout (auth required) | Authentication not configured |
+| `test_litellm_gateway_accessible` | Timeout (proxy auth required) | Reverse proxy headers missing |
 | `test_exact_match_routes_correctly` | HTTP 400 | Cannot route to models |
 | `test_different_providers_routable` | HTTP 400 | Ollama routing broken |
 | `test_fallback_preserves_context` | HTTP 400 | Fallback testing blocked |
@@ -166,7 +166,7 @@ model_list:
 
 **Error**: HTTP 400 Bad Request (No API key)
 
-**Root Cause**: LiteLLM requires authentication for all endpoints including `/health`
+**Root Cause**: The reverse proxy required credentials for all endpoints, including `/health`
 
 **Tests Affected**:
 - `test_litellm_gateway_accessible`

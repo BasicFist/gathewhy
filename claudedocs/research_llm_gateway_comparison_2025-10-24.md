@@ -131,7 +131,7 @@ Your AI Backend Unified project follows industry best practices for LLM gateway 
 | **Fallback Chains** | Primary → Secondary → Tertiary | Standard pattern | ✅ Excellent |
 | **Observability** | Prometheus + Grafana | Prometheus + Grafana/OpenTelemetry | ✅ Standard |
 | **Rate Limiting** | Per-model RPM/TPM | Per-model + per-user | ✅ Good |
-| **Authentication** | Master key (optional) | JWT/API keys | ✅ Available |
+| **Authentication** | Loopback-only, keyless | JWT/API keys | ✅ Acceptable for local |
 | **Cost Tracking** | Token counting | Token + cost metrics | ✅ Implemented |
 
 ---
@@ -282,7 +282,7 @@ Provider Health:
 
 | Feature | Your Project | Industry Standard | Gap |
 |---------|-------------|-------------------|-----|
-| Master Key Auth | ✅ Available (commented out) | ✅ Required for production | Enable for prod |
+| Edge Authentication | ⚠️ Loopback-only | ✅ Required for exposed deployments | Add reverse proxy |
 | API Key per User | ❌ Not implemented | ✅ Recommended | Consider adding |
 | CORS Protection | ✅ Localhost-only | ✅ Standard | Good |
 | Rate Limiting | ✅ Per-model | ✅ Per-model + per-user | Good |
@@ -306,15 +306,17 @@ litellm_settings:
 
 ---
 
-**API Key Management**:
-```yaml
-# Industry pattern: Per-user API keys
-general_settings:
-  master_key: ${LITELLM_MASTER_KEY}
-  database_url: ${DATABASE_URL}  # Store user keys
+**API Gateway Hardening**:
+```nginx
+# Example: require auth at the proxy instead of LiteLLM itself
+location /v1/ {
+    auth_basic "LLM Gateway";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    proxy_pass http://127.0.0.1:4000;
+}
 ```
 
-**Your Project**: Uses single master key (sufficient for local network)
+**Your Project**: Relies on loopback-only access, which is acceptable for local labs. Add a reverse proxy if you need to expose the API beyond localhost.
 
 ---
 
@@ -343,7 +345,7 @@ general_settings:
 | Version control | ✅ | ⚠️ | ❌ | ❌ | ❌ |
 | Rollback support | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Security** |
-| Master key auth | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Edge proxy auth | ⚠️ (loopback-only) | ✅ | ✅ | ✅ | ❌ |
 | Per-user API keys | ❌ | ✅ | ✅ | ✅ | ❌ |
 | PII masking | ❌ | ✅ (Presidio) | ✅ | ❌ | ❌ |
 | Guardrails | ❌ | ⚠️ | ✅ (50+) | ❌ | ❌ |
@@ -430,16 +432,24 @@ router_settings:
 
 ---
 
-#### 2. **Enable Master Key Auth** 🔒
-```yaml
-# Production deployment should enable
-general_settings:
-  master_key: ${LITELLM_MASTER_KEY}
+#### 2. **Add Reverse Proxy Auth** 🔒
+```nginx
+# Production deployment should terminate TLS + auth before LiteLLM
+server {
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/domain/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/domain/privkey.pem;
+    auth_basic "LLM Gateway";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    location / {
+        proxy_pass http://127.0.0.1:4000;
+    }
+}
 ```
 
-**Source**: All researched projects require auth for production
-**Impact**: Security baseline
-**Effort**: 5 minutes
+**Source**: All researched projects protect public endpoints at the edge
+**Impact**: Security baseline without modifying LiteLLM
+**Effort**: 5–10 minutes + certificate issuance
 
 ---
 
@@ -520,7 +530,7 @@ litellm_settings:
 ### ⚠️ Consider Adopting
 
 1. **simple-shuffle routing** (performance)
-2. **Master key authentication** (production security)
+2. **Edge proxy authentication** (production security)
 3. **Per-user API keys** (multi-tenant)
 4. **Complexity-based routing** (cost optimization)
 
@@ -651,7 +661,7 @@ Based on research, here's where the industry is heading:
 ### ⚠️ **Quick Wins** (Change Now)
 
 1. **Routing Strategy**: Change to `simple-shuffle` (1-line config, immediate perf boost)
-2. **Enable Master Key**: Production security baseline (5-minute setup)
+2. **Add Reverse Proxy Auth**: Production security baseline (5-minute setup)
 3. **Fix vLLM Port Conflict**: Choose single-instance or multi-port strategy
 
 ### 🚀 **Future Enhancements** (Consider Next)

@@ -799,7 +799,7 @@ For complete testing documentation, see [`tests/README.md`](tests/README.md).
 2. **Phase 1: Configuration & Security**
    - 8 Serena memory files with operational knowledge
    - Pydantic-based configuration validation (schemas + validation script)
-   - Security hardening (CORS, rate limits, master key authentication)
+   - Security hardening (CORS, rate limits, localhost-only exposure)
    - Configuration hot-reload script with automatic backup/rollback
    - Configuration consistency validator (model name validation)
    - Pre-commit git hook for automatic validation

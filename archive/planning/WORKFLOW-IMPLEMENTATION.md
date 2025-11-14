@@ -150,7 +150,7 @@ pytest --cov=config --cov-report=term-missing
 
 # 1.2 Security audit
 grep -A 5 "cors" config/litellm-unified.yaml  # Restricted origins
-env | grep LITELLM_MASTER_KEY  # Authentication enabled
+ss -tlnp | grep 4000  # Confirm gateway bound to localhost-only
 pre-commit run detect-secrets --all-files  # No leaked secrets
 
 # 1.3 Rollback testing

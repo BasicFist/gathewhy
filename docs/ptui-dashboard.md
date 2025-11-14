@@ -154,7 +154,7 @@ providers:
 
 ### Connection Model
 
-The PTUI dashboard assumes the local LiteLLM gateway is open on the loopback interface and does not require authentication headers. This keeps the CLI frictionless for air-gapped labs and local developer laptops. If you later enable LiteLLM's optional master-key security (see `docs/security-setup.md`), use the Textual dashboard or API clients that support Bearer tokens until PTUI gains pluggable auth hooks.
+The PTUI dashboard assumes the local LiteLLM gateway is open on the loopback interface and does not require extra headers. This keeps the CLI frictionless for air-gapped labs and local developer laptops. If you front the gateway with an authenticated reverse proxy, use the Textual dashboard or API clients that support those credentials until PTUI gains pluggable hooks.
 
 ### Terminal Compatibility
 
@@ -301,8 +301,8 @@ nc -zv 127.0.0.1 4000   # Test LiteLLM port
 
 **Check 4**: Authentication issues
 ```bash
-# PTUI expects LiteLLM to run without auth.
-# If you've enabled a master key, use curl to test manually or switch to the Textual dashboard.
+# PTUI assumes LiteLLM stays on localhost without extra headers.
+# If you've wrapped the gateway with an auth proxy, test manually or switch to the Textual dashboard.
 curl http://localhost:4000/v1/models
 ```
 
@@ -346,10 +346,10 @@ systemctl --user status litellm.service
 curl http://localhost:4000/v1/models | jq '.data[] | .id'
 ```
 
-**Cause 3**: LiteLLM secured with master key
+**Cause 3**: LiteLLM sits behind an authenticated proxy
 ```bash
-# Switch to the Textual dashboard or use curl with the correct Bearer token as
-# described in docs/security-setup.md. PTUI currently targets open gateways.
+# Use the Textual dashboard or curl with the required OAuth/mTLS headers until
+# PTUI exposes a pluggable auth hook. Today it targets loopback-only gateways.
 ```
 
 ## Architecture
@@ -550,7 +550,7 @@ All services hardcoded/loaded from config point to localhost:
 
 ### Authentication
 
-The PTUI dashboard expects LiteLLM to be exposed without authentication. Securing the gateway via master keys is documented separately in `docs/security-setup.md`; once enabled, use the Textual dashboard or API scripts that attach credentials.
+The PTUI dashboard expects LiteLLM to be exposed without additional authentication. When you introduce a reverse proxy with OAuth/mTLS/Tailscale, switch to the Textual dashboard or API scripts that attach the required credentials.
 
 ### Input Validation
 

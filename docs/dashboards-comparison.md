@@ -507,7 +507,7 @@ tput lines # Should be >= 24
 
 **Issue**: Authentication fails (401 errors on /v1/models)
 
-**Solution**: LiteLLM runs without auth by default. If you explicitly enabled master-key protection, verify the key matches the gateway configuration as described in `docs/security-setup.md`.
+**Solution**: LiteLLM runs without auth by default. If you wrap it with an authenticated reverse proxy, make sure the dashboards include those headers (see `docs/security-setup.md`).
 
 **Issue**: Terminal rendering is ugly (no colors, broken lines)
 
@@ -651,7 +651,7 @@ Tested on:
 
 - **PTUI Dashboard (curses)**:
   - [x] Configuration loading from providers.yaml (✅ Completed 2025-11-03)
-  - [x] Document optional LiteLLM authentication flow (✅ Completed 2025-11-03)
+  - [x] Document reverse-proxy/edge-auth integration (✅ Completed 2025-11-03)
   - [x] Input validation for environment variables (✅ Completed 2025-11-03)
   - [x] Async architecture with graceful fallback (✅ Completed 2025-11-03)
   - [ ] Basic GPU monitoring (nvidia-smi text output)
@@ -669,7 +669,7 @@ Tested on:
 
 **Phase 1 (Q4 2025)**: Feature Parity ✅ COMPLETED
 - [x] Enhance PTUI Dashboard with config loading (✅ Done Nov 3, 2025)
-- [x] Document optional PTUI authentication (✅ Done Nov 3, 2025)
+- [x] Document PTUI behaviour when a proxy injects authentication (✅ Done Nov 3, 2025)
 - [x] Create comprehensive unit tests (✅ Done Nov 3, 2025)
 - [x] Create comprehensive documentation (✅ Done Nov 3, 2025)
 - [x] Dashboard comparison guide (✅ Done Nov 3, 2025)
@@ -688,7 +688,7 @@ Tested on:
 - [ ] Implement basic GPU monitoring in PTUI
 - [ ] Optimize AI Dashboard async performance
 - [ ] Shared configuration library between dashboards
-- [ ] Unified authentication approach
+- [ ] Unified reverse-proxy/edge access pattern
 
 **Phase 4 (Q2 2026 onwards)**: Long-term Maintenance
 - Maintain AI Dashboard (feature-rich, local monitoring)

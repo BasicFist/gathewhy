@@ -19,7 +19,7 @@ Keep a Redis cache and fallback routes enabled; these high-parameter models are 
 
 | Setting | Recommendation | Where to set it |
 |---------|----------------|-----------------|
-| Auth | Only the LiteLLM gateway key is required; Ollama Cloud models are exposed without additional API keys. | `~/.config/codex/secrets.env` for gateway. |
+| Auth | Clients stay keyless; only the provider’s `OLLAMA_API_KEY` is required so the gateway can call Ollama Cloud on behalf of users. | `~/.config/codex/secrets.env` (synced to systemd). |
 | Timeouts | Leave `request_timeout: 60`, `timeout: 300` in `litellm_settings`. Increase per model if you expect long outputs (> 8K tokens). | `config/providers.yaml` → regenerate → restart. |
 | Streaming | Keep `stream: true`. Only disable if a client can’t handle tokens. | In model definition under `litellm_params`. |
 | Cache | Redis is on by default (`cache: true`, `ttl: 3600`). Increase TTL for expensive calls or set `metadata["cache_key"]` in your app. | `litellm_settings.cache_params` or per request metadata. |
@@ -69,11 +69,10 @@ extra_body:
 - Defaults: `temperature=0.45`, `top_p=0.9`, `max_tokens=1536`.
 - Tip: Pair with an English local fallback to keep bilingual tasks from going entirely to the cloud.
 
-### GLM 4.6 (Zhipu AI API)
-- Role: same as above but via Zhipu’s native API.
-- Defaults: `temperature=0.4`, `frequency_penalty=0.3`, `repetition_penalty=1.05`.
-- Integration: configure an `openai_compatible` provider with base URL `https://open.bigmodel.cn/api/paas/v4` and the Zhipu API key.
-- Tip: Zhipu supports tool-calling natively; map LiteLLM `tool_choice` to the model’s expected format if you need agent-style behaviour.
+### Extended Catalog Examples
+- **aya-expanse:32b-cloud** – multilingual policy/finance assistant. Add an `extra_body.temperature` of `0.3` to keep responses precise and pair it with `qwen3-coder:480b-cloud` for complex translations.
+- **phi-4:mini-cloud** – 14B-class chat model for budget-sensitive workloads. Use `max_tokens: 768` to keep responses snappy and let the router fall back to `gpt-oss:20b-cloud` for larger prompts.
+- **llama-guard3:cloud** – moderation stage that inspects prompts/responses before forwarding to the main model. Configure it as the first hop in a fallback chain, then call your conversational model if the guard marks the request as safe.
 
 ---
 

@@ -598,7 +598,7 @@ general_settings:
   background_health_checks: true  # ✅ NEW: Enable background health checks
   health_check_interval: 300      # ✅ NEW: Check every 5 minutes
   health_check_details: false     # ✅ NEW: Hide sensitive info
-  # master_key: ${LITELLM_MASTER_KEY}  # Still commented (fine for solo dev)
+  # Gateway remains keyless; enforce auth at a reverse proxy if exposing beyond localhost
 
 debug: false
 debug_router: false

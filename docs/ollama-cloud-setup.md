@@ -37,7 +37,7 @@ Add the `ollama_cloud` provider block (already committed). Confirm the status is
 
 ## 3. Update Model Routing
 
-Ensure `config/model-mappings.yaml` contains exact matches and fallback chains for the six cloud models:
+Ensure `config/model-mappings.yaml` contains exact matches and fallback chains for the six committed cloud models:
 
 - `deepseek-v3.1:671b-cloud`
 - `qwen3-coder:480b-cloud`
@@ -45,6 +45,20 @@ Ensure `config/model-mappings.yaml` contains exact matches and fallback chains f
 - `gpt-oss:120b-cloud`
 - `gpt-oss:20b-cloud`
 - `glm-4.6:cloud`
+
+### Adding More Cloud Models
+
+Any new Ollama Cloud identifier can be added by repeating the same declarative steps:
+
+1. **Declare it in `config/providers.yaml`.** Copy one of the existing entries under `ollama_cloud.models` and swap the `name`,
+   `size`, and `specialty` fields (e.g., `aya-expanse:32b-cloud`, `phi-4:mini-cloud`, or `llama-guard3:cloud`).
+2. **Give it routing context in `config/model-mappings.yaml`.** Add an `exact_match` entry plus a `fallback_chain` so LiteLLM knows
+   when to escalate to or descend from the new model.
+3. **Regenerate + restart.** Run `python3 scripts/generate-litellm-config.py` and restart the service with
+   `systemctl --user restart litellm.service`.
+
+Because everything is configuration-driven you can maintain separate capability groups (e.g., moderation, multilingual, or tool
+-calling) without touching the runtime code.
 
 ## 4. Regenerate LiteLLM Config
 
@@ -73,6 +87,7 @@ Expected models:
 - `gpt-oss:120b-cloud`
 - `gpt-oss:20b-cloud`
 - `glm-4.6:cloud`
+- Any additional entries you declared (e.g., `aya-expanse:32b-cloud`, `phi-4:mini-cloud`)
 
 ## 6. Usage Tips
 

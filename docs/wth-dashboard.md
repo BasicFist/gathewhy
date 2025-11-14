@@ -58,7 +58,6 @@ All scripts degrade gracefully if Gum is unavailable by emitting plain text.
 | `LITELLM_HEALTH_ENDPOINT` | `/health/liveliness` | Health endpoint path |
 | `LITELLM_METRICS_ENDPOINT` | `/metrics` | Prometheus metrics path |
 | `LITELLM_LOG_SOURCE` | `journalctl --user -u litellm.service -n 40 --no-pager` | Command used by logs widget |
-| `LITELLM_API_KEY` | (unset) | If set, widgets hit LiteLLM endpoints with `Authorization: Bearer` headers |
 | `PROM_HOST` | `http://127.0.0.1:9090` | Prometheus base URL |
 | `WTH_WIDGET_DIR` | `$HOME/.local/share/wth-widgets` | Base path referenced in the config file |
 | `WTH_ALIAS_NAME` | `wth-lite` | Alias name appended to `~/.zshrc` or `~/.bashrc` |
@@ -89,6 +88,6 @@ For full Bubble Tea modules, compile Go code with `-buildmode=plugin` and place 
 
 - Service control widget (start/stop LiteLLM) implemented as a Go plugin for better UX
 - Redis/GPU monitoring stickers
-- Optional remote auth integration once LiteLLM master-key support is required
+- Optional proxy header injection once a reverse-proxy auth layer is introduced
 
 Feedback and contributions are welcome—open an issue or PR with your widget ideas.

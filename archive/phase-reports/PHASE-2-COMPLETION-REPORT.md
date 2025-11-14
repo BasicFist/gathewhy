@@ -423,7 +423,7 @@ content-type: text/html; charset=utf-8
 **Recommendations for Production**:
 1. Add Gradio OAuth authentication
 2. Restrict to 127.0.0.1 (localhost only)
-3. Enable LiteLLM API key authentication
+3. Add reverse-proxy authentication in front of LiteLLM
 4. Set proper database file permissions (600)
 
 **Documented in**: `web-ui/README.md` Security Considerations section

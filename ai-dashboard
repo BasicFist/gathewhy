@@ -4,8 +4,6 @@
 # Automatically detects the Python interpreter from the current virtual environment
 # or system Python. Works correctly on any system without hardcoded paths.
 
-SCRIPT_PATH="$(dirname "$(readlink -f "$0")")/scripts/ai-dashboard"
-
 # Priority 1: Use Python from current virtual environment
 if [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/bin/python3" ]; then
     PYTHON_PATH="$VIRTUAL_ENV/bin/python3"
@@ -20,6 +18,18 @@ else
     echo "Alternatively, activate a virtual environment with Python 3 installed." >&2
     exit 1
 fi
+
+# Resolve the dashboard target using Python realpath for portable path handling
+# (works on Linux and macOS, even when this launcher is a symlink).
+SCRIPT_DIR="$("$PYTHON_PATH" - <<'PY' -- "$0"
+import os
+import sys
+
+print(os.path.dirname(os.path.realpath(sys.argv[1])))
+PY
+)"
+
+SCRIPT_PATH="$SCRIPT_DIR/scripts/ai-dashboard"
 
 # Execute the dashboard script with the detected Python interpreter
 exec "$PYTHON_PATH" "$SCRIPT_PATH" "$@"

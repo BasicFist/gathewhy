@@ -367,7 +367,7 @@ class ProviderMonitor:
             delta_cpu = max(cpu_time - entry.last_cpu_time, 0.0)
             cpu_percent = 0.0
             if delta_time > 0:
-                cpu_percent = (delta_cpu / delta_time) / self._cpu_count * 100.0
+                cpu_percent = (delta_cpu / delta_time) * 100.0
             memory_mb = proc.memory_info().rss / 1024**2
             entry.last_cpu_time = cpu_time
             entry.last_timestamp = now

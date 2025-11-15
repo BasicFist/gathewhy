@@ -77,6 +77,7 @@ class DashboardApp(App[None]):
         self.auto_refresh_enabled = True
         self.search_query: str = ""
         self.dashboard_view: DashboardView | None = None
+        self._controls_alerted = False
 
         # Try to load previous state
         loaded_state = load_dashboard_state()
@@ -118,6 +119,8 @@ class DashboardApp(App[None]):
         )
         self.log_event(f"[cyan]✓[/] Dashboard initialized (refresh: {self.refresh_interval}s)")
         self.add_alert("info", "Dashboard initialized successfully")
+        if not self.monitor.system_controls_available:
+            self._notify_controls_unavailable()
 
     def action_quit(self) -> None:
         """Quit application and save state."""
@@ -278,6 +281,16 @@ class DashboardApp(App[None]):
         if self.dashboard_view:
             self.dashboard_view.add_alert(level, message)
 
+    def _notify_controls_unavailable(self) -> None:
+        """Surface a user-facing warning when system controls are disabled."""
+
+        if self._controls_alerted:
+            return
+        warning = "System controls unavailable: systemctl not present on this platform"
+        self.log_event(f"[yellow]⚠[/] {warning}")
+        self.add_alert("warning", warning)
+        self._controls_alerted = True
+
     # ========================= EVENT HANDLERS =========================
 
     @on(DataTable.RowSelected)
@@ -319,3 +332,5 @@ class DashboardApp(App[None]):
         else:
             self.log_event(f"[red]✗[/] Failed: {action} → {display_name}")
             self.add_alert("error", f"Failed to {action} {display_name}")
+            if not self.monitor.system_controls_available:
+                self._notify_controls_unavailable()

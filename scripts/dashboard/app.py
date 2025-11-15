@@ -7,12 +7,14 @@ better colors, improved readability, and enhanced functionality.
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import Literal
 
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import DataTable, Footer, Header, Input
+from textual.worker import Worker
 
 from .config import load_env_config
 from .controllers import NavigationController
@@ -77,6 +79,7 @@ class DashboardApp(App[None]):
         self.auto_refresh_enabled = True
         self.search_query: str = ""
         self.dashboard_view: DashboardView | None = None
+        self._snapshot_worker: Worker[tuple[list[ServiceMetrics], GPUOverview]] | None = None
 
         # Try to load previous state
         loaded_state = load_dashboard_state()
@@ -112,9 +115,11 @@ class DashboardApp(App[None]):
         self.dashboard_view.configure(self.log_height)
         self.dashboard_view.hide_help()
 
-        self._refresh_table()
+        self._refresh_table(source="initial")
         self.refresh_timer = self.set_interval(
-            self.refresh_interval, self._refresh_table, pause=not self.auto_refresh_enabled
+            self.refresh_interval,
+            lambda: self._refresh_table(source="auto"),
+            pause=not self.auto_refresh_enabled,
         )
         self.log_event(f"[cyan]✓[/] Dashboard initialized (refresh: {self.refresh_interval}s)")
         self.add_alert("info", "Dashboard initialized successfully")
@@ -147,8 +152,7 @@ class DashboardApp(App[None]):
 
     def action_refresh(self) -> None:
         """Manual refresh (binding: 'r')."""
-        self._refresh_table()
-        self.log_event("[cyan]🔄[/] Manual refresh completed")
+        self._refresh_table(source="manual")
 
     def action_clear_log(self) -> None:
         """Clear event log (binding: 'ctrl+l')."""
@@ -221,30 +225,66 @@ class DashboardApp(App[None]):
 
     # ========================= REFRESH ENGINE =========================
 
-    def _refresh_table(self) -> None:
-        """Refresh all dashboard displays."""
-        try:
-            self.metrics, self.gpu_overview = self.monitor.collect_snapshot()
-            active_count = sum(1 for m in self.metrics if m.status == "active")
-            degraded_count = sum(1 for m in self.metrics if m.status == "degraded")
-            logger.debug(f"Snapshot collected: {active_count}/{len(self.metrics)} active")
-
-            # Check for degraded services and alert
-            if degraded_count > 0:
-                self.add_alert("warning", f"{degraded_count} service(s) degraded or offline")
-
-        except Exception as e:
-            error_msg = f"{type(e).__name__}"
-            logger.error(f"Error collecting snapshot: {error_msg}: {e}")
-            self.log_event(f"[red]✗[/] Snapshot failed: {error_msg}")
-            self.add_alert("error", f"Snapshot collection failed: {error_msg}")
+    def _refresh_table(self, source: str = "auto") -> None:
+        """Refresh all dashboard displays via a background worker."""
+        if self._snapshot_worker and self._snapshot_worker.is_running:
+            logger.debug("Snapshot already running; skipping %s refresh", source)
             return
 
-        # Apply filters
+        worker = self.run_worker(
+            self.monitor.collect_snapshot,
+            name="provider-snapshot",
+            group="provider-snapshot",
+            description=f"{source}-refresh",
+            exit_on_error=False,
+            exclusive=True,
+            thread=True,
+        )
+        self._snapshot_worker = worker
+        waiter = partial(self._await_snapshot_result, worker, source)
+        self.run_worker(
+            waiter,
+            name="provider-snapshot-waiter",
+            group="provider-snapshot",
+            exit_on_error=False,
+        )
+
+    async def _await_snapshot_result(
+        self,
+        worker: Worker[tuple[list[ServiceMetrics], GPUOverview]],
+        source: str,
+    ) -> None:
+        try:
+            metrics, gpu_overview = await worker.wait()
+        except Exception as exc:  # pragma: no cover - worker errors handled on main thread
+            self.call_from_thread(self._handle_snapshot_error, worker, source, exc)
+        else:
+            self.call_from_thread(
+                self._handle_snapshot_success, worker, source, metrics, gpu_overview
+            )
+
+    def _handle_snapshot_success(
+        self,
+        worker: Worker[tuple[list[ServiceMetrics], GPUOverview]],
+        source: str,
+        metrics: list[ServiceMetrics],
+        gpu_overview: GPUOverview,
+    ) -> None:
+        if self._snapshot_worker is worker:
+            self._snapshot_worker = None
+
+        self.metrics = metrics
+        self.gpu_overview = gpu_overview
+        active_count = sum(1 for m in self.metrics if m.status == "active")
+        degraded_count = sum(1 for m in self.metrics if m.status == "degraded")
+        logger.debug(f"Snapshot collected: {active_count}/{len(self.metrics)} active")
+
+        if degraded_count > 0:
+            self.add_alert("warning", f"{degraded_count} service(s) degraded or offline")
+
         self._apply_filters()
 
         try:
-            # Update stats bar
             if self.dashboard_view:
                 self.dashboard_view.update_stats(
                     self.metrics, self.auto_refresh_enabled, float(self.refresh_interval)
@@ -256,6 +296,31 @@ class DashboardApp(App[None]):
             error_msg = f"{type(e).__name__}"
             logger.error(f"Error updating displays: {error_msg}: {e}")
             self.log_event(f"[red]✗[/] Display update failed: {error_msg}")
+            return
+
+        if source == "manual":
+            self.log_event("[cyan]🔄[/] Manual refresh completed")
+        elif source == "action":
+            self.log_event("[cyan]🔄[/] Refresh after service action completed")
+
+    def _handle_snapshot_error(
+        self,
+        worker: Worker[tuple[list[ServiceMetrics], GPUOverview]],
+        source: str,
+        exc: Exception,
+    ) -> None:
+        if self._snapshot_worker is worker:
+            self._snapshot_worker = None
+
+        error_msg = f"{type(exc).__name__}"
+        logger.error(f"Error collecting snapshot: {error_msg}: {exc}")
+        if source == "manual":
+            self.log_event(f"[red]✗[/] Manual refresh failed: {error_msg}")
+        elif source == "action":
+            self.log_event(f"[red]✗[/] Post-action refresh failed: {error_msg}")
+        else:
+            self.log_event(f"[red]✗[/] Snapshot failed: {error_msg}")
+        self.add_alert("error", f"Snapshot collection failed: {error_msg}")
 
     def _find_metric(self, key: str | None) -> ServiceMetrics | None:
         """Find ServiceMetrics by provider key."""
@@ -315,7 +380,7 @@ class DashboardApp(App[None]):
         if success:
             self.log_event(f"[green]✓[/] {action.title()} → {display_name}")
             self.add_alert("info", f"Action '{action}' sent to {display_name}")
-            self.set_timer(1.0, self._refresh_table)
+            self.set_timer(1.0, lambda: self._refresh_table("action"))
         else:
             self.log_event(f"[red]✗[/] Failed: {action} → {display_name}")
             self.add_alert("error", f"Failed to {action} {display_name}")

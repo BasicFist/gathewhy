@@ -131,12 +131,12 @@ else
     echo "  Run: systemctl --user start litellm.service"
 fi
 
-# Check Ollama service (if exists)
+# Check Ollama service (if exists) — treat as optional
 if systemctl --user list-unit-files | grep -q ollama.service; then
     if systemctl --user is-active ollama.service > /dev/null 2>&1; then
         log_success "Ollama service is running"
     else
-        log_error "Ollama service exists but is NOT running"
+        log_warning "Ollama service exists but is NOT running (optional)"
     fi
 fi
 
@@ -151,9 +151,9 @@ echo ""
 
 log_info "Testing provider endpoints..."
 
-# Ollama
-test_endpoint "Ollama" "http://localhost:11434/api/tags"
-test_json_response "Ollama models list" "http://localhost:11434/api/tags" ".models"
+# Ollama (optional)
+test_endpoint "Ollama" "http://localhost:11434/api/tags" 5 true
+test_json_response "Ollama models list" "http://localhost:11434/api/tags" ".models" true
 
 # llama.cpp Python
 if test_endpoint "llama.cpp Python" "http://localhost:8000/v1/models" 5 true; then

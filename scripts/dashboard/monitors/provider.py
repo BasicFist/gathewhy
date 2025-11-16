@@ -10,6 +10,7 @@ import logging
 import os
 import subprocess
 import time
+from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import urljoin, urlparse
 
@@ -21,6 +22,15 @@ from ..models import GPUOverview, ServiceMetrics
 from .gpu import GPUMonitor
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _ProcessCacheEntry:
+    """Cached process reference and last CPU sample."""
+
+    process: psutil.Process
+    last_cpu_time: float
+    last_timestamp: float
 
 # Security: Service name allowlist (prevent command injection)
 ALLOWED_SERVICES: dict[str, str] = {
@@ -142,6 +152,8 @@ class ProviderMonitor:
         self._cooldowns: dict[str, float] = {}
         self._last_status: dict[str, str] = {}
         self._last_samples: dict[str, dict[str, float | int]] = {}
+        self._process_cache: dict[int, _ProcessCacheEntry] = {}
+        self._cpu_count = max(psutil.cpu_count(logical=True) or 1, 1)
         # SECURITY: Validate all endpoints at init time
         self._validate_endpoints()
 
@@ -302,6 +314,30 @@ class ProviderMonitor:
             return None
         return pid if pid > 0 else None
 
+    @staticmethod
+    def _process_cpu_time(proc: psutil.Process) -> float:
+        """Return sum of user and system CPU time for a process."""
+
+        times = proc.cpu_times()
+        return float(getattr(times, "user", 0.0) + getattr(times, "system", 0.0))
+
+    def _prime_process_entry(self, pid: int) -> _ProcessCacheEntry | None:
+        """Create and cache a process entry, priming CPU stats."""
+
+        try:
+            proc = psutil.Process(pid)
+            proc.cpu_percent(interval=None)
+            entry = _ProcessCacheEntry(
+                process=proc,
+                last_cpu_time=self._process_cpu_time(proc),
+                last_timestamp=time.perf_counter(),
+            )
+            self._process_cache[pid] = entry
+            return entry
+        except psutil.Error:
+            self._process_cache.pop(pid, None)
+            return None
+
     def _collect_process_metrics(
         self, key: str, pid_override: int | None = None
     ) -> tuple[int | None, float, float]:
@@ -317,12 +353,27 @@ class ProviderMonitor:
         if pid is None:
             return None, 0.0, 0.0
 
+        entry = self._process_cache.get(pid)
+        if entry is None:
+            entry = self._prime_process_entry(pid)
+            if entry is None:
+                return None, 0.0, 0.0
+
+        proc = entry.process
         try:
-            proc = psutil.Process(pid)
-            cpu = proc.cpu_percent(interval=0.0)
+            now = time.perf_counter()
+            cpu_time = self._process_cpu_time(proc)
+            delta_time = now - entry.last_timestamp
+            delta_cpu = max(cpu_time - entry.last_cpu_time, 0.0)
+            cpu_percent = 0.0
+            if delta_time > 0:
+                cpu_percent = (delta_cpu / delta_time) * 100.0
             memory_mb = proc.memory_info().rss / 1024**2
-            return pid, cpu, memory_mb
+            entry.last_cpu_time = cpu_time
+            entry.last_timestamp = now
+            return pid, cpu_percent, memory_mb
         except psutil.Error:
+            self._process_cache.pop(pid, None)
             return None, 0.0, 0.0
 
     def _parse_models(self, key: str, response_json: dict) -> int:
@@ -366,6 +417,7 @@ class ProviderMonitor:
 
         metrics: list[ServiceMetrics] = []
         now_monotonic = time.monotonic()
+        active_pids: set[int] = set()
 
         for key, cfg in self.providers.items():
             notes: list[str] = []
@@ -450,6 +502,8 @@ class ProviderMonitor:
                     self._cooldowns[key] = now_monotonic + SOFT_ERROR_BACKOFF_SECONDS
 
             pid, cpu_percent, memory_mb = self._collect_process_metrics(key, pid_override=pid_hint)
+            if pid:
+                active_pids.add(pid)
             memory_percent = (memory_mb / system_memory_total * 100) if system_memory_total else 0.0
             vram_mb, vram_percent = per_pid_vram.get(pid, (0.0, 0.0)) if pid else (0.0, 0.0)
 
@@ -474,6 +528,10 @@ class ProviderMonitor:
                 )
             )
             self._last_status[key] = status
+
+        stale_pids = [cached_pid for cached_pid in self._process_cache if cached_pid not in active_pids]
+        for stale_pid in stale_pids:
+            self._process_cache.pop(stale_pid, None)
 
         if gpu_info:
             total_used = sum(entry["memory_used_mb"] for entry in gpu_info)

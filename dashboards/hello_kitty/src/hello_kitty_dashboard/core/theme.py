@@ -23,7 +23,7 @@ class ColorProfile(Enum):
 class ColorToken:
     """Represents a color token with fallbacks for different profiles."""
     name: str
-    hex_color: str
+    hex: str
     ansi_256: int
     ansi_16: str
     usage: str
@@ -204,12 +204,12 @@ class HelloKittyTheme:
     def get_color(self, token_name: str, profile: ColorProfile = ColorProfile.TRUECOLOR) -> str:
         """Get color value for a token in the specified profile."""
         if token_name not in self.colors:
-            return self.colors["hk_text"].hex_color
+            return self.colors["hk_text"].hex
         
         color_token = self.colors[token_name]
         
         if profile == ColorProfile.TRUECOLOR:
-            return color_token.hex_color
+            return color_token.hex
         elif profile == ColorProfile.ANSI_256:
             return f"color({color_token.ansi_256})"
         elif profile == ColorProfile.ANSI_16:

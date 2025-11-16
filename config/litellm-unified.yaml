@@ -466,10 +466,11 @@ rate_limit_settings:
       tpm: 50000
 general_settings:
   background_health_checks: true
-  health_check_interval: 60
+  health_check_interval: 300
   health_check_details: false
   '# Authentication disabled intentionally':
   '# Set master_key in this section only if you need request signing':
+  use_shared_health_check: true
 debug: false
 debug_router: false
 test_mode: false

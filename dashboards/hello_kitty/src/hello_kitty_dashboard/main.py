@@ -37,10 +37,7 @@ from hello_kitty_dashboard.config.settings import Settings
 class HelloKittyBubbleTeaTUI(App):
     """Main TUI application for Hello Kitty BubbleTea shop management."""
     
-    CSS = """
-    /* Import Hello Kitty theme styles */
-    @import "theme.css";
-    """
+    CSS_PATH = "theme.css"
     
     BINDINGS = [
         Binding("d", "show_dashboard", "Dashboard"),

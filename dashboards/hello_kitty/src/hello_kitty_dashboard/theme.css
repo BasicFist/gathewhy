@@ -1,0 +1,9 @@
+/* Minimal theme stub to satisfy Textual loader */
+
+Screen {
+    background: black;
+}
+
+Label {
+    color: white;
+}

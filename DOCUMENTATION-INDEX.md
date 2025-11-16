@@ -155,21 +155,23 @@ Located in `.serena/memories/` - Comprehensive knowledge preserved by Serena MCP
 - **[scripts/validate-unified-backend.sh](scripts/validate-unified-backend.sh)** - Complete system validation
 - **[scripts/validate-all-configs.sh](scripts/validate-all-configs.sh)** - Configuration validation
 - **[scripts/generate-litellm-config.py](scripts/generate-litellm-config.py)** - Config generation
+- **[scripts/validate-observability.sh](scripts/validate-observability.sh)** - Monitoring stack validation
 
 ### Debugging & Analysis (Phase 2)
+- **[scripts/debugging/test-request.py](scripts/debugging/test-request.py)** - `--test-routing` verifies provider assignments
 - **[scripts/debugging/tail-requests.py](scripts/debugging/tail-requests.py)** - Real-time request monitoring
 - **[scripts/debugging/analyze-logs.py](scripts/debugging/analyze-logs.py)** - Log analysis and search
-- **[scripts/debugging/test-routing.sh](scripts/debugging/test-routing.sh)** - Routing decision testing
 
 ### Profiling & Optimization (Phase 2)
-- **[scripts/profiling/analyze-latency.py](scripts/profiling/analyze-latency.py)** - Latency analysis
-- **[scripts/profiling/analyze-token-usage.py](scripts/profiling/analyze-token-usage.py)** - Token usage tracking
-- **[scripts/profiling/compare-providers.py](scripts/profiling/compare-providers.py)** - Provider benchmarking
+- **[scripts/profiling/profile-latency.py](scripts/profiling/profile-latency.py)** - Latency analysis
+- **[scripts/profiling/profile-throughput.py](scripts/profiling/profile-throughput.py)** - Throughput + concurrency sweeps
+- **[scripts/profiling/compare-providers.py](scripts/profiling/compare-providers.py)** - Provider benchmarking & token stats
 
 ### Operational Tools
 - **[scripts/vllm-model-switch.sh](scripts/vllm-model-switch.sh)** - vLLM model switching
-- **[scripts/backup-config.sh](scripts/backup-config.sh)** - Configuration backup
-- **[scripts/health-check-all.sh](scripts/health-check-all.sh)** - All-provider health check
+- **[scripts/reload-litellm-config.sh](scripts/reload-litellm-config.sh)** - Validated config reload + automatic backups
+- **[scripts/monitor-redis-cache.sh](scripts/monitor-redis-cache.sh)** - Redis cache visibility
+- **[scripts/check-port-conflicts.sh](scripts/check-port-conflicts.sh)** - Required port validation
 
 ---
 
@@ -263,7 +265,7 @@ pytest --cov=. tests/
 #### Troubleshooting Provider Issues
 1. Check: [docs/troubleshooting.md](docs/troubleshooting.md) → Provider-specific section
 2. Logs: `scripts/debugging/tail-requests.py` or `journalctl --user -u litellm.service`
-3. Health: Run `scripts/health-check-all.sh`
+3. Health: Run `scripts/validate-unified-backend.sh`
 4. Patterns: [.serena/memories/06-troubleshooting-patterns.md](.serena/memories/06-troubleshooting-patterns.md)
 5. Recovery: [docs/recovery-procedures.md](docs/recovery-procedures.md)
 
@@ -272,7 +274,7 @@ pytest --cov=. tests/
 2. Routing Logic: [docs/local-vs-cloud-routing.md](docs/local-vs-cloud-routing.md)
 3. Memory: [.serena/memories/03-routing-config.md](.serena/memories/03-routing-config.md)
 4. Edit: [config/model-mappings.yaml](config/model-mappings.yaml)
-5. Test: `scripts/debugging/test-routing.sh model-name`
+5. Test: `python3 scripts/debugging/test-request.py --test-routing`
 
 #### Setting Up Monitoring
 1. Guide: [docs/observability.md](docs/observability.md)

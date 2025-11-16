@@ -74,7 +74,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 - [ ] Test model switching script end-to-end
 - [ ] Add Dolphin model to providers.yaml
 - [ ] Consider routing_strategy optimization (simple-shuffle)
-- [ ] Enable master key authentication for production
+- [ ] Front LiteLLM with an authenticated reverse proxy for production
 
 ---
 

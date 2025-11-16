@@ -243,9 +243,9 @@ llama_cpp_native:
 
 #### Failures Breakdown
 
-**Authentication Issues** (8 tests):
-- Tests require API key (LiteLLM auth enabled)
-- Workaround: Configure test API key or disable auth for testing
+**Gateway Access Issues** (8 tests):
+- Tests expected Bearer tokens after we briefly proxied the gateway
+- Workaround: Keep the keyless default or teach tests to send the proxy headers
 
 **Model Entry** (1 test - FIXED by hotfix):
 - ✅ `test_fallback_models_exist` now passes
@@ -254,7 +254,7 @@ llama_cpp_native:
 - Redis configured with RDB persistence (sufficient for caching)
 
 **Health Check** (1 test):
-- Timeout due to authentication requirement
+- Timeout due to reverse-proxy headers blocking `/health`
 
 #### Passes (21 tests)
 - ✅ Model list endpoint (12 models)

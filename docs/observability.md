@@ -270,19 +270,19 @@ Located in `scripts/debugging/`:
 **Usage:**
 ```bash
 # Basic test
-./test-request.py
+python3 scripts/debugging/test-request.py
 
 # Test specific model
-./test-request.py --model qwen-coder-vllm
+python3 scripts/debugging/test-request.py --model qwen-coder-vllm
 
 # Test with metadata
-./test-request.py --metadata '{"project":"debug","env":"dev"}'
+python3 scripts/debugging/test-request.py --metadata '{"project":"debug","env":"dev"}'
 
 # Test routing to all providers
-./test-request.py --test-routing
+python3 scripts/debugging/test-request.py --test-routing
 
 # List available models
-./test-request.py --list-models
+python3 scripts/debugging/test-request.py --list-models
 ```
 
 **Output**: Health check, request/response details, timing data
@@ -303,7 +303,7 @@ Located in `scripts/debugging/`:
 ./scripts/debugging/analyze-logs.py /var/log/litellm/requests.log --trace <request-id>
 
 # Step 5: Test fix
-./scripts/debugging/test-request.py --model <failing-model>
+python3 scripts/debugging/test-request.py --model <failing-model>
 ```
 
 ---
@@ -633,7 +633,7 @@ curl http://localhost:8000/v1/models  # llama.cpp
 curl http://localhost:8001/v1/models  # vLLM
 
 # 4. Test routing
-./scripts/debugging/test-request.py --test-routing
+python3 scripts/debugging/test-request.py --test-routing
 ```
 
 **Common causes**:

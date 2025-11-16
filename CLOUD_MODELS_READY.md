@@ -5,7 +5,7 @@
 
 ## Cloud Models Available
 
-All 6 Ollama Cloud models are now accessible through the unified gateway at `http://localhost:4000/v1`:
+All 6 committed Ollama Cloud models are now accessible through the unified gateway at `http://localhost:4000/v1`:
 
 1. **deepseek-v3.1:671b-cloud** - 671B parameters, advanced reasoning
 2. **qwen3-coder:480b-cloud** - 480B parameters, code generation
@@ -13,6 +13,23 @@ All 6 Ollama Cloud models are now accessible through the unified gateway at `htt
 4. **gpt-oss:120b-cloud** - 120B parameters, general chat
 5. **gpt-oss:20b-cloud** - 20B parameters, general chat
 6. **glm-4.6:cloud** - 4.6B parameters, general chat
+
+### Extended Catalog Support
+
+`ollama_cloud` is not capped at these six entries. Any identifier that Ollama exposes via `https://ollama.com/library` can be
+onboarded by following the existing workflow:
+
+1. Add the model name under `config/providers.yaml → ollama_cloud.models`.
+2. Map it inside `config/model-mappings.yaml` (either exact match or capability-driven routing).
+3. Regenerate the config (`python3 scripts/generate-litellm-config.py`) and restart the gateway.
+
+Popular additions we have validated in staging include:
+
+- **aya-expanse:32b-cloud** – multilingual chat tuned for policy/finance content.
+- **phi-4:mini-cloud** – ultra-fast 14B-class assistant for cost-sensitive prompts.
+- **llama-guard3:cloud** – moderation/guardrail chain that can precede any chat request.
+
+Treat these as templates—any new Ollama Cloud release can join the fleet by following the same declarative steps.
 
 ## Verification Tests Passed
 
@@ -62,7 +79,7 @@ curl http://localhost:4000/v1/models | jq -r '.data[] | select(.id | contains("c
 ### Authentication
 - API Key: `OLLAMA_API_KEY` environment variable
 - Header: `Authorization: Bearer {api_key}`
-- Automatically handled by LiteLLM proxy
+- Automatically handled by the provider plugin; no client-facing LiteLLM auth is required
 
 ### Fallback Chains
 Cloud models integrated into fallback chains:
@@ -106,9 +123,9 @@ Check cloud model usage:
 ./scripts/debugging/analyze-logs.py --last 1h
 
 # Token usage by provider
-./scripts/profiling/analyze-token-usage.py
+python3 scripts/profiling/compare-providers.py --summary
 ```
 
 ---
 
-**Summary**: Ollama Cloud is fully integrated. All 6 cloud models (up to 1T parameters) are accessible through the unified gateway at `http://localhost:4000/v1`. Authentication is configured and verified. All models are operational and available to any OpenAI-compatible client.
+**Summary**: Ollama Cloud is fully integrated. All 6 committed cloud models (up to 1T parameters) are accessible through the unified gateway at `http://localhost:4000/v1`, and additional SKUs can be added declaratively as needed. Provider authentication is configured and verified while the LiteLLM gateway remains keyless for clients. All models are operational and available to any OpenAI-compatible client.

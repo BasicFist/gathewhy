@@ -76,7 +76,7 @@ Comprehensive checklist for deploying the AI Backend Unified Infrastructure to p
 
 - [ ] Authentication configured (optional, only for shared deployments)
   ```bash
-  # Defaults require no master key; follow docs/security-setup.md to enable one if needed
+  # Defaults rely on localhost-only exposure; front with a reverse proxy if you need authentication
   ```
 
 - [ ] Redis password configured (if applicable)

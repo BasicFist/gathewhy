@@ -8,8 +8,8 @@
 The AI Backend Unified Infrastructure implements multiple security layers:
 1. **CORS Restrictions**: Localhost-only by default
 2. **Rate Limiting**: Per-model request and token limits
-3. **Authentication**: Master key support (optional)
-4. **Encryption**: Salt key for database encryption
+3. **Encryption**: Salt key for database encryption (when persistence is used)
+4. **Operational Isolation**: Services bind to loopback interfaces and are accessed via SSH tunnels or VPN when remote access is required
 
 ## Current Security Posture
 
@@ -26,16 +26,11 @@ The AI Backend Unified Infrastructure implements multiple security layers:
 - Configuration: `config/litellm-unified.yaml:rate_limit_settings`
 
 **Security Documentation**
-- Master key setup instructions
+- CORS enforcement playbook
 - Salt key encryption guidance
 - Environment variable patterns
 
 ### ⏳ Available for Production (Not Yet Enabled)
-
-**Master Key Authentication**
-- JWT-based request authentication
-- Requires `Authorization: Bearer sk-...` header
-- Setup documented in config file
 
 **Database Encryption**
 - Salt key for encrypting stored data
@@ -87,51 +82,15 @@ rate_limit_settings:
       tpm: 100000  # Increase tokens per minute
 ```
 
-### 3. Master Key Authentication (Optional)
+### 3. Gateway Exposure (Keyless by Design)
 
-**Generate Master Key**:
-```bash
-# Generate secure key
-LITELLM_MASTER_KEY="sk-$(openssl rand -hex 16)"
-echo "export LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY'" >> ~/.bashrc
-source ~/.bashrc
-```
+LiteLLM intentionally exposes a keyless OpenAI-compatible endpoint. Access control is enforced by network topology:
 
-**Configure systemd Service**:
-```bash
-# Edit service
-systemctl --user edit litellm.service
+- Bind services to `127.0.0.1`/`[::1]`.
+- Require SSH tunnelling, WireGuard, or VPN for remote operators.
+- Keep provider API keys (e.g., `OLLAMA_API_KEY`) in systemd environment files so the gateway can reach upstream APIs without handing secrets to clients.
 
-# Add environment variable
-[Service]
-Environment="LITELLM_MASTER_KEY=sk-your-generated-key-here"
-
-# Reload and restart
-systemctl --user daemon-reload
-systemctl --user restart litellm.service
-```
-
-**Enable in Configuration**:
-```yaml
-# In config/litellm-unified.yaml
-general_settings:
-  master_key: ${LITELLM_MASTER_KEY}  # Uncomment this line
-```
-
-**Apply Configuration**:
-```bash
-cp config/litellm-unified.yaml ../openwebui/config/litellm.yaml
-systemctl --user restart litellm.service
-```
-
-**Test Authentication**:
-```bash
-# Without key - should fail
-curl http://localhost:4000/v1/models
-
-# With key - should work
-curl -H "Authorization: Bearer sk-your-key" http://localhost:4000/v1/models
-```
+If you must share the API beyond localhost, terminate TLS and authentication at a reverse proxy (Caddy, Nginx, Tailscale) while leaving LiteLLM itself keyless.
 
 ### 4. Salt Key for Encryption (Optional)
 
@@ -171,11 +130,9 @@ general_settings:
   - Configure reverse proxy (nginx/traefik)
   - Redirect HTTP → HTTPS
 
-- [ ] **Enable Master Key Authentication**
-  - Generate strong master key
-  - Store in secure vault (not in files)
-  - Enable in configuration
-  - Update client applications
+- [ ] **Authenticated Reverse Proxy**
+  - Terminate TLS + auth (OAuth, mTLS, VPN, or network ACLs)
+  - Keep LiteLLM bound to loopback interfaces
 
 - [ ] **Audit Logging**
   - Enable detailed request logging
@@ -192,13 +149,13 @@ general_settings:
 - [ ] **Secrets Management**
   - Use systemd `LoadCredential=` for encrypted secrets
   - Never commit secrets to git
-  - Rotate keys regularly (quarterly)
+  - Rotate provider/API keys regularly (quarterly)
   - Document key rotation procedures
 
 - [ ] **Monitoring & Alerting**
   - Set up Prometheus alerts
   - Configure PagerDuty/Slack notifications
-  - Monitor failed authentication attempts
+  - Monitor provider quota errors
   - Track rate limit violations
 
 - [ ] **Compliance**
@@ -219,8 +176,8 @@ general_settings:
 ### Operation
 
 1. **Regular updates**: Keep LiteLLM and providers updated
-2. **Monitor logs**: Watch for authentication failures
-3. **Rotate keys**: Change master key quarterly
+2. **Monitor logs**: Watch for unexpected 4xx responses or spikes in rejected requests
+3. **Rotate keys**: Change provider API keys quarterly
 4. **Backup configs**: Version control all configuration changes
 5. **Incident response**: Have rollback plan ready
 
@@ -235,17 +192,12 @@ general_settings:
 
 ### Suspected Unauthorized Access
 
-1. **Immediate**:
+1. **Immediate containment**:
    ```bash
-   # Rotate master key immediately
-   LITELLM_MASTER_KEY="sk-$(openssl rand -hex 16)"
+   # Restrict exposure to localhost-only
+   sudo ufw deny 4000/tcp
 
-   # Update systemd service
-   systemctl --user edit litellm.service
-   # Update Environment= line
-
-   # Restart
-   systemctl --user daemon-reload
+   # Restart gateway to drop existing sessions
    systemctl --user restart litellm.service
    ```
 
@@ -254,14 +206,14 @@ general_settings:
    # Check logs for suspicious activity
    journalctl --user -u litellm.service --since "1 day ago" | grep "401\|403"
 
-   # Check failed authentication attempts
-   journalctl --user -u litellm.service | grep "authentication failed"
+   # Identify leaked provider keys / quota spikes
+   journalctl --user -u litellm.service | grep "invalid_api_key"
    ```
 
 3. **Remediate**:
-   - Update all client applications with new key
+   - Rotate provider keys in the secrets store and reload systemd units
    - Review and tighten CORS policies
-   - Consider additional access restrictions
+   - Add VPN or proxy authentication before re-exposing the service
 
 ### Rate Limit Violations
 
@@ -285,8 +237,8 @@ general_settings:
 
 ### Daily Checks
 ```bash
-# Failed authentications
-journalctl --user -u litellm.service --since "1 day ago" | grep "401" | wc -l
+# Upstream auth or quota errors
+journalctl --user -u litellm.service --since "1 day ago" | grep "401\|invalid_api_key" | wc -l
 
 # Rate limit violations
 journalctl --user -u litellm.service --since "1 day ago" | grep "rate_limit" | wc -l
@@ -306,7 +258,7 @@ git log --since="1 week ago" --oneline config/
 
 ### Monthly Checks
 - Review rate limit appropriateness
-- Rotate master key (if enabled)
+- Rotate provider API keys (where supported by upstream services)
 - Update security documentation
 - Audit log access patterns
 

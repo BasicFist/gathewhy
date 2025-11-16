@@ -469,7 +469,7 @@ ss -tap | grep litellm
 #   timeout: 60
 ```
 
-### Error: Auth/API Key Issues
+### Error: Provider API Key Issues
 
 **Symptoms:**
 ```
@@ -478,25 +478,25 @@ ss -tap | grep litellm
 ```
 
 **Causes:**
-- API key not configured
-- API key expired
-- Header missing or malformed
-- Key rotation issue
+- `OLLAMA_API_KEY` not exported for the service
+- Provider key expired or revoked
+- Direnv/systemd not loading the `.env` file
+- Key rotation performed but LiteLLM not restarted
 
 **Solution:**
 ```bash
-# 1. Check LiteLLM configuration
-grep -i "api_key\|auth" config/litellm-unified.yaml
+# 1. Check provider secrets
+echo ${OLLAMA_API_KEY:0:6}...
+systemctl --user show litellm.service | grep OLLAMA
 
-# 2. Verify auth header format
-# Correct: Authorization: Bearer sk-...
-curl -H "Authorization: Bearer sk-123" http://localhost:4000/v1/models
+# 2. Confirm LiteLLM config references the provider key
+rg "env_var: OLLAMA_API_KEY" -n config/providers.yaml
 
-# 3. Check if auth is required
-grep -B 2 -A 2 "require_auth\|api_key" config/litellm-unified.yaml
+# 3. Reload environment if direnv/systemd missed it
+direnv reload
+systemctl --user restart litellm.service
 
-# 4. Generate new key if needed
-# Depends on LiteLLM configuration
+# 4. Rotate the upstream key in your secrets store if compromised
 ```
 
 ---

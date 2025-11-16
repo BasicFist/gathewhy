@@ -110,7 +110,7 @@ python3 scripts/config-audit.py --focus security
 - ⚙️ Configuration errors (YAML, schema, provider)
 - 🌐 Provider connection errors (timeout, SSL, refused)
 - 🎯 Routing errors (not found, circular chains)
-- 🚀 LiteLLM gateway errors (startup, hanging, auth)
+- 🚀 LiteLLM gateway errors (startup, hanging, proxy misconfig)
 - 💾 Cache/Redis errors (connection, invalidation)
 - ⚡ Performance issues (latency, memory, CPU)
 - 🔄 Migration errors (compatibility, rollback)
@@ -360,7 +360,7 @@ echo "Reloading configuration..."
 
 **Recommendations**:
 1. Use HTTPS for remote connections
-2. Enable authentication for production
+2. Add reverse proxy authentication for production
 3. Implement access controls (future enhancement)
 4. Regular audit runs (weekly recommended)
 

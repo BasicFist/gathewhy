@@ -260,19 +260,9 @@ curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .l
 - [ ] Grafana accessible
 - [ ] Dashboard imported
 
-### Optional: WTH Terminal Dashboard
+### Optional: WTH Terminal Dashboard (Deprecated)
 
-Set up the sticker-based dashboard for operators who prefer WTH/Gum:
-
-```bash
-./scripts/install-wth-dashboard.sh
-export WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets
-wth run --config $HOME/.config/wth/wth.yaml
-```
-
-- [ ] WTH installed on jump hosts
-- [ ] Widgets copied via `install-wth-dashboard.sh`
-- [ ] Operators briefed on [docs/wth-dashboard.md](docs/wth-dashboard.md)
+The WTH/Gum dashboard is deprecated. Use the Hello Kitty Textual dashboard (`./scripts/ai-dashboard`) as the primary TUI. Keep WTH only if legacy operators rely on it.
 
 ## Post-Deployment Verification
 

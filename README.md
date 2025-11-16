@@ -144,7 +144,7 @@ ai-backend-unified/
 │   ├── validate-observability.sh  # Phase 2 validation
 │   ├── generate-litellm-config.py
 │   └── test-rollback.sh
-├── wth-widgets/                # WTH sticker-based dashboard widgets (beta)
+├── wth-widgets/                # WTH sticker-based dashboard widgets (deprecated; legacy only)
 ├── tests/                      # Automated test suite
 │   ├── unit/                   # Unit tests (30+ tests)
 │   ├── integration/            # Integration tests (25+ tests)

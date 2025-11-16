@@ -54,7 +54,7 @@ class HelloKittyBubbleTeaTUI(App):
     def __init__(self, settings: Settings = None):
         super().__init__()
         self.settings = settings or Settings()
-        self.theme = HelloKittyTheme()
+        self.hk_theme = HelloKittyTheme()
         self.shop_manager = ShopManager(self.settings)
         self.title = "🌸 Hello Kitty BubbleTea TUI 🌸"
         self.sub_title = "Your kawaii bubble tea shop management system!"
@@ -75,7 +75,7 @@ class HelloKittyBubbleTeaTUI(App):
         }
         
         if screen_name in screens:
-            screen = screens[screen_name](self.shop_manager, self.theme)
+            screen = screens[screen_name](self.shop_manager, self.hk_theme)
             await self.view.dock(screen, edge="top", size=1)
     
     # Screen switching actions

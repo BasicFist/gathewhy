@@ -214,26 +214,9 @@ export GF_SECURITY_ADMIN_PASSWORD=mypassword
 docker compose up -d
 ```
 
-### When to Use WTH Dashboard (Beta)
+### WTH Dashboard (Deprecated)
 
-**Primary Scenarios**:
-1. Responsive terminals (tmux/kitty) where sticker layouts shine
-2. Teams that prefer writing shell/Gum scripts instead of Python Textual widgets
-3. Operators who want a lightweight, modular dashboard installed alongside LiteLLM
-
-**Requirements**:
-- [WTH](https://github.com/mrusme/wth) installed locally
-- [Gum](https://github.com/charmbracelet/gum) for rich styling (optional)
-- Bash utilities: `curl`, `jq`, `systemctl`
-
-**Example Workflow**:
-```bash
-./scripts/install-wth-dashboard.sh
-export WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets
-wth run --config $HOME/.config/wth/wth.yaml
-```
-
-See [docs/wth-dashboard.md](wth-dashboard.md) for widget details and customization tips.
+The WTH/Gum sticker dashboard is deprecated. Use the Hello Kitty Textual dashboard (`./scripts/ai-dashboard`) as the primary TUI. Legacy directions remain in [docs/wth-dashboard.md](wth-dashboard.md) for operators who still rely on it.
 
 ## Architecture Differences
 

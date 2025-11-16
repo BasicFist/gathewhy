@@ -357,58 +357,22 @@ curl http://localhost:4000/v1/models | jq '.data[] | .id'
 ### Code Structure
 
 ```
-ptui_dashboard.py (720 lines)
-├── Configuration (39 lines)
-│   ├── validate_env_float()       # Input validation
-│   ├── DEFAULT_HTTP_TIMEOUT
-│   └── AUTO_REFRESH_SECONDS
-│
-├── Data Models (3 dataclasses)
-│   ├── Service                    # Service definition
-│   ├── ActionItem                 # Quick action
-│   └── MenuItem                   # Menu panel
-│
-├── Config Loading (67 lines)
-│   └── load_services_from_config() # YAML → Service list
-│
-├── Utilities (5 functions)
-│   ├── safe_addstr()              # Safe terminal write
-│   ├── fetch_json()               # HTTP helper
-│   ├── check_service()            # Health check
-│   ├── get_models()               # Fetch model list
-│   └── format_latency()           # Format timing
-│
-├── Data Collection (2 functions)
-│   ├── gather_state()             # Collect all metrics
-│   └── run_validation()           # Run validation script
-│
-├── Actions (3 functions)
-│   ├── action_refresh_state()     # Manual refresh
-│   ├── action_health_probe()      # Health check
-│   └── action_run_validation()    # Validation
-│
-├── Rendering (5 functions)
-│   ├── init_colors()              # Color pairs
-│   ├── render_overview()          # Services panel
-│   ├── render_models()            # Models panel
-│   ├── render_operations()        # Actions panel
-│   └── draw_footer()              # Footer
-│
-├── Event Handling (2 functions)
-│   ├── handle_menu_keys()         # Menu navigation
-│   └── handle_action_keys()       # Action navigation
-│
-├── Terminal Setup (4 functions)
-│   ├── _ensure_valid_terminfo()   # Fix TERMINFO
-│   ├── _has_terminfo()            # Check terminfo
-│   ├── _compile_kitty_terminfo()  # Compile kitty
-│   └── _ensure_term_capabilities() # Ensure terminal works
-│
-└── Main (3 functions)
-    ├── interactive_dashboard()    # Main loop (140 lines)
-    ├── _launch_dashboard()        # Wrapper
-    └── main()                     # Entry point
+scripts/
+├── ptui_dashboard.py              # 40-line entry point & re-export shim
+└── ptui_dashboard_core/           # Modular implementation (8 focused modules)
+    ├── __init__.py                # Public surface + re-exports
+    ├── config.py                  # Env validation + YAML service loader
+    ├── models.py                  # Service/Menu/Action dataclasses
+    ├── network.py                 # HTTP helpers + aiohttp detection
+    ├── monitor.py                 # Service/model polling + summaries
+    ├── actions.py                 # Quick actions + validation runner
+    ├── ui.py                      # Curses rendering + key handling
+    └── utils.py                   # Shared helpers (latency formatting, etc.)
 ```
+
+Each module has a single responsibility, making it straightforward to test units in isolation (e.g., `monitor.py` for state
+collection, `actions.py` for automation hooks).  The entry script simply re-exports these symbols so existing tests, CLI
+workflows, and tooling continue to behave exactly as before while benefiting from the refactor.
 
 ### Data Flow
 
@@ -468,7 +432,7 @@ ptui_dashboard.py (720 lines)
 |---------|---------------|--------------------------|--------|
 | **Dependencies** | stdlib only | textual, psutil, pynvml, requests | PTUI |
 | **Startup time** | <100ms | ~2s | PTUI |
-| **Size** | 720 LOC | 1,185 LOC | PTUI |
+| **Size** | 8 modules / ~900 LOC | 1,185 LOC | PTUI |
 | **Service monitoring** | ✅ Yes | ✅ Yes | Tie |
 | **GPU/VRAM monitoring** | ❌ No | ✅ Yes | Textual |
 | **CPU/Memory metrics** | ❌ No | ✅ Yes | Textual |
@@ -513,7 +477,7 @@ Restart dashboard - it auto-loads the new service!
 
 ### Adding a New Action
 
-Edit `scripts/ptui_dashboard.py`:
+Edit `scripts/ptui_dashboard_core/actions.py`:
 
 ```python
 def action_my_new_action(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
@@ -572,7 +536,7 @@ subprocess.run([script_path], ...)  # Safe
 2. **No service controls** - Can't start/stop/restart services
 3. **No state persistence** - Loses state on exit
 4. **Read-only** - Can only monitor, not manage
-5. **Single file** - All code in one 720-line file (harder to test)
+5. **Limited quick actions** - Only refresh/probe/validation hooks exist today
 6. **Basic UI** - No progress bars, no graphs
 
 ## Future Enhancements

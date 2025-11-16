@@ -151,9 +151,9 @@ echo ""
 
 log_info "Testing provider endpoints..."
 
-# Ollama (optional)
-test_endpoint "Ollama" "http://localhost:11434/api/tags" 5 true
-test_json_response "Ollama models list" "http://localhost:11434/api/tags" ".models" true
+# Ollama (optional) — ignore failures
+test_endpoint "Ollama" "http://localhost:11434/api/tags" 5 true || true
+test_json_response "Ollama models list" "http://localhost:11434/api/tags" ".models" true || true
 
 # llama.cpp Python
 if test_endpoint "llama.cpp Python" "http://localhost:8000/v1/models" 5 true; then

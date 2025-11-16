@@ -58,15 +58,19 @@ response = client.chat.completions.create(
 # Check all providers status
 ./scripts/validate-unified-backend.sh
 
-# Add new provider
+# Add or update provider routing
 # 1. Edit config/providers.yaml
-# 2. Update config/litellm-unified.yaml
-# 3. Test with validation script
+# 2. Edit config/model-mappings.yaml
+# 3. Regenerate config/litellm-unified.yaml
+python scripts/generate-litellm-config.py
+# 4. Test with validation script
 
 # View configuration
 cat config/providers.yaml
 cat config/model-mappings.yaml
 ```
+
+`config/litellm-unified.yaml` is generated via the script above and should not be hand-edited.
 
 ## 📚 Documentation
 

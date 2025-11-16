@@ -60,7 +60,7 @@ class HelloKittyBubbleTeaTUI(App):
         """Initialize the application when mounted."""
         await self.shop_manager.initialize()
         await self.switch_screen("dashboard")
-    
+
     async def switch_screen(self, screen_name: str) -> None:
         """Switch between different screens."""
         screens = {
@@ -73,7 +73,10 @@ class HelloKittyBubbleTeaTUI(App):
         
         if screen_name in screens:
             screen = screens[screen_name](self.shop_manager, self.hk_theme)
-            await self.view.dock(screen, edge="top", size=1)
+            if hasattr(self, "_current_screen") and self._current_screen is not None:
+                self._current_screen.remove()
+            self._current_screen = screen
+            await self.mount(screen)
     
     # Screen switching actions
     def action_show_dashboard(self) -> None:

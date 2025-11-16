@@ -1,48 +1,27 @@
 #!/usr/bin/env python3
-"""Interactive AI backend command center built with Textual.
+"""
+Hello Kitty Dashboard launcher.
 
-This is the entry point script for the AI Backend Dashboard. The dashboard
-provides a comprehensive terminal-based interface for monitoring and managing
-AI backend LLM provider services including Ollama, vLLM, and llama.cpp.
-
-Example:
-    Run the dashboard interactively:
-
-        ./ai-dashboard
-
-    Or with Python:
-
-        python3 scripts/ai-dashboard
-
-Key Bindings:
-    - 'r': Manual refresh
-    - 'q': Quit
-    - 'a': Toggle auto-refresh
-    - 'ctrl+l': Clear event log
-
-Environment Variables:
-    AI_DASH_HTTP_TIMEOUT: HTTP request timeout in seconds (0.5-30, default: 3.0)
-    AI_DASH_REFRESH_INTERVAL: Refresh interval in seconds (1-60, default: 5)
-    AI_DASH_LOG_HEIGHT: Event log height in lines (5-50, default: 12)
-
-For more information, see: docs/ai-dashboard.md
+This replaces the legacy Textual dashboard entrypoint and forwards directly to
+the Hello Kitty BubbleTea/Textual app under dashboards/hello_kitty.
 """
 
-import logging
-import sys
 from pathlib import Path
+import runpy
+import sys
 
-# Add parent directory to path to allow importing dashboard package
-sys.path.insert(0, str(Path(__file__).parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+HELLO_KITTY_MAIN = REPO_ROOT / "dashboards" / "hello_kitty" / "src" / "hello_kitty_dashboard" / "main.py"
 
-from dashboard.app import DashboardApp
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+def main() -> None:
+    if not HELLO_KITTY_MAIN.exists():
+        sys.stderr.write(f"Hello Kitty dashboard not found at {HELLO_KITTY_MAIN}\n")
+        sys.exit(1)
+    # Ensure package imports work when executed from anywhere
+    sys.path.insert(0, str(HELLO_KITTY_MAIN.parent.parent))
+    runpy.run_path(str(HELLO_KITTY_MAIN), run_name="__main__")
+
 
 if __name__ == "__main__":
-    app = DashboardApp()
-    app.run()
+    main()

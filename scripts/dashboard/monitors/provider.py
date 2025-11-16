@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -23,7 +24,6 @@ from .gpu import GPUMonitor
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class _ProcessCacheEntry:
     """Cached process reference and last CPU sample."""
@@ -31,6 +31,14 @@ class _ProcessCacheEntry:
     process: psutil.Process
     last_cpu_time: float
     last_timestamp: float
+
+_SYSTEMCTL_AVAILABLE = shutil.which("systemctl") is not None
+
+
+def _system_controls_available() -> bool:
+    """Return whether systemctl controls are available on this host."""
+
+    return _SYSTEMCTL_AVAILABLE
 
 # Security: Service name allowlist (prevent command injection)
 ALLOWED_SERVICES: dict[str, str] = {
@@ -55,6 +63,12 @@ SOFT_ERROR_BACKOFF_SECONDS = 15.0
 
 def _run_systemctl(args: list[str]) -> bool:
     """Run systemctl command with constrained environment."""
+    global _SYSTEMCTL_AVAILABLE
+
+    if not _SYSTEMCTL_AVAILABLE:
+        logger.warning("System controls unavailable: systemctl not detected on this platform")
+        return False
+
     env = {
         "PATH": "/usr/bin:/bin",
         # Preserve required session metadata for user services
@@ -80,6 +94,16 @@ def _run_systemctl(args: list[str]) -> bool:
             result.returncode,
             f": {stderr}" if stderr else "",
         )
+        return False
+    except FileNotFoundError:
+        logger.warning("systemctl binary not found; service controls disabled for this session")
+        _SYSTEMCTL_AVAILABLE = False
+        return False
+    except OSError as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "systemctl is unavailable on this platform: %s", exc
+        )
+        _SYSTEMCTL_AVAILABLE = False
         return False
     except subprocess.SubprocessError as exc:  # pragma: no cover - defensive
         logger.debug(f"systemctl {' '.join(args)} failed: {type(exc).__name__}")
@@ -154,6 +178,11 @@ class ProviderMonitor:
         self._last_samples: dict[str, dict[str, float | int]] = {}
         self._process_cache: dict[int, _ProcessCacheEntry] = {}
         self._cpu_count = max(psutil.cpu_count(logical=True) or 1, 1)
+        self.system_controls_available = _system_controls_available()
+        if not self.system_controls_available:
+            logger.warning(
+                "systemctl not detected; service control buttons will be disabled"
+            )
         # SECURITY: Validate all endpoints at init time
         self._validate_endpoints()
 
@@ -219,6 +248,11 @@ class ProviderMonitor:
             registry[key] = record
 
         return registry
+
+    def _sync_controls_capability(self) -> None:
+        """Refresh cached controls capability flag from module state."""
+
+        self.system_controls_available = _system_controls_available()
 
     def _validate_endpoints(self) -> None:
         """SECURITY: Validate all provider endpoints against allowlists.
@@ -417,6 +451,7 @@ class ProviderMonitor:
 
         metrics: list[ServiceMetrics] = []
         now_monotonic = time.monotonic()
+        self._sync_controls_capability()
         active_pids: set[int] = set()
 
         for key, cfg in self.providers.items():
@@ -431,10 +466,13 @@ class ProviderMonitor:
             status = self._last_status.get(key) or (
                 "active" if pid_hint else ("degraded" if required else "inactive")
             )
-            controls_enabled = bool(cfg.get("service"))
+            has_service = bool(cfg.get("service"))
+            controls_enabled = has_service and self.system_controls_available
 
-            if not controls_enabled:
+            if not has_service:
                 notes.append("Service controls unavailable (no systemd unit)")
+            elif not self.system_controls_available:
+                notes.append("Service controls unavailable on this platform")
 
             skip_probe = now_monotonic < cooldown_until
 
@@ -600,6 +638,11 @@ class ProviderMonitor:
         # SECURITY: Validate action
         if action not in ALLOWED_ACTIONS:
             logger.warning(f"Rejected invalid action: {action}")
+            return False
+
+        self._sync_controls_capability()
+        if not self.system_controls_available:
+            logger.warning("Service controls requested but systemctl is unavailable")
             return False
 
         if action == "restart":

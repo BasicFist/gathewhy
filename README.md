@@ -75,6 +75,7 @@ cat config/model-mappings.yaml
 - **[⚡ Configuration Quick Reference](CONFIGURATION-QUICK-REFERENCE.md)** - Fast lookup for common tasks
 - **[🔌 API Reference](docs/API-REFERENCE.md)** - Complete API documentation with examples
 - **[🏗️ Architecture Guide](docs/architecture.md)** - Detailed system architecture
+- **[🧑‍💻 Contributor Guidelines](AGENTS.md)** - Repository expectations for agents and maintainers
 - **[🚀 Quick Start](docs/quick-start.md)** - Fastest path to using the unified backend
 
 **By Task:**
@@ -349,46 +350,48 @@ Explicit port registry and automated conflict detection:
 
 ### Dashboard (Recommended)
 
-Launch the interactive TUI dashboard for real-time monitoring:
+Launch the Hello Kitty Textual dashboard for real-time monitoring:
 
 ```bash
-# Start the AI Dashboard
-python3 scripts/ai-dashboard
+# Launch the kawaii dashboard (auto-loads config/providers.yaml)
+./scripts/ai-dashboard
 
-# Or with custom settings
-AI_DASH_REFRESH_INTERVAL=3 python3 scripts/ai-dashboard
+# Point at a custom providers file
+./scripts/ai-dashboard --providers-config /path/to/providers.yaml
+
+# Disable the LiteLLM bridge and use demo data
+./scripts/ai-dashboard --disable-litellm-adapter
 ```
 
 **Dashboard Features**:
-- Real-time provider status (active/degraded/inactive)
-- CPU, memory, and GPU utilization
-- Service control (start/stop/restart/enable/disable)
-- Event logging and alerts
+- Real-time provider/model snapshots derived from LiteLLM registry
+- Synthetic order/inventory widgets that reflect provider health
+- Kawaii Textual UI with keyboard shortcuts (`d`, `m`, `o`, `i`, `c`, `q`)
+- Configurable refresh interval and themed layouts
 
 See **[AI Dashboard Documentation](docs/ai-dashboard.md)** for complete guide.
 
 ### Dashboard Options Comparison
 
-This project provides **three dashboard implementations** for different use cases:
+This project provides **two active dashboard implementations** for different use cases:
 
-| Feature | **AI Dashboard** (Textual) | **PTUI Dashboard** (curses) | **Grafana** (Web Monitoring) |
+| Feature | **Hello Kitty Dashboard** (Textual) | **PTUI Dashboard** (curses) | **Grafana** (Web Monitoring) |
 |---------|---------------------------|----------------------------|---------------------|
-| **Technology** | Textual (modern TUI framework) | Python curses (stdlib) | Grafana (web interface) |
+| **Technology** | Textual (Hello Kitty theme) | Python curses (stdlib) | Grafana (web interface) |
 | **Target Use Case** | **Primary monitoring tool** | **Remote SSH sessions** | **Web-based monitoring** |
-| **Installation** | `pip install textual` | No dependencies | Docker Compose |
-| **Terminal Support** | Modern terminals (Kitty, iTerm2, Alacritty) | Universal (fallback to basic) | Any web browser |
-| **Resource Usage** | Medium (10-15MB) | Minimal (<5MB) | High (Prometheus+Grafana) |
-| **Real-time Updates** | ✅ Auto-refresh (5s) | ✅ Auto-refresh (5s) | ✅ Real-time via WebSocket |
-| **Service Health** | ✅ Detailed status with latency | ✅ Status with latency | ✅ Professional dashboards |
-| **Model Discovery** | ✅ LiteLLM model catalog | ✅ LiteLLM model catalog | ✅ Model list |
-| **Quick Actions** | ✅ Refresh, health probe, validation | ✅ Refresh, health probe, validation | ⚠️ Limited actions |
-| **Service Control** | ✅ Start/stop/restart via systemctl | ❌ Read-only | ❌ Read-only |
-| **GPU Monitoring** | ✅ GPU utilization graphs | ❌ Not supported | ⚠️ Basic |
-| **Event Logging** | ✅ Real-time event stream | ❌ Not supported | ⚠️ Basic logs |
-| **Keyboard Navigation** | ✅ Full keyboard support | ✅ Arrows, Tab, Enter | ⚠️ Mouse/keyboard |
-| **Configuration** | Dynamic from `providers.yaml` | Dynamic from `providers.yaml` | Hardcoded services |
+| **Installation** | Ships with repo (`./scripts/ai-dashboard`) | No dependencies | Docker Compose |
+| **Terminal Support** | TrueColor / 256-color | Universal (fallback to basic) | Any web browser |
+| **Resource Usage** | Medium (Textual runtime) | Minimal (<5MB) | High (Prometheus+Grafana) |
+| **Real-time Updates** | ✅ Configurable refresh interval | ✅ Auto-refresh (5s) | ✅ Real-time via WebSocket |
+| **Service Health** | ✅ Provider cards derived from LiteLLM | ✅ Status with latency | ✅ Professional dashboards |
+| **Model Discovery** | ✅ LiteLLM model catalog (kawaii drinks) | ✅ LiteLLM model catalog | ✅ Model list |
+| **Quick Actions** | ✅ Screen hotkeys (`d/m/o/i/c`) | ✅ Refresh, health probe, validation | ⚠️ Limited actions |
+| **Service Control** | ⚠️ Observability only (no systemctl) | ❌ Read-only | ❌ Read-only |
+| **GPU Monitoring** | ⚠️ Planned widget | ❌ Not supported | ⚠️ Basic |
+| **Event Logging** | ✅ Dashboard log stream | ❌ Not supported | ⚠️ Basic logs |
+| **Configuration** | Providers YAML + CLI flags | Dynamic from `providers.yaml` | Hardcoded services |
 | **Authentication** | ❌ Not required | ❌ Not required | ❌ Not required |
-| **Remote Access** | SSH with terminal support | SSH (universal compatibility) | HTTP (network exposed) |
+| **Remote Access** | SSH with modern terminal | SSH (universal compatibility) | HTTP (network exposed) |
 | **Documentation** | `docs/ai-dashboard.md` | `docs/ptui-dashboard.md` | `web-ui/README.md` |
 
 > **⚠️ Web UI Removal Notice**
@@ -401,11 +404,10 @@ This project provides **three dashboard implementations** for different use case
 
 #### When to Use Each Dashboard
 
-**Use AI Dashboard (Textual)** when:
-- ✅ You need **full-featured monitoring** with service control
-- ✅ Running on **local machine** or SSH with modern terminal
-- ✅ You want **GPU utilization** monitoring
-- ✅ You need **event logging** and rich UI
+**Use Hello Kitty Dashboard (Textual)** when:
+- ✅ You need **full-screen monitoring** with playful theming
+- ✅ Running on **local machine** or SSH with TrueColor/256-color terminal
+- ✅ You want cute summaries sourced from LiteLLM providers
 - ✅ **Recommended for primary monitoring**
 
 **Use PTUI Dashboard (curses)** when:
@@ -423,41 +425,31 @@ This project provides **three dashboard implementations** for different use case
 #### Quick Start Commands
 
 ```bash
-# Textual Dashboard (Recommended for local monitoring)
-python3 scripts/ai-dashboard
+# Hello Kitty Dashboard (Recommended for local monitoring)
+./scripts/ai-dashboard
 
 # Curses Dashboard (Recommended for SSH)
 python3 scripts/ptui_dashboard.py
-
-# WTH Dashboard (Responsive stickers, beta)
-./scripts/install-wth-dashboard.sh
-export WTH_WIDGET_DIR=$HOME/.local/share/wth-widgets
-wth run --config $HOME/.config/wth/wth.yaml
-# After installation, use the auto-created alias (default: wth-lite)
-wth-lite
 
 # Grafana Dashboard (Web-based Monitoring)
 # cd monitoring && docker compose up -d
 # Access at http://localhost:3000 (admin/admin)
 ```
 
-#### WTH Dashboard (Beta)
-
-WTH offers a sticker-based layout that resizes automatically and loads widgets from shell scripts. See [docs/wth-dashboard.md](docs/wth-dashboard.md) for installation details.
-
 #### Configuration
 
 All dashboards support configuration via environment variables:
 
 ```bash
-# Textual Dashboard
-export AI_DASH_REFRESH_INTERVAL=3  # Refresh interval (seconds)
+# Hello Kitty Dashboard
+export HELLO_KITTY_PROVIDERS_CONFIG=$PWD/config/providers.yaml
+export HELLO_KITTY_REFRESH_INTERVAL=4
 
 # PTUI Dashboard
 export PTUI_HTTP_TIMEOUT=10        # HTTP request timeout (seconds)
 export PTUI_REFRESH_SECONDS=5      # Auto-refresh interval (seconds)
 
-# WTH Dashboard (optional)
+# WTH Dashboard (deprecated – keep for legacy users)
 export LITELLM_HOST="http://127.0.0.1:4000"
 export LITELLM_LOG_SOURCE="journalctl --user -u litellm.service -n 40 --no-pager"
 export WTH_WIDGET_DIR="$HOME/.local/share/wth-widgets"

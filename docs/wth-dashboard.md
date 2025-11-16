@@ -1,4 +1,6 @@
-# WTH Dashboard (Beta)
+# WTH Dashboard (Beta) — Deprecated
+
+> **Status:** Deprecated. The Hello Kitty Textual dashboard (launched via `./scripts/ai-dashboard`) is now the primary TUI. Keep this document for historical reference only; new work should target the Hello Kitty dashboard.
 
 The WTH dashboard is a next-generation terminal UI that uses sticker-based layouts and plugin modules to provide a responsive command center for LiteLLM. This document explains how to install, customize, and operate the bundled widgets found under `wth-widgets/`.
 

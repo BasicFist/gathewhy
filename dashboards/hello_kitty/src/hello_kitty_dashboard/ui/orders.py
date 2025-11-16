@@ -99,8 +99,8 @@ class NewOrderForm(Static):
             # Customer selection
             yield Label("Select Customer:", classes="form-label")
             customer_options = [(c.name, c.id) for c in self.shop_manager.get_all_customers()]
-        # Fallback entry when no customer list is available
-        customer_options.append(("Guest (No Account)", "guest"))
+            # Fallback entry when no customer list is available
+            customer_options.append(("Guest (No Account)", "guest"))
             yield Select(customer_options, id="customer-select", classes="form-select")
             
             # Drink selection

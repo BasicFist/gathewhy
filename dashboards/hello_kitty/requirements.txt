@@ -1,0 +1,39 @@
+# Hello Kitty BubbleTea TUI - Core Requirements
+# Core dependencies for the kawaii bubble tea management system
+
+# Textual TUI Framework
+textual>=0.40.0
+textual-dev>=1.1.0
+
+# Data handling and configuration
+pyyaml>=6.0
+pydantic>=2.0.0
+dataclasses-json>=0.6.0
+
+# Async support and utilities
+asyncio
+typing-extensions>=4.0.0
+
+# Date and time handling
+python-dateutil>=2.8.0
+
+# Optional: For enhanced terminal features
+rich>=13.0.0  # Rich formatting and styling
+click>=8.0.0  # CLI utilities
+tqdm>=4.64.0  # Progress bars
+
+# Optional: For data persistence
+sqlalchemy>=2.0.0
+alembic>=1.10.0
+
+# Optional: For API integrations
+requests>=2.31.0
+httpx>=0.24.0
+
+# Optional: For notifications
+plyer>=2.1.0  # Cross-platform notifications
+
+# Development dependencies (moved to requirements-dev.txt)
+# Testing (pytest, pytest-asyncio, pytest-cov)
+# Linting (flake8, black, mypy, isort)
+# Documentation (sphinx, sphinx-rtd-theme)

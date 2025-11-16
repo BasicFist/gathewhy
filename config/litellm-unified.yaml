@@ -155,6 +155,8 @@ litellm_settings:
     host: 127.0.0.1
     port: 6379
     ttl: 3600
+    namespace: litellm
+    max_connections: 100
   set_verbose: true
   json_logs: true
 router_settings:

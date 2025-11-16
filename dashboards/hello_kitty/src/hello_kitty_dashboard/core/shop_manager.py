@@ -381,8 +381,12 @@ class ShopManager:
             provider_icon = self._pick_provider_icon(provider_cfg.get("type"))
 
             for model in models:
+                if isinstance(model, str):
+                    model_cfg = {"name": model}
+                else:
+                    model_cfg = model or {}
                 drink = self._create_drink_from_model(
-                    provider_key, provider_cfg, model, color_token, provider_icon
+                    provider_key, provider_cfg, model_cfg, color_token, provider_icon
                 )
                 self.drinks[drink.id] = drink
                 self.inventory.setdefault(drink.id, random.randint(40, 180))

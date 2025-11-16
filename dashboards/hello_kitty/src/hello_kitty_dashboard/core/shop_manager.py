@@ -448,6 +448,16 @@ class ShopManager:
         self, provider_key: str, provider_cfg: Dict[str, Any], models: List[Dict[str, Any]]
     ) -> None:
         """Generate synthetic orders to power the dashboard metrics."""
+
+        # Normalize model entries (strings -> dicts)
+        normalized: list[Dict[str, Any]] = []
+        for model in models or []:
+            if isinstance(model, str):
+                normalized.append({"name": model})
+            else:
+                normalized.append(model or {})
+        models = normalized
+
         if not models:
             return
 

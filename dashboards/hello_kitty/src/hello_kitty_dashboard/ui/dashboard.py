@@ -182,24 +182,21 @@ class DashboardScreen(Static):
         """Create the popular drinks widget."""
         summary = self.shop_manager.get_daily_sales_summary()
         popular_drinks = summary["popular_drinks"]
-        
-        with Container(classes="popular-drinks-widget"):
-            yield Label("🔥 Popular Drinks Today", classes="widget-title")
-            
-            if not popular_drinks:
-                yield Label("No orders yet today ✨", classes="no-orders")
-                return
-            
+
+        children: list[Static] = [Label("🔥 Popular Drinks Today", classes="widget-title")]
+
+        if not popular_drinks:
+            children.append(Label("No orders yet today ✨", classes="no-orders"))
+        else:
             for drink_name, count in popular_drinks:
-                # Get the drink icon
-                drink_icon = "🍵"
-                for drink in self.shop_manager.drinks.values():
-                    if drink.name == drink_name:
-                        drink_icon = drink.icon
-                        break
-                
+                drink_icon = next(
+                    (drink.icon for drink in self.shop_manager.drinks.values() if drink.name == drink_name),
+                    "🍵",
+                )
                 drink_info = f"{drink_icon} {drink_name}: {count} sold"
-                yield Label(drink_info, classes="popular-drink-item")
+                children.append(Label(drink_info, classes="popular-drink-item"))
+
+        return Container(*children, classes="popular-drinks-widget")
 
 
 # CSS styling for kawaii Hello Kitty theme

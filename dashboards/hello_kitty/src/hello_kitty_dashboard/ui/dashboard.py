@@ -44,6 +44,18 @@ class OrderStatusWidget(Static):
         super().__init__()
         self.shop_manager = shop_manager
         self.theme = theme
+
+    @staticmethod
+    def _get_status_emoji(status: str) -> str:
+        """Map order status to a cute emoji."""
+        mapping = {
+            "in_progress": "🛠️",
+            "pending": "⏳",
+            "completed": "💖",
+            "cancelled": "❌",
+            "ready": "✅",
+        }
+        return mapping.get(status, "❓")
     
     def compose(self) -> ComposeResult:
         """Compose the order status widget."""

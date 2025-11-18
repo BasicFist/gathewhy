@@ -265,20 +265,3 @@ metadata:
       best_for: Massive models without local GPU
       performance: Data-center grade
       resource_usage: Remote (billable)
-
-# ============================================================================
-# HEALTH CHECK CONFIGURATION
-# ============================================================================
-
-health_checks:
-  enabled: true
-  interval_seconds: 60
-  timeout_seconds: 5
-  retry_attempts: 3
-
-  endpoints:
-    ollama: http://127.0.0.1:11434/api/tags
-    llama_cpp_python: http://127.0.0.1:8000/v1/models
-    llama_cpp_native: http://127.0.0.1:8080/v1/models
-    vllm-qwen: http://127.0.0.1:8001/v1/models
-    vllm-dolphin: http://127.0.0.1:8002/v1/models

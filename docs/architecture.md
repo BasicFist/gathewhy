@@ -21,7 +21,7 @@ The AI Unified Backend provides a single API endpoint that routes requests to mu
 └──────────────────────────┼──────────────────────────────────┘
                            │
                            │ OpenAI-Compatible API
-                           │ http://localhost:4000
+                           │ https://localhost:4000
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
 │              Gateway Layer (LiteLLM)                        │
@@ -89,6 +89,7 @@ The AI Unified Backend provides a single API endpoint that routes requests to mu
 - Response caching (Redis)
 - Health monitoring
 - Metrics collection
+- Secure provider connections (HTTPS)
 
 **Configuration**: This project's `config/litellm-unified.yaml`
 
@@ -265,14 +266,17 @@ Recovery: Gradual traffic increase
 ## Security Considerations
 
 ### Network Access
-- **Internal Only**: All providers listen on localhost
-- **No External Exposure**: LiteLLM on 0.0.0.0 for LAB network only
-- **Future**: Add reverse proxy + authentication for external access
+- **Internal Only**: All providers listen on localhost.
+- **No External Exposure**: LiteLLM on 0.0.0.0 for LAB network only.
+- **Future**: Add reverse proxy + authentication for external access.
 
 ### API Keys
-- **Current**: No authentication (local development)
-- **Production**: Set `master_key` in litellm.yaml
-- **Cloud Providers**: Store API keys in environment variables
+- **Current**: No authentication by default (local development). Master Key authentication is available and recommended for production.
+- **Production**: Set `master_key` in litellm.yaml.
+- **Cloud Providers**: Store API keys in environment variables.
+
+### Provider Connections
+- **Secure by Default**: All connections to backend providers are secured using HTTPS.
 
 ## Monitoring & Observability
 

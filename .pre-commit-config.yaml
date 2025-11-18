@@ -74,7 +74,7 @@ repos:
     hooks:
       - id: validate-config-schema
         name: Validate configuration schema
-        entry: python3 scripts/validate-config-schema.py
+        entry: runtime/.venv/bin/python3 scripts/validate-config-schema.py
         language: system
         files: ^config/.*\.(yaml|yml)$
         pass_filenames: false

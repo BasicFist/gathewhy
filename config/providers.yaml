@@ -8,7 +8,7 @@ providers:
 
   ollama:
     type: ollama
-    base_url: http://127.0.0.1:11434
+    base_url: https://127.0.0.1:11434
     status: active
     description: Local Ollama server for general-purpose models
     features:
@@ -40,7 +40,7 @@ providers:
 
   llama_cpp_python:
     type: llama_cpp
-    base_url: http://127.0.0.1:8000
+    base_url: https://127.0.0.1:8000
     status: active
     description: llama.cpp Python bindings server with CUDA support
     features:
@@ -67,7 +67,7 @@ providers:
 
   llama_cpp_native:
     type: llama_cpp
-    base_url: http://127.0.0.1:8080
+    base_url: https://127.0.0.1:8080
     status: active
     description: llama.cpp native C++ server (maximum performance)
     features:
@@ -89,7 +89,7 @@ providers:
 
   vllm-qwen:
     type: vllm
-    base_url: http://127.0.0.1:8001
+    base_url: https://127.0.0.1:8001
     status: active
     description: vLLM high-throughput inference with AWQ quantization (Qwen model)
     features:
@@ -118,7 +118,7 @@ providers:
 
   vllm-dolphin:
     type: vllm
-    base_url: http://127.0.0.1:8002
+    base_url: https://127.0.0.1:8002
     status: disabled  # vLLM runs single instance - use vllm-model-switch.sh to enable
     description: vLLM high-throughput inference with AWQ quantization (Dolphin model)
     features:
@@ -276,8 +276,8 @@ health_checks:
   retry_attempts: 3
 
   endpoints:
-    ollama: http://127.0.0.1:11434/api/tags
-    llama_cpp_python: http://127.0.0.1:8000/v1/models
-    llama_cpp_native: http://127.0.0.1:8080/v1/models
-    vllm-qwen: http://127.0.0.1:8001/v1/models
-    vllm-dolphin: http://127.0.0.1:8002/v1/models
+    ollama: https://127.0.0.1:11434/api/tags
+    llama_cpp_python: https://127.0.0.1:8000/v1/models
+    llama_cpp_native: https://127.0.0.1:8080/v1/models
+    vllm-qwen: https://127.0.0.1:8001/v1/models
+    vllm-dolphin: https://127.0.0.1:8002/v1/models

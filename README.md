@@ -40,7 +40,7 @@ The AI Unified Backend provides a single, consistent API endpoint that routes to
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:4000",  # LiteLLM unified gateway
+    base_url="https://localhost:4000",  # LiteLLM unified gateway
     api_key="not-needed"  # pragma: allowlist secret
 )
 
@@ -165,7 +165,7 @@ This project references:
 ## Key Concepts
 
 ### Single Entry Point
-All LAB projects consume AI services via **one endpoint**: `http://localhost:4000`
+All LAB projects consume AI services via **one endpoint**: `https://localhost:4000`
 
 ### Provider Abstraction
 Users request models by name, LiteLLM routes to appropriate provider automatically.
@@ -175,6 +175,9 @@ Add new providers by updating configuration files, no code changes required.
 
 ### OpenAI Compatibility
 Standard OpenAI API format works across all providers.
+
+### Secure by Default
+All connections between the unified backend and the LLM providers are secured using HTTPS.
 
 ## Documentation
 
@@ -466,12 +469,12 @@ See dashboard-specific documentation for advanced configuration options.
 
 ```bash
 # Check all providers
-curl http://localhost:4000/health
+curl https://localhost:4000/health
 
 # Check specific provider
-curl http://localhost:11434/api/tags  # Ollama
-curl http://localhost:8000/v1/models  # llama.cpp
-curl http://localhost:8001/v1/models  # vLLM
+curl https://localhost:11434/api/tags  # Ollama
+curl https://localhost:8000/v1/models  # llama.cpp
+curl https://localhost:8001/v1/models  # vLLM
 
 # Run comprehensive validation
 ./scripts/validate-unified-backend.sh

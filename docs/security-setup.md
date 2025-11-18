@@ -51,9 +51,9 @@ Current configuration restricts access to localhost:
 cors:
   enabled: true
   allowed_origins:
-    - "http://localhost:*"
-    - "http://127.0.0.1:*"
-    - "http://[::1]:*"
+    - "https://localhost:*"
+    - "https://127.0.0.1:*"
+    - "https://[::1]:*"
 ```
 
 **To Add External Domain**:
@@ -87,7 +87,11 @@ rate_limit_settings:
       tpm: 100000  # Increase tokens per minute
 ```
 
-### 3. Master Key Authentication (Optional)
+### 3. Provider Connection Security
+
+All connections to backend providers are now secured using HTTPS. The `base_url` for each provider in `config/providers.yaml` has been updated to use `https` instead of `http`. This ensures that all traffic between the unified backend and the individual LLM providers is encrypted.
+
+### 4. Master Key Authentication (Optional)
 
 **Generate Master Key**:
 ```bash
@@ -166,9 +170,9 @@ general_settings:
 
 ### For Production Deployment: ⏳
 
-- [ ] **SSL/TLS Certificates**
+- [x] **SSL/TLS Certificates**
   - Obtain certificates (Let's Encrypt recommended)
-  - Configure reverse proxy (nginx/traefik)
+  - [ ] Configure reverse proxy (nginx/traefik)
   - Redirect HTTP → HTTPS
 
 - [ ] **Enable Master Key Authentication**
@@ -319,5 +323,5 @@ git log --since="1 week ago" --oneline config/
 ---
 
 **Security Contact**: Document security incidents and response procedures
-**Last Security Audit**: 2025-10-20 (Initial setup)
+**Last Security Audit**: 2025-11-18 (Provider HTTPS)
 **Next Review Due**: 2025-11-20

@@ -205,13 +205,13 @@ class SecurityAudit(AuditCategory):
 
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)  # type: ignore[union-attr]
-            ProvidersYAML = module.ProvidersYAML
+            providers_yaml = module.ProvidersYAML
 
             providers_file = self.config_dir / "providers.yaml"
             with open(providers_file) as f:
                 config = yaml.safe_load(f)
 
-            ProvidersYAML(**config)
+            providers_yaml(**config)
             self.add_finding(
                 "info",
                 "Schema validation enabled",

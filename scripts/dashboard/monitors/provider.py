@@ -16,7 +16,7 @@ from typing import Literal
 from urllib.parse import urljoin, urlparse
 
 import psutil
-import requests  # type: ignore[import-untyped]
+import requests
 
 from ..config import load_providers_config
 from ..models import GPUOverview, ServiceMetrics
@@ -563,7 +563,9 @@ class ProviderMonitor:
             self._last_status[key] = status
 
         # Drop cached processes that disappeared
-        stale_pids = [cached_pid for cached_pid in self._process_cache if cached_pid not in active_pids]
+        stale_pids = [
+            cached_pid for cached_pid in self._process_cache if cached_pid not in active_pids
+        ]
         for stale_pid in stale_pids:
             self._process_cache.pop(stale_pid, None)
 

@@ -4,6 +4,7 @@
 # Configuration validation
 pydantic>=2.0.0
 pyyaml>=6.0
+types-pyyaml>=6.0.1
 
 # Structured logging
 loguru>=0.7.0
@@ -25,10 +26,12 @@ pytest>=7.4.0
 pytest-cov>=4.1.0  # Coverage reporting
 pytest-xdist>=3.3.0  # Parallel test execution
 requests>=2.31.0  # HTTP requests for integration tests
+types-requests>=2.31.0.20240106
 pytest-playwright>=0.4.0  # Browser automation for monitoring tests
 playwright>=1.40.0  # Playwright browser automation
 
 # Dashboards and monitoring UIs
 textual>=0.58.0
 psutil>=5.9.0
+types-psutil>=5.9.5.20240106
 nvidia-ml-py3>=7.352.0  # Optional GPU metrics (pynvml)

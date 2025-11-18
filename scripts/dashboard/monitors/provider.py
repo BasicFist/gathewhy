@@ -18,6 +18,8 @@ from urllib.parse import urljoin, urlparse
 import psutil
 import requests
 
+from scripts.common_utils import _resolve_env_var
+
 from ..config import load_providers_config
 from ..models import GPUOverview, ServiceMetrics
 from .gpu import GPUMonitor
@@ -197,8 +199,8 @@ class ProviderMonitor:
                 registry.pop(key, None)
                 continue
 
-            base_url = str(meta.get("base_url", "")).strip()
-            health_endpoint = str(meta.get("health_endpoint", "")).strip()
+            base_url = _resolve_env_var(str(meta.get("base_url", ""))).strip()
+            health_endpoint = _resolve_env_var(str(meta.get("health_endpoint", ""))).strip()
 
             endpoint = ""
             if base_url and health_endpoint:

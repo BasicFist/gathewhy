@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
+from common_utils import _resolve_env_var
 
 # ============================================================================
 # PROVIDER CONFIGURATION MODELS
@@ -53,13 +54,14 @@ class ProviderConfig(BaseModel):
     @field_validator("base_url")
     @classmethod
     def validate_url_format(cls, v):
-        """Validate URL format without requiring https"""
-        if not v.startswith(("http://", "https://")):
+        """Validate URL format, resolving env vars first."""
+        resolved_url = _resolve_env_var(v)
+        if not resolved_url.startswith(("http://", "https://")):
             raise ValueError(f"URL must start with http:// or https://, got: {v}")
         # Basic validation of format (allow placeholders for templates)
         import re
 
-        if not re.match(r"^https?://[a-zA-Z0-9._-]+(:[A-Z0-9_]+|:[0-9]+)?(/.*)?$", v):
+        if not re.match(r"^https?://[a-zA-Z0-9._-]+(:[A-Z0-9_]+|:[0-9]+)?(/.*)?$", resolved_url):
             raise ValueError(f"Invalid URL format: {v}")
         return v
 

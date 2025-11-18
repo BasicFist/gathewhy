@@ -15,6 +15,7 @@ Examples:
     >>> log_success("Validation completed")
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -238,6 +239,18 @@ def validate_yaml_file(filepath: Path) -> bool:
             error_type=type(e).__name__,
         )
         return False
+
+
+def _resolve_env_var(value: str) -> str:
+    """Resolve environment variable placeholders in the format ${ENV_VAR:-default_value}."""
+    if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+        # Extract ENV_VAR and default_value
+        var_and_default = value[2:-1]
+        if ":-" in var_and_default:
+            var_name, default_value = var_and_default.split(":-", 1)
+            return os.getenv(var_name, default_value)
+        return os.getenv(var_and_default, "")
+    return value
 
 
 # Config file constants

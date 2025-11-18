@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from common_utils import _resolve_env_var
 from loguru import logger
 
 
@@ -247,7 +248,8 @@ class ConfigGenerator:
                 continue
 
             provider_type = provider_config.get("type")
-            base_url = provider_config.get("base_url")
+            raw_base_url = provider_config.get("base_url")
+            base_url = _resolve_env_var(raw_base_url)
             models = provider_config.get("models", [])
 
             logger.debug(

@@ -12,9 +12,11 @@ import asyncio
 import curses
 import json
 import os
+import re  # Moved to top
 import subprocess
 import sys
 import time
+import traceback  # Moved to top
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,6 +32,14 @@ try:
     ASYNC_AVAILABLE = True
 except ImportError:
     ASYNC_AVAILABLE = False
+
+# Try to import pynvml for GPU stats
+try:
+    import pynvml
+
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
 
 
 def validate_env_float(name: str, default: str, min_val: float, max_val: float) -> float:
@@ -88,6 +98,23 @@ def safe_addstr(
         stdscr.addnstr(y, x, text.ljust(width), width, attr)
 
 
+def _resolve_env_var(value: str) -> str:
+    """Resolve shell-style env vars like ${VAR:-default}."""
+    if not isinstance(value, str):
+        return value
+
+    # Match ${VAR:-default} or ${VAR}
+    pattern = r"\$\{([A-Z0-9_]+)(?::-(.*?))?\}"
+    match = re.match(pattern, value)
+
+    if match:
+        var_name = match.group(1)
+        default_val = match.group(2) or ""
+        return os.environ.get(var_name, default_val)
+
+    return value
+
+
 def load_services_from_config() -> list[Service]:
     """Load services from config/providers.yaml with fallback to defaults."""
     config_path = Path(__file__).parent.parent / "config" / "providers.yaml"
@@ -133,7 +160,9 @@ def load_services_from_config() -> list[Service]:
             if provider_data.get("status") != "active":
                 continue
 
-            base_url = provider_data.get("base_url", "")
+            raw_url = provider_data.get("base_url", "")
+            base_url = _resolve_env_var(raw_url)
+
             if key in provider_map:
                 display_name, endpoint, required = provider_map[key]
             else:
@@ -277,10 +306,41 @@ def run_validation() -> str:
         return f"Validation error: {exc}"
 
 
+def get_gpu_stats() -> dict[str, Any] | None:
+    """Fetch GPU statistics using pynvml."""
+    if not GPU_AVAILABLE:
+        return None
+
+    try:
+        pynvml.nvmlInit()
+        # Just get the first GPU for now
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        name = pynvml.nvmlDeviceGetName(handle)
+        # pynvml returns bytes in older versions, str in newer. decode if needed
+        if isinstance(name, bytes):
+            name = name.decode("utf-8")
+
+        mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+
+        return {
+            "name": name,
+            "memory_used": mem_info.used / 1024**2,  # MB
+            "memory_total": mem_info.total / 1024**2,  # MB
+            "gpu_util": utilization.gpu,
+            "mem_util": utilization.memory,
+        }
+    except Exception:
+        return None
+    # We don't shutdown nvml here to keep it efficient for repeated polling
+
+
 def gather_state(timeout: float) -> dict[str, Any]:
     """Gather all state synchronously (fallback when async not available)."""
     services_status = [check_service(service, timeout) for service in SERVICES]
     models_info = get_models(timeout)
+    gpu_stats = get_gpu_stats()
+
     healthy_required = sum(
         1 for entry in services_status if entry["service"].required and entry["status"]
     )
@@ -293,6 +353,7 @@ def gather_state(timeout: float) -> dict[str, Any]:
     return {
         "services": services_status,
         "models": models_info,
+        "gpu": gpu_stats,
         "summary": {
             "required": (healthy_required, total_required),
             "optional": (healthy_optional, total_optional),
@@ -317,6 +378,8 @@ async def gather_state_async(timeout: float) -> dict[str, Any]:
             asyncio.gather(*service_tasks), models_task
         )
 
+    gpu_stats = get_gpu_stats()
+
     # Calculate summary statistics
     healthy_required = sum(
         1 for entry in services_status if entry["service"].required and entry["status"]
@@ -330,6 +393,7 @@ async def gather_state_async(timeout: float) -> dict[str, Any]:
     return {
         "services": services_status,
         "models": models_info,
+        "gpu": gpu_stats,
         "summary": {
             "required": (healthy_required, total_required),
             "optional": (healthy_optional, total_optional),
@@ -383,17 +447,43 @@ def action_run_validation(state: dict[str, Any]) -> tuple[str, dict[str, Any] | 
     return message, None
 
 
+def call_service_control(alias: str, action: str) -> tuple[bool, str]:
+    """Call the local service control API."""
+    port = os.environ.get("SERVICE_CONTROL_PORT", "8070")
+    url = f"http://localhost:{port}/service/{alias}/{action}"
+    try:
+        req = Request(url, method="POST")
+        with urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return data.get("success", False), data.get("message", "Unknown response")
+    except Exception as e:
+        return False, str(e)
+
+
+def action_start_vllm(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    success, msg = call_service_control("vllm", "start")
+    return f"Start vLLM: {'OK' if success else 'Failed'} ({msg})", None
+
+
+def action_restart_litellm(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    success, msg = call_service_control("litellm", "restart")
+    return f"Restart LiteLLM: {'OK' if success else 'Failed'} ({msg})", None
+
+
 ACTION_ITEMS: list[ActionItem] = [
     ActionItem("Refresh State", "Gather latest service and model data.", action_refresh_state),
     ActionItem(
         "Health Probe", "Check required services and report any failures.", action_health_probe
     ),
     ActionItem("Run Validation", "Execute validate-unified-backend.sh.", action_run_validation),
+    ActionItem("Start vLLM", "Attempt to start the vLLM service via systemctl.", action_start_vllm),
+    ActionItem("Restart LiteLLM", "Restart the main gateway service.", action_restart_litellm),
 ]
 
 
 def init_colors() -> None:
     curses.start_color()
+    curses.use_default_colors()
     curses.init_pair(1, curses.COLOR_GREEN, -1)  # success
     curses.init_pair(2, curses.COLOR_RED, -1)  # error
     curses.init_pair(3, curses.COLOR_YELLOW, -1)  # warning
@@ -411,6 +501,39 @@ def render_overview(
     selection: int | None = None,
     focused: bool = False,
 ) -> None:
+    y = top
+
+    # --- Hardware Section ---
+    safe_addstr(stdscr, y, left, "Hardware Resources", width, curses.color_pair(4) | curses.A_BOLD)
+    y += 2
+
+    gpu_stats = state.get("gpu")
+    if gpu_stats:
+        name = gpu_stats["name"]
+        mem_used = gpu_stats["memory_used"]
+        mem_total = gpu_stats["memory_total"]
+        gpu_util = gpu_stats["gpu_util"]
+
+        # Color logic for utilization
+        util_attr = curses.color_pair(1)
+        if gpu_util > 80:
+            util_attr = curses.color_pair(2)
+        elif gpu_util > 50:
+            util_attr = curses.color_pair(3)
+
+        safe_addstr(stdscr, y, left, f"GPU: {name}", width, curses.A_BOLD)
+        y += 1
+        safe_addstr(stdscr, y, left, f"VRAM: {mem_used:.0f}MB / {mem_total:.0f}MB", width)
+        y += 1
+        safe_addstr(stdscr, y, left, f"Load: {gpu_util}%", width, util_attr)
+    else:
+        safe_addstr(stdscr, y, left, "GPU telemetry unavailable", width, curses.A_DIM)
+
+    y += 2
+    if y - top >= height:
+        return
+
+    # --- Service Health Section ---
     summary = state.get("summary", {})
     required_ok, required_total = summary.get("required", (0, 0))
     optional_ok, optional_total = summary.get("optional", (0, 0))
@@ -418,9 +541,16 @@ def render_overview(
     required_attr = curses.color_pair(1) if required_ok == required_total else curses.color_pair(2)
     optional_attr = curses.color_pair(1) if optional_ok == optional_total else curses.color_pair(3)
 
-    y = top
     safe_addstr(stdscr, y, left, "Service Health", width, curses.color_pair(4) | curses.A_BOLD)
-    y += 2
+    y += 1
+    if focused:
+        safe_addstr(
+            stdscr, y, left, "Controls: [s]tart [k]ill [r]estart", width, curses.color_pair(5)
+        )
+    y += 1
+    if y - top >= height:
+        return
+
     safe_addstr(
         stdscr,
         y,
@@ -440,7 +570,8 @@ def render_overview(
     )
     y += 2
 
-    for entry in state.get("services", []):
+    services = state.get("services", [])
+    for idx, entry in enumerate(services):
         if y - top >= height:
             break
         service: Service = entry["service"]
@@ -448,6 +579,10 @@ def render_overview(
         latency_text = format_latency(entry["latency"])
         error = entry["error"]
 
+        is_selected = idx == selection
+        indicator = "➤" if is_selected else " "
+
+        row_attr = 0
         if status_ok:
             status_text = "ONLINE "
             row_attr = curses.color_pair(1) | curses.A_BOLD
@@ -459,7 +594,10 @@ def render_overview(
                 row_attr = curses.color_pair(3) | curses.A_BOLD
                 status_text = "MISSING "
 
-        safe_addstr(stdscr, y, left, f"{status_text} {service.name}", width, row_attr)
+        if is_selected and focused:
+            row_attr |= curses.A_REVERSE
+
+        safe_addstr(stdscr, y, left, f"{indicator} {status_text} {service.name}", width, row_attr)
         y += 1
         if y - top >= height:
             break
@@ -643,6 +781,62 @@ def handle_action_keys(
     return action_selection, "content", None
 
 
+SERVICE_ALIAS_MAP = {
+    "LiteLLM Gateway": "litellm",
+    "Ollama": "ollama",
+    "vLLM": "vllm",
+    "vLLM high-throughput inference with AWQ quantization (Qwen model)": "vllm",
+    "llama.cpp (Python)": "llamacpp_python",
+    "llama.cpp (Native)": "llamacpp_native",
+}
+
+
+def handle_service_keys(
+    key: int, selection: int, services: list[dict[str, Any]]
+) -> tuple[int, str, str | None]:
+    """Handle keys for the Service Overview panel."""
+    if not services:
+        return selection, "menu", None
+
+    if key == curses.KEY_UP:
+        return (selection - 1) % len(services), "content", None
+    if key == curses.KEY_DOWN:
+        return (selection + 1) % len(services), "content", None
+    if key in (curses.KEY_LEFT, curses.KEY_BTAB):
+        return selection, "menu", "Menu focused."
+    if key in (9,):  # Tab
+        return selection, "menu", "Menu focused."
+
+    # Actions
+    action = None
+    if key == ord("s"):
+        action = "start"
+    if key == ord("k") or key == ord("x"):
+        action = "stop"
+    if key == ord("r"):
+        action = "restart"
+
+    if action:
+        entry = services[selection]
+        service_name = entry["service"].name
+        # Try exact match or partial match
+        alias = SERVICE_ALIAS_MAP.get(service_name)
+        if not alias:
+            # Fallback: try to find partial match
+            for k, v in SERVICE_ALIAS_MAP.items():
+                if service_name.startswith(k) or k in service_name:
+                    alias = v
+                    break
+
+        if alias:
+            success, msg = call_service_control(alias, action)
+            return selection, "content", f"{action.title()} {alias}: {msg}"
+
+        return selection, "content", f"No control alias for '{service_name}'"
+
+    return selection, "content", None
+
+
 def interactive_dashboard(stdscr: Any) -> None:
     curses.curs_set(0)
     stdscr.nodelay(True)
@@ -654,6 +848,7 @@ def interactive_dashboard(stdscr: Any) -> None:
             "Service Overview",
             "Live status, latency, and errors for required services.",
             render_overview,
+            supports_actions=True,  # This was missing
         ),
         MenuItem(
             "Model Catalog",
@@ -669,6 +864,7 @@ def interactive_dashboard(stdscr: Any) -> None:
     ]
 
     action_selection = 0 if ACTION_ITEMS else -1
+    service_selection = 0
 
     menu_index = 0
     focus = "menu"
@@ -757,7 +953,15 @@ def interactive_dashboard(stdscr: Any) -> None:
 
         content_top = content_title_y + 3
         content_height = max(1, available_height - 3)
-        selection_value = action_selection if current_item.supports_actions else None
+
+        # Determine which selection to pass to renderer
+        if current_item.title == "Service Overview":
+            selection_value = service_selection
+        elif current_item.supports_actions:
+            selection_value = action_selection
+        else:
+            selection_value = None
+
         current_item.renderer(
             stdscr,
             state,
@@ -769,7 +973,7 @@ def interactive_dashboard(stdscr: Any) -> None:
             focus == "content" and current_item.supports_actions,
         )
 
-        focus_label = "Actions" if focus == "content" and current_item.supports_actions else "Menu"
+        focus_label = "Content" if focus == "content" and current_item.supports_actions else "Menu"
         draw_footer(stdscr, message, last_refresh, focus_label)
         stdscr.refresh()
 
@@ -779,7 +983,9 @@ def interactive_dashboard(stdscr: Any) -> None:
         if key == ord("q"):
             break
 
-        if key in (ord("r"), ord("R")):
+        if key in (ord("r"), ord("R")) and not (
+            focus == "content" and current_item.title == "Service Overview"
+        ):
             apply_state(gather_state_smart(DEFAULT_HTTP_TIMEOUT))
             mode = "async" if ASYNC_AVAILABLE else "sync"
             message = f"Service state refreshed ({mode})."
@@ -799,14 +1005,29 @@ def interactive_dashboard(stdscr: Any) -> None:
             menu_index, focus, message = handle_menu_keys(key, menu_index, menu_items)
             continue
 
-        # Handle action keys if in content with actions
-        if focus == "content" and current_item.supports_actions:
-            action_selection, focus, execute_idx = handle_action_keys(
+        # Handle Service Overview interactions
+        if focus == "content" and current_item.title == "Service Overview":
+            service_selection, focus, status_msg = handle_service_keys(
+                key, service_selection, state.get("services", [])
+            )
+            if status_msg:
+                message = status_msg
+                # If an action was performed, auto-refresh after a delay
+                if "Start" in status_msg or "Stop" in status_msg or "Restart" in status_msg:
+                    last_auto_refresh = (
+                        time.monotonic() - AUTO_REFRESH_SECONDS + 2
+                    )  # Force refresh soon
+            continue
+
+        # Handle Operations interactions
+        if focus == "content" and current_item.title == "Operations":
+            action_selection, focus, result = handle_action_keys(
                 key, action_selection, ACTION_ITEMS
             )
-            if execute_idx is not None:
+
+            if isinstance(result, int):
                 # Execute the action
-                action = ACTION_ITEMS[execute_idx]
+                action = ACTION_ITEMS[result]
                 pre_message = f"{action.title}: running..."
                 draw_footer(stdscr, pre_message, last_refresh, "Actions")
                 stdscr.refresh()
@@ -816,6 +1037,9 @@ def interactive_dashboard(stdscr: Any) -> None:
                 else:
                     last_auto_refresh = time.monotonic()
                 message = action_message
+            elif isinstance(result, str):
+                message = result
+
             continue
 
         if key == -1 and (now - last_auto_refresh) > AUTO_REFRESH_SECONDS:
@@ -900,8 +1124,8 @@ def _launch_dashboard() -> tuple[bool, str | None]:
         curses.wrapper(interactive_dashboard)
     except KeyboardInterrupt:
         return True, None
-    except curses.error:
-        return False, "curses.error"
+    except Exception:
+        return False, traceback.format_exc()
     return True, None
 
 
@@ -911,10 +1135,8 @@ def main() -> None:
         sys.exit(1)
 
     original_term = os.environ.get("TERM")
+    # Attempted terms logic removed, as user's TERM is proven to work.
     attempted_terms: list[str | None] = [original_term]
-
-    if original_term in {"xterm-kitty", "kitty"}:
-        attempted_terms.extend(["xterm-256color", "xterm"])
 
     failure_messages: list[str] = []
 
@@ -924,8 +1146,9 @@ def main() -> None:
         else:
             os.environ.pop("TERM", None)
 
-        _ensure_valid_terminfo(candidate)
-        _ensure_term_capabilities(candidate)
+        # Bypassing these functions as they might be causing interference
+        # _ensure_valid_terminfo(candidate)
+        # _ensure_term_capabilities(candidate)
         success, error_detail = _launch_dashboard()
         if success:
             return

@@ -643,13 +643,22 @@ class ConfigGenerator:
         if os.getenv("LITELLM_ENABLE_PROMETHEUS", "false").lower() in {"1", "true", "yes", "y"}:
             callbacks.append("prometheus")
 
+        cache_enabled = os.getenv("AI_BACKEND_ENABLE_CACHE", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+            "y",
+        }
+
         litellm_settings = {
             "request_timeout": 60,  # Per-request timeout (seconds)
             "stream_timeout": 120,  # Streaming response timeout (seconds)
             "num_retries": 3,  # Number of retry attempts on failure
             "timeout": 300,  # Overall operation timeout (5 minutes)
-            "cache": True,
-            "cache_params": {"type": "redis", "host": "127.0.0.1", "port": 6379, "ttl": 3600},
+            "cache": cache_enabled,
+            "cache_params": {"type": "disk", "disk_cache_dir": ".litellm_cache"}
+            if cache_enabled
+            else {},
             "set_verbose": True,  # Enable verbose logging for debugging
             "json_logs": True,
         }

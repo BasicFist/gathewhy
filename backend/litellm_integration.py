@@ -8,6 +8,7 @@ except ImportError:
 
 from backend.callbacks import CallbackManager, RequestContext
 from backend.observability.metrics import PrometheusCallback
+from backend.security.guardrails import GuardrailManager
 from backend.usage.budgets import BudgetManager
 from backend.usage.sql_logger import SQLUsageLoggerCallback
 
@@ -19,9 +20,17 @@ class BackendIntegration(CustomLogger):
         self.prometheus = PrometheusCallback()
         self.callback_manager.register(self.prometheus)
         self.budget_manager = BudgetManager()
+        self.guardrails = GuardrailManager()
 
     def log_pre_api_call(self, model, messages, kwargs):
         try:
+            # 1. Security Check (Guardrails)
+            # If this raises, it might not stop LiteLLM depending on version/config,
+            # but it provides a vital hook for validation.
+            if error := self.guardrails.check_request(kwargs):
+                print(f"SECURITY BLOCK: {error}")
+                raise error
+
             ctx = self._build_context(kwargs, model, start=True)
             self.callback_manager.emit_request(ctx)
 

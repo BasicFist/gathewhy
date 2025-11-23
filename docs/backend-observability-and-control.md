@@ -49,6 +49,16 @@ capabilities:
 ```
 The backend checks these budgets *before* every request and logs warnings/metrics if exceeded.
 
+### 5. Guardrails (`backend/security/guardrails.py`)
+Basic security checks are performed on every prompt:
+- **Secret Scanning:** Detects potential API keys (sk-..., gh_..., etc.).
+- **Blocking:** High-risk violations can block the request (depending on LiteLLM version/config).
+
+### 6. Caching
+Local disk caching is available to reduce latency and costs for repetitive prompts.
+- **Enable:** Set `AI_BACKEND_ENABLE_CACHE=true` in your environment (e.g., `.env` or systemd).
+- **Storage:** Cached responses are stored in `.litellm_cache/`.
+
 ## Control & Introspection
 
 ### Dashboard (`scripts/ptui`)

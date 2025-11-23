@@ -470,12 +470,43 @@ def action_restart_litellm(state: dict[str, Any]) -> tuple[str, dict[str, Any] |
     return f"Restart LiteLLM: {'OK' if success else 'Failed'} ({msg})", None
 
 
+def action_regenerate_config(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    try:
+        subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(__file__), "generate-litellm-config.py")],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return "Config regenerated successfully.", None
+    except subprocess.CalledProcessError as e:
+        return f"Regeneration failed: {e.stderr}", None
+
+
+def action_inspect_config(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    try:
+        result = subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(__file__), "print-logical-config.py")],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # Just show success, content is too big for footer
+        return f"Config snapshot: {len(result.stdout)} bytes", None
+    except subprocess.CalledProcessError as e:
+        return f"Inspection failed: {e.stderr}", None
+
+
 ACTION_ITEMS: list[ActionItem] = [
     ActionItem("Refresh State", "Gather latest service and model data.", action_refresh_state),
     ActionItem(
         "Health Probe", "Check required services and report any failures.", action_health_probe
     ),
     ActionItem("Run Validation", "Execute validate-unified-backend.sh.", action_run_validation),
+    ActionItem(
+        "Regenerate Config", "Re-build LiteLLM config from sources.", action_regenerate_config
+    ),
+    ActionItem("Inspect Config", "Check logical configuration snapshot.", action_inspect_config),
     ActionItem("Start vLLM", "Attempt to start the vLLM service via systemctl.", action_start_vllm),
     ActionItem("Restart LiteLLM", "Restart the main gateway service.", action_restart_litellm),
 ]

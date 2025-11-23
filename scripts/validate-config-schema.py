@@ -17,6 +17,13 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # ============================================================================
 
 
+class BudgetSettings(BaseModel):
+    """Budget configuration settings"""
+
+    max_budget_usd: float | None = None
+    budget_window: Literal["1h", "1d", "7d", "30d"] | None = None
+
+
 class ProviderModel(BaseModel):
     """Model definition within a provider"""
 
@@ -50,6 +57,7 @@ class ProviderConfig(BaseModel):
     health_endpoint: str | None = None
     features: list[str] | None = []
     configuration: dict[str, Any] | None = {}
+    budget: BudgetSettings | None = None
 
     @field_validator("base_url")
     @classmethod
@@ -96,6 +104,7 @@ class ExactMatch(BaseModel):
     fallback: str | None = None
     description: str
     backend_model: str | None = None
+    budget: BudgetSettings | None = None
 
 
 class PatternRouting(BaseModel):
@@ -129,6 +138,7 @@ class CapabilityRouting(BaseModel):
     routing_strategy: str | None = None
     min_model_size: str | None = None
     min_context: int | None = None
+    budget: BudgetSettings | None = None
 
 
 class FallbackChain(BaseModel):

@@ -34,6 +34,7 @@ Examples:
 """
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -201,6 +202,34 @@ class ConfigGenerator:
                 reason=type(e).__name__,
             )
             return timestamp_version
+
+    def export_budget_config(self) -> None:
+        """Export budget configuration to runtime JSON file."""
+        logger.info("Exporting budget configuration...")
+        budgets = {"providers": {}, "models": {}, "capabilities": {}}
+
+        # Extract provider budgets
+        for name, cfg in self.providers.get("providers", {}).items():
+            if "budget" in cfg:
+                budgets["providers"][name] = cfg["budget"]
+
+        # Extract model budgets (exact matches)
+        for name, cfg in self.mappings.get("exact_matches", {}).items():
+            if "budget" in cfg:
+                budgets["models"][name] = cfg["budget"]
+
+        # Extract capability budgets
+        for name, cfg in self.mappings.get("capabilities", {}).items():
+            if "budget" in cfg:
+                budgets["capabilities"][name] = cfg["budget"]
+
+        runtime_dir = PROJECT_ROOT / "runtime"
+        runtime_dir.mkdir(exist_ok=True)
+
+        with open(runtime_dir / "budget_config.json", "w") as f:
+            json.dump(budgets, f, indent=2)
+
+        logger.info("Budget configuration exported to runtime/budget_config.json")
 
     def build_model_list(self) -> list[dict[str, Any]]:
         """
@@ -610,9 +639,9 @@ class ConfigGenerator:
         """Build complete LiteLLM configuration"""
         print("\n🏗️  Building complete configuration...")
 
-        callbacks: list[str] = []
+        callbacks: list[str] = ["backend.litellm_integration.BackendIntegration"]
         if os.getenv("LITELLM_ENABLE_PROMETHEUS", "false").lower() in {"1", "true", "yes", "y"}:
-            callbacks = ["prometheus"]
+            callbacks.append("prometheus")
 
         litellm_settings = {
             "request_timeout": 60,  # Per-request timeout (seconds)
@@ -840,6 +869,9 @@ class ConfigGenerator:
 
         # Backup existing
         self.backup_existing()
+
+        # Export budgets
+        self.export_budget_config()
 
         # Build configuration
         config = self.build_config()

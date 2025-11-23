@@ -231,8 +231,8 @@ providers:
 # ============================================================================
 
 metadata:
-  version: "1.4"
-  last_updated: "2025-10-30"
+  version: "1.5"
+  last_updated: "2025-11-23"
   total_providers: 5  # ollama, llama_cpp_python, llama_cpp_native, vllm-qwen (active), ollama_cloud
   total_models_available: 11  # 3 Ollama + 1 vLLM + 1 llama.cpp + 6 Ollama Cloud
   notes: "vllm-dolphin disabled - vLLM runs single instance on port 8001"
@@ -265,3 +265,16 @@ metadata:
       best_for: Massive models without local GPU
       performance: Data-center grade
       resource_usage: Remote (billable)
+
+health_checks:
+  enabled: true
+  interval_seconds: 60
+  timeout_seconds: 5
+  retry_attempts: 3
+
+  endpoints:
+    ollama: http://127.0.0.1:11434/api/tags
+    llama_cpp_python: http://127.0.0.1:8000/v1/models
+    llama_cpp_native: http://127.0.0.1:8080/v1/models
+    vllm-qwen: http://127.0.0.1:8001/v1/models
+    vllm-dolphin: http://127.0.0.1:8002/v1/models

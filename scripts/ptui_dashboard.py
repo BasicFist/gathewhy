@@ -185,6 +185,23 @@ def load_services_from_config() -> list[Service]:
         return default_services
 
 
+def load_model_mappings() -> dict[str, Any]:
+    """Load model mappings from config/model-mappings.yaml."""
+    config_path = Path(__file__).parent.parent / "config" / "model-mappings.yaml"
+    if not config_path.exists():
+        return {}
+    try:
+        import yaml
+
+        with open(config_path) as f:
+            return yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"Warning: Failed to load model mappings: {e}", file=sys.stderr)
+        return {}
+
+
+MODEL_MAPPINGS = load_model_mappings()
+
 SERVICES: list[Service] = load_services_from_config()
 
 
@@ -526,12 +543,80 @@ def action_view_logs(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]
         return f"Error reading logs: {e}", None
 
 
+def action_validate_schema(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    try:
+        cmd = [sys.executable, "scripts/validate-config-schema.py"]
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, cwd=Path(__file__).parent.parent
+        )
+        if result.returncode == 0:
+            return "Schema Validation: ✅ PASSED", None
+
+        err_lines = [line for line in result.stdout.splitlines() if "❌" in line or "Error" in line]
+        err_msg = err_lines[0] if err_lines else "Unknown error"
+        return f"Schema Validation: ❌ FAILED - {err_msg}", None
+    except Exception as e:
+        return f"Validation error: {e}", None
+
+
+def action_test_completion(model: str) -> tuple[str, dict[str, Any] | None]:
+    cmd = [
+        "curl",
+        "-s",
+        "-X",
+        "POST",
+        "http://localhost:4000/v1/chat/completions",
+        "-H",
+        "Content-Type: application/json",
+        "-d",
+        json.dumps(
+            {"model": model, "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 5}
+        ),
+    ]
+    try:
+        start = time.time()
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        duration = time.time() - start
+
+        if result.returncode != 0:
+            return f"Test {model}: Curl failed", None
+
+        try:
+            resp = json.loads(result.stdout)
+            if "error" in resp:
+                err = resp["error"].get("message", str(resp["error"]))
+                return f"Test {model}: ❌ API Error ({err[:40]}...)", None
+
+            # content = resp.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+            model_used = resp.get("model", "unknown")
+            return f"Test {model}: ✅ OK ({duration:.2f}s) via {model_used}", None
+        except json.JSONDecodeError:
+            return f"Test {model}: ❌ Invalid JSON response", None
+
+    except subprocess.TimeoutExpired:
+        return f"Test {model}: ❌ Timeout (>15s)", None
+    except Exception as e:
+        return f"Test {model}: ❌ Error {e}", None
+
+
+def action_test_chat(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    return action_test_completion("llama3.1:latest")
+
+
+def action_test_code(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    return action_test_completion("qwen-coder-vllm")
+
+
+def action_test_cloud(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    return action_test_completion("gpt-oss:20b-cloud")
+
+
 ACTION_ITEMS: list[ActionItem] = [
     ActionItem("Refresh State", "Gather latest service and model data.", action_refresh_state),
-    ActionItem(
-        "Health Probe", "Check required services and report any failures.", action_health_probe
-    ),
-    ActionItem("Run Validation", "Execute validate-unified-backend.sh.", action_run_validation),
+    ActionItem("Validate Schema", "Run config schema validation.", action_validate_schema),
+    ActionItem("Test Chat (Local)", "Test llama3.1 routing.", action_test_chat),
+    ActionItem("Test Code (vLLM)", "Test qwen-coder routing.", action_test_code),
+    ActionItem("Test Cloud", "Test gpt-oss:20b-cloud routing.", action_test_cloud),
     ActionItem(
         "Regenerate Config", "Re-build LiteLLM config from sources.", action_regenerate_config
     ),
@@ -689,36 +774,57 @@ def render_models(
 ) -> None:
     y = top
     models_info = state.get("models", {})
-    models = models_info.get("models", [])
+    available_models = set(models_info.get("models", []))
     error = models_info.get("error")
     latency = models_info.get("latency")
 
-    safe_addstr(stdscr, y, left, "LiteLLM Models", width, curses.color_pair(4) | curses.A_BOLD)
+    safe_addstr(
+        stdscr, y, left, "Logical Models & Routing", width, curses.color_pair(4) | curses.A_BOLD
+    )
     y += 2
 
     if error:
         safe_addstr(stdscr, y, left, f"⚠ {error}", width, curses.color_pair(3))
         return
 
-    safe_addstr(
-        stdscr,
-        y,
-        left,
-        f"Discovered: {len(models)} (fetch {format_latency(latency)})",
-        width,
-        curses.A_BOLD,
-    )
-    y += 2
+    # Extract logical models from mappings
+    exact_matches = MODEL_MAPPINGS.get("exact_matches", {})
+    fallbacks = MODEL_MAPPINGS.get("fallback_chains", {})
 
-    if not models:
-        safe_addstr(stdscr, y, left, "No models available.", width, curses.color_pair(3))
+    if not exact_matches:
+        safe_addstr(stdscr, y, left, "No logical models configured.", width, curses.A_DIM)
         return
 
-    for model in models:
+    # Display header
+    header = f"{'Model Name':<30} {'Provider':<15} {'Status':<10} {'Fallback Chain'}"
+    safe_addstr(stdscr, y, left, header, width, curses.A_UNDERLINE)
+    y += 1
+
+    for model_name, config in exact_matches.items():
         if y - top >= height:
             break
-        safe_addstr(stdscr, y, left, f"• {model}", width)
+
+        provider = config.get("provider", "unknown")
+        status_attr = (
+            curses.color_pair(1) if model_name in available_models else curses.color_pair(3)
+        )
+        status_text = "READY" if model_name in available_models else "UNAVAIL"
+
+        # Get fallback chain
+        chain = fallbacks.get(model_name, {}).get("chain", [])
+        chain_text = " -> ".join(chain) if chain else "None"
+        if len(chain_text) > 40:
+            chain_text = chain_text[:37] + "..."
+
+        line = f"{model_name:<30} {provider:<15} {status_text:<10} {chain_text}"
+        safe_addstr(stdscr, y, left, line, width, status_attr)
         y += 1
+
+    y += 1
+    if y - top < height:
+        safe_addstr(
+            stdscr, y, left, f"LiteLLM Latency: {format_latency(latency)}", width, curses.A_DIM
+        )
 
 
 def render_operations(
@@ -946,17 +1052,27 @@ def interactive_dashboard(stdscr: Any) -> None:
 
         header_title = "AI Backend Unified - PTUI Command Center"
         safe_addstr(stdscr, 0, 2, header_title, width - 4, curses.color_pair(4) | curses.A_BOLD)
+
         mode_indicator = "(async)" if ASYNC_AVAILABLE else "(sync)"
-        mode_color = curses.color_pair(1) if ASYNC_AVAILABLE else curses.color_pair(3)
-        subtitle = f"ptui-dashboard {mode_indicator}"
+
+        # Cloud Status Check
+        has_cloud_key = "OLLAMA_API_KEY" in os.environ
+        cloud_text = "CLOUD: ON" if has_cloud_key else "CLOUD: OFF"
+        cloud_attr = curses.color_pair(1) if has_cloud_key else curses.color_pair(3)
+
+        # Draw subtitle with mixed colors manually since safe_addstr handles one attr
+        safe_addstr(
+            stdscr, 1, 2, f"ptui-dashboard {mode_indicator}  |  ", width - 4, curses.color_pair(5)
+        )
         safe_addstr(
             stdscr,
             1,
-            2,
-            subtitle,
-            width - 4,
-            curses.color_pair(5) | mode_color,
+            2 + len(f"ptui-dashboard {mode_indicator}  |  "),
+            cloud_text,
+            width,
+            cloud_attr | curses.A_BOLD,
         )
+
         from contextlib import suppress
 
         with suppress(curses.error):

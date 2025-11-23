@@ -3,8 +3,7 @@
 
 # ============================================================================
 # ARCHITECTURAL CONSTRAINTS AND PATTERNS
-# ============================================================================
-#
+# ============================================================================#
 # vLLM Single-Instance Pattern:
 #   vLLM can only run ONE model at a time per GPU. Current setup:
 #   - Port 8001: vllm-qwen (Qwen/Qwen2.5-Coder-7B-Instruct-AWQ) [ACTIVE]
@@ -39,9 +38,9 @@
 #     - Saturation-aware: Overflow to cloud when local saturated
 #     - Quality-based: Route by requested quality tier
 #
-# ============================================================================
+# ============================================================================#
 # EXACT MODEL NAME ROUTING
-# ============================================================================
+# ============================================================================#
 
 exact_matches:
   # Ollama models (exact name)
@@ -128,18 +127,18 @@ exact_matches:
     fallback: ollama
     description: "4.6B general chat model via Ollama Cloud"
 
-# ============================================================================
+# ============================================================================#
 # PATTERN-BASED ROUTING
-# ============================================================================
+# ============================================================================#
 
 patterns:
   # HuggingFace model paths → vLLM
-  - pattern: "^Qwen/Qwen2\\.5-Coder.*"
+  - pattern: '^Qwen/Qwen2\.5-Coder.*'
     provider: vllm-qwen
     fallback: ollama
     description: "Qwen Coder models via vLLM (AWQ quantized)"
 
-  - pattern: "^solidrust/dolphin.*AWQ$"
+  - pattern: '^solidrust/dolphin.*AWQ$'
     provider: vllm-dolphin
     fallback: ollama
     description: "Dolphin uncensored models via vLLM (AWQ quantized)"
@@ -155,26 +154,26 @@ patterns:
     description: "Mistral models via vLLM"
 
   # Ollama-style names → Ollama
-  - pattern: ".*:\\d+[bB]$"  # Matches "model:7b", "model:13B", etc.
+  - pattern: '.*:\d+[bB]$'  # Matches "model:7b", "model:13B", etc.
     provider: ollama
     description: "Ollama naming convention (model:size)"
 
   # GGUF files → llama.cpp
-  - pattern: ".*\\.gguf$"
+  - pattern: '.*\.gguf$'
     provider: llama_cpp_python
     fallback: llama_cpp_native
     description: "GGUF quantized models"
 
-# ============================================================================
+# ============================================================================#
 # CAPABILITY-BASED ROUTING
-# ============================================================================
+# ============================================================================#
 # Consolidated capabilities with clear separation of concerns
 # Priority: Semantic routing by use case, not implementation details
 
 capabilities:
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # PRIMARY CAPABILITIES (Use Case Driven)
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   code:
     description: "Code generation, analysis, and debugging"
@@ -225,9 +224,9 @@ capabilities:
       - glm-4.6:cloud               # Cloud: Lightweight conversation
     routing_strategy: usage_based
 
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # PERFORMANCE-ORIENTED CAPABILITIES
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   high_throughput:
     description: "Batch processing and concurrent request handling"
@@ -250,15 +249,15 @@ capabilities:
       - llama_cpp_python            # Local: 8192 context configured
     routing_strategy: most_capacity
 
-# ============================================================================
+# ============================================================================#
 # LOAD BALANCING CONFIGURATION
-# ============================================================================
+# ============================================================================#
 # Intelligent distribution across providers with complexity-aware routing
 
 load_balancing:
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # CONVERSATIONAL LOAD BALANCING
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   "llama3.1:latest":
     providers:
@@ -278,9 +277,9 @@ load_balancing:
     strategy: least_loaded
     description: "Dynamic load balancing based on current provider load"
 
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # CODE GENERATION LOAD BALANCING (NEW)
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   "code-generation":
     providers:
@@ -299,9 +298,9 @@ load_balancing:
       saturation_threshold: 0.8  # 80% capacity triggers cloud routing
       complexity_detection: token_count  # Estimate complexity from prompt length
 
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # CREATIVE WRITING LOAD BALANCING (NEW)
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   "creative-tasks":
     providers:
@@ -315,16 +314,16 @@ load_balancing:
     strategy: quality_based
     description: "Creative writing: local for standard, cloud for high-quality or long-form"
 
-# ============================================================================
+# ============================================================================#
 # FALLBACK CHAINS
-# ============================================================================
+# ============================================================================#
 # Quality-preserving fallback chains with tier-based degradation
 # Design principle: Maintain capability tier, degrade model size gradually
 
 fallback_chains:
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # LOCAL MODEL FALLBACK CHAINS
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   "qwen2.5-coder:7b":
     description: "Local code model fallback: same capability, alternative providers"
@@ -367,9 +366,9 @@ fallback_chains:
     tier: local
     notes: "Maximum performance terminal node, port 8080, pure C++ implementation"
 
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # CLOUD MODEL FALLBACK CHAINS (FIXED: Quality-Preserving)
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   "deepseek-v3.1:671b-cloud":
     description: "Advanced reasoning: cloud-first, maintain quality tier"
@@ -418,9 +417,9 @@ fallback_chains:
       - mythomax-l2-13b-q5_k_m       # Alternative local 13B creative model
     tier: cloud_entry
 
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
   # DEFAULT FALLBACK CHAIN
-  # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------#
 
   default:
     description: "Universal fallback: cloud capability preservation then local"
@@ -433,9 +432,9 @@ fallback_chains:
     tier: universal
     notes: "Cloud-first for unknown models, gradual degradation to local"
 
-# ============================================================================
+# ============================================================================#
 # ROUTING RULES
-# ============================================================================
+# ============================================================================#
 
 routing_rules:
   # Rule precedence (highest to lowest):
@@ -477,9 +476,9 @@ routing_rules:
       fallback: ollama
       reason: "Large models benefit from vLLM batching"
 
-# ============================================================================
+# ============================================================================#
 # SPECIAL ROUTING CASES
-# ============================================================================
+# ============================================================================#
 
 special_cases:
   first_request_routing:
@@ -503,13 +502,13 @@ special_cases:
     enabled: false
     prefer_local: true
 
-# ============================================================================
+# ============================================================================#
 # METADATA
-# ============================================================================
+# ============================================================================#
 
 metadata:
   version: "1.7"
-  last_updated: "2025-11-11"
+  last_updated: "2025-11-23"
   total_routing_rules: 30+
   architecture_version: "quality-preserving-fallbacks"
 

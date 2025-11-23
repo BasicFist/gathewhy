@@ -2,18 +2,22 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
 from backend.callbacks import RequestContext
 
+
 class BudgetManager:
-    def __init__(self,
-                 config_path: str = "runtime/budget_config.json",
-                 db_path: str = "runtime/usage/llm_usage.db"):
+    def __init__(
+        self,
+        config_path: str = "runtime/budget_config.json",
+        db_path: str = "runtime/usage/llm_usage.db",
+    ):
         self.config_path = Path(config_path)
         self.db_path = Path(db_path)
         self.budgets = self._load_config()
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         if not self.config_path.exists():
             return {}
         try:

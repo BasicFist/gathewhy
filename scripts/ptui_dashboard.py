@@ -497,6 +497,35 @@ def action_inspect_config(state: dict[str, Any]) -> tuple[str, dict[str, Any] | 
         return f"Inspection failed: {e.stderr}", None
 
 
+def action_view_logs(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    log_path = Path(__file__).parent.parent / "logs" / "service_control.log"
+    if not log_path.exists():
+        return "Log file not found.", None
+
+    try:
+        # Read last 5 lines
+        with open(log_path, "rb") as f:
+            # Minimal implementation of tail
+            f.seek(0, 2)
+            file_size = f.tell()
+            lines_to_read = 5
+            block_size = 1024
+            block_end_byte = file_size
+            lines = []
+
+            while block_end_byte > 0 and len(lines) < lines_to_read:
+                block_end_byte = max(0, block_end_byte - block_size)
+                f.seek(block_end_byte)
+                block_data = f.read(min(block_size, file_size - block_end_byte))
+                # Split and keep lines
+                lines = block_data.decode("utf-8", errors="ignore").splitlines()[-lines_to_read:]
+
+            content = " | ".join(lines)
+            return f"Last logs: {content}", None
+    except Exception as e:
+        return f"Error reading logs: {e}", None
+
+
 ACTION_ITEMS: list[ActionItem] = [
     ActionItem("Refresh State", "Gather latest service and model data.", action_refresh_state),
     ActionItem(
@@ -507,6 +536,7 @@ ACTION_ITEMS: list[ActionItem] = [
         "Regenerate Config", "Re-build LiteLLM config from sources.", action_regenerate_config
     ),
     ActionItem("Inspect Config", "Check logical configuration snapshot.", action_inspect_config),
+    ActionItem("View Logs", "Show recent service control logs.", action_view_logs),
     ActionItem("Start vLLM", "Attempt to start the vLLM service via systemctl.", action_start_vllm),
     ActionItem("Restart LiteLLM", "Restart the main gateway service.", action_restart_litellm),
 ]

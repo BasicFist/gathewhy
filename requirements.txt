@@ -59,3 +59,4 @@ uc-micro-py==1.0.3
 urllib3==2.5.0
 virtualenv==20.35.4
 yamllint==1.37.1
+prometheus_client>=0.20.0

@@ -24,12 +24,12 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-AI_DASHBOARD_PATH = PROJECT_ROOT / "scripts" / "ai-dashboard"
+AI_DASHBOARD_PATH = PROJECT_ROOT / "scripts" / "dashboard" / "monitors" / "provider.py"
 
 if not AI_DASHBOARD_PATH.exists():  # pragma: no cover - defensive
     raise ImportError(f"Unable to locate ai-dashboard module at {AI_DASHBOARD_PATH}")
 
-loader = machinery.SourceFileLoader("ai_dashboard_module", str(AI_DASHBOARD_PATH))
+loader = machinery.SourceFileLoader("ai_dashboard_provider", str(AI_DASHBOARD_PATH))
 spec = util.spec_from_loader(loader.name, loader)
 if spec is None or spec.loader is None:  # pragma: no cover - defensive
     raise ImportError("Unable to create module spec for ai-dashboard")

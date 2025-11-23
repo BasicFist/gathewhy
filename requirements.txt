@@ -1,4 +1,5 @@
 annotated-types==0.7.0
+aiohttp==3.9.5
 attrs==25.4.0
 certifi==2025.11.12
 cfgv==3.4.0

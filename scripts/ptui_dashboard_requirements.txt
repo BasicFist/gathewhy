@@ -9,3 +9,6 @@ aiohttp>=3.9.0
 
 # YAML parsing (required for dynamic config loading)
 PyYAML>=6.0.0
+
+# GPU Statistics (optional)
+nvidia-ml-py>=12.535.133

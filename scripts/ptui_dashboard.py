@@ -611,9 +611,56 @@ def action_test_cloud(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None
     return action_test_completion("gpt-oss:20b-cloud")
 
 
+def action_switch_vllm_qwen(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    try:
+        script = os.path.join(os.path.dirname(__file__), "vllm-model-switch.sh")
+        subprocess.Popen([script, "qwen"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return "Switching vLLM to Qwen (async)...", None
+    except Exception as e:
+        return f"Switch error: {e}", None
+
+
+def action_switch_vllm_dolphin(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    try:
+        script = os.path.join(os.path.dirname(__file__), "vllm-model-switch.sh")
+        subprocess.Popen([script, "dolphin"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return "Switching vLLM to Dolphin (async)...", None
+    except Exception as e:
+        return f"Switch error: {e}", None
+
+
+def action_check_budgets(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    db_path = Path(__file__).parent.parent / "runtime" / "usage" / "llm_usage.db"
+    if not db_path.exists():
+        return "No usage DB found.", None
+
+    try:
+        import sqlite3
+
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT SUM(cost_usd), COUNT(*) FROM usage_logs")
+            row = cursor.fetchone()
+            total_spend = row[0] if row[0] else 0.0
+            count = row[1]
+
+            # Get today's spend
+            today = datetime.now().strftime("%Y-%m-%d")
+            cursor.execute(
+                "SELECT SUM(cost_usd) FROM usage_logs WHERE timestamp LIKE ?", (f"{today}%",)
+            )
+            row_today = cursor.fetchone()
+            today_spend = row_today[0] if row_today[0] else 0.0
+
+        return f"Total Spend: ${total_spend:.4f} ({count} reqs) | Today: ${today_spend:.4f}", None
+    except Exception as e:
+        return f"Budget check failed: {e}", None
+
+
 ACTION_ITEMS: list[ActionItem] = [
     ActionItem("Refresh State", "Gather latest service and model data.", action_refresh_state),
     ActionItem("Validate Schema", "Run config schema validation.", action_validate_schema),
+    ActionItem("Check Budgets", "View total and daily spend.", action_check_budgets),
     ActionItem("Test Chat (Local)", "Test llama3.1 routing.", action_test_chat),
     ActionItem("Test Code (vLLM)", "Test qwen-coder routing.", action_test_code),
     ActionItem("Test Cloud", "Test gpt-oss:20b-cloud routing.", action_test_cloud),
@@ -623,6 +670,10 @@ ACTION_ITEMS: list[ActionItem] = [
     ActionItem("Inspect Config", "Check logical configuration snapshot.", action_inspect_config),
     ActionItem("View Logs", "Show recent service control logs.", action_view_logs),
     ActionItem("Start vLLM", "Attempt to start the vLLM service via systemctl.", action_start_vllm),
+    ActionItem("Switch vLLM -> Qwen", "Hot-swap vLLM to Qwen2.5-Coder.", action_switch_vllm_qwen),
+    ActionItem(
+        "Switch vLLM -> Dolphin", "Hot-swap vLLM to Dolphin-Mistral.", action_switch_vllm_dolphin
+    ),
     ActionItem("Restart LiteLLM", "Restart the main gateway service.", action_restart_litellm),
 ]
 

@@ -69,17 +69,17 @@ PTUI_REFRESH_SECONDS=3 python3 scripts/ptui_dashboard.py
 ```
 ┌────────────────────────────────────────────────────────────┐
 │ AI Backend Unified - PTUI Command Center                   │
-│ ai-dashboard                                               │
+│ ptui-dashboard (async)                                     │
 ├────────────────────────────────────────────────────────────┤
 │ Sections          │ Service Overview                       │
 │ ➤ Service Overview│ Required services: 2/2 healthy         │
 │   Model Catalog   │ Optional services: 1/3 online          │
-│   Operations      │                                        │
-│                   │ ONLINE LiteLLM Gateway                 │
-│                   │   Latency: 12ms   URL: http://...      │
+│   System Resources│                                        │
+│   Operations      │ ONLINE LiteLLM Gateway                 │
+│   Help            │   Latency: 12ms →  URL: http://...     │
 │                   │                                        │
 │                   │ ONLINE Ollama                          │
-│                   │   Latency: 45ms   URL: http://...      │
+│                   │   Latency: 45ms ↓  URL: http://...     │
 │                   │                                        │
 │                   │ MISSING llama.cpp (Python)             │
 │                   │   ⚠ Connection refused                 │
@@ -94,7 +94,7 @@ PTUI_REFRESH_SECONDS=3 python3 scripts/ptui_dashboard.py
 
 **1. Service Overview** (default view)
 - Real-time service health status
-- Response latency for each service
+- Response latency for each service with trend indicators (↓=improving, ↑=degrading, →=stable)
 - Color-coded status (Green=online, Red=offline, Yellow=optional missing)
 - Error messages for failed services
 
@@ -103,11 +103,23 @@ PTUI_REFRESH_SECONDS=3 python3 scripts/ptui_dashboard.py
 - Model count
 - Fetch latency
 
-**3. Operations**
+**3. System Resources**
+- CPU usage with progress bar
+- Memory usage with progress bar
+- Disk usage with progress bar
+- System load average (Unix only)
+- Requires psutil (optional dependency)
+
+**4. Operations**
 - Quick actions menu
 - Refresh state
 - Health probe (checks required services)
 - Run validation script
+
+**5. Help**
+- Keyboard shortcuts reference
+- Navigation tips
+- Feature availability status
 
 ## Key Bindings
 
@@ -117,6 +129,7 @@ PTUI_REFRESH_SECONDS=3 python3 scripts/ptui_dashboard.py
 | `q` | Quit | Exit dashboard |
 | `r` / `R` | Refresh | Manually refresh all data |
 | `g` / `G` | Gather | Force state collection |
+| `?` | Help | Jump to help section |
 
 ### Navigation
 | Key | Action | Description |
@@ -568,22 +581,21 @@ subprocess.run([script_path], ...)  # Safe
 
 ## Known Limitations
 
-1. **No resource metrics** (CPU/Memory/VRAM) - Use Textual dashboard for these
-2. **No service controls** - Can't start/stop/restart services
-3. **No state persistence** - Loses state on exit
-4. **Read-only** - Can only monitor, not manage
-5. **Single file** - All code in one 720-line file (harder to test)
-6. **Basic UI** - No progress bars, no graphs
+1. **No service controls** - Can't start/stop/restart services
+2. **No state persistence** - Loses state on exit
+3. **Read-only** - Can only monitor, not manage
+4. **Single file** - All code in one file (harder to test)
+5. **Basic UI** - No graphs (uses text-based progress bars)
 
 ## Future Enhancements
 
-- [ ] Add basic CPU/Memory metrics (optional psutil)
+- [x] Add basic CPU/Memory metrics (optional psutil)
+- [x] Add historical latency tracking with trend indicators
 - [ ] Add service control actions (start/stop/restart)
 - [ ] Save state to `~/.cache/ptui-dashboard/state.json`
 - [ ] Add configuration file (`~/.ptui-dashboard.yaml`)
 - [ ] Add color themes (dark, light, high-contrast)
 - [ ] Add export metrics to JSON
-- [ ] Add historical latency tracking
 
 ## Related Documentation
 

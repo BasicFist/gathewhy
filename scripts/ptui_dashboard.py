@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,6 +31,27 @@ try:
     ASYNC_AVAILABLE = True
 except ImportError:
     ASYNC_AVAILABLE = False
+
+# Try to import psutil for system resource metrics (optional dependency)
+try:
+    import psutil
+
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
+# Latency history - stores the last N latencies for each service
+LATENCY_HISTORY_SIZE = 10
+latency_history: dict[str, deque[float]] = {}
+
+# Latency trend calculation constants
+TREND_RECENT_SAMPLES = 3  # Number of recent samples for trend calculation
+TREND_MIN_SAMPLES = 2  # Minimum samples needed for trend calculation
+TREND_IMPROVEMENT_THRESHOLD = 0.9  # Ratio threshold for "improving" trend
+TREND_DEGRADATION_THRESHOLD = 1.1  # Ratio threshold for "degrading" trend
+
+# UI constants
+PROGRESS_BAR_MAX_WIDTH = 30  # Maximum width for progress bars
 
 
 def validate_env_float(name: str, default: str, min_val: float, max_val: float) -> float:
@@ -200,11 +222,52 @@ async def fetch_json_async(
         return None, None, str(exc)
 
 
+def record_latency(service_name: str, latency: float | None) -> None:
+    """Record a latency measurement for trend tracking."""
+    if latency is None:
+        return
+    if service_name not in latency_history:
+        latency_history[service_name] = deque(maxlen=LATENCY_HISTORY_SIZE)
+    latency_history[service_name].append(latency)
+
+
+def get_latency_trend(service_name: str) -> str:
+    """Get latency trend indicator based on history."""
+    if service_name not in latency_history:
+        return ""
+    history = latency_history[service_name]
+    if len(history) < TREND_MIN_SAMPLES:
+        return ""
+
+    # Compare recent average to older average
+    if len(history) >= TREND_RECENT_SAMPLES:
+        recent = list(history)[-TREND_RECENT_SAMPLES:]
+    else:
+        recent = list(history)[-TREND_MIN_SAMPLES:]
+    older = list(history)[:-len(recent)] if len(history) > len(recent) else None
+
+    if not older:
+        return ""
+
+    recent_avg = sum(recent) / len(recent)
+    older_avg = sum(older) / len(older)
+
+    if recent_avg < older_avg * TREND_IMPROVEMENT_THRESHOLD:
+        return "↓"  # Improving (faster)
+    if recent_avg > older_avg * TREND_DEGRADATION_THRESHOLD:
+        return "↑"  # Degrading (slower)
+    return "→"  # Stable
+
+
 def check_service(service: Service, timeout: float) -> dict[str, Any]:
     """Check service health synchronously."""
     url = f"{service.url}{service.endpoint}"
     data, latency, error = fetch_json(url, timeout)
     status_ok = data is not None and error is None
+
+    # Record latency for trend tracking
+    record_latency(service.name, latency)
+
     return {
         "service": service,
         "status": status_ok,
@@ -220,6 +283,10 @@ async def check_service_async(
     url = f"{service.url}{service.endpoint}"
     data, latency, error = await fetch_json_async(session, url, timeout)
     status_ok = data is not None and error is None
+
+    # Record latency for trend tracking
+    record_latency(service.name, latency)
+
     return {
         "service": service,
         "status": status_ok,
@@ -392,6 +459,65 @@ ACTION_ITEMS: list[ActionItem] = [
 ]
 
 
+def get_system_resources() -> dict[str, Any]:
+    """Get current system resource usage using psutil.
+
+    Uses non-blocking cpu_percent() to avoid UI delays.
+    """
+    if not PSUTIL_AVAILABLE:
+        return {
+            "available": False,
+            "error": "psutil not installed. Install with: pip install psutil",
+        }
+
+    try:
+        # CPU usage - use interval=None for non-blocking (returns cached value)
+        # The first call may return 0.0, but subsequent calls return valid data
+        cpu_percent = psutil.cpu_percent(interval=None)
+        cpu_count = psutil.cpu_count()
+
+        # Memory usage
+        memory = psutil.virtual_memory()
+        memory_percent = memory.percent
+        memory_used_gb = memory.used / (1024 ** 3)
+        memory_total_gb = memory.total / (1024 ** 3)
+
+        # Disk usage (root partition)
+        try:
+            disk = psutil.disk_usage("/")
+            disk_percent = disk.percent
+            disk_used_gb = disk.used / (1024 ** 3)
+            disk_total_gb = disk.total / (1024 ** 3)
+        except OSError:
+            disk_percent = 0
+            disk_used_gb = 0
+            disk_total_gb = 0
+
+        # System load (Unix only)
+        try:
+            load_avg = os.getloadavg()
+        except (OSError, AttributeError):
+            load_avg = (0, 0, 0)
+
+        return {
+            "available": True,
+            "cpu_percent": cpu_percent,
+            "cpu_count": cpu_count,
+            "memory_percent": memory_percent,
+            "memory_used_gb": memory_used_gb,
+            "memory_total_gb": memory_total_gb,
+            "disk_percent": disk_percent,
+            "disk_used_gb": disk_used_gb,
+            "disk_total_gb": disk_total_gb,
+            "load_avg": load_avg,
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "error": str(e),
+        }
+
+
 def init_colors() -> None:
     curses.start_color()
     curses.init_pair(1, curses.COLOR_GREEN, -1)  # success
@@ -463,11 +589,14 @@ def render_overview(
         y += 1
         if y - top >= height:
             break
+        # Get latency trend indicator
+        trend = get_latency_trend(service.name)
+        trend_str = f" {trend}" if trend else ""
         safe_addstr(
             stdscr,
             y,
             left + 2,
-            f"Latency: {latency_text}   URL: {service.url}",
+            f"Latency: {latency_text}{trend_str}   URL: {service.url}",
             width - 2,
             curses.A_DIM,
         )
@@ -562,6 +691,160 @@ def render_operations(
             break
         safe_addstr(stdscr, y, left + 4, action.description, width - 4, curses.A_DIM)
         y += 2
+
+
+def render_resources(
+    stdscr: Any,
+    state: dict[str, Any],
+    top: int,
+    left: int,
+    width: int,
+    height: int,
+    selection: int | None = None,
+    focused: bool = False,
+) -> None:
+    """Render system resource metrics panel."""
+    y = top
+    safe_addstr(stdscr, y, left, "System Resources", width, curses.color_pair(4) | curses.A_BOLD)
+    y += 2
+
+    resources = get_system_resources()
+
+    if not resources.get("available"):
+        error_msg = resources.get("error", "Unable to fetch system resources")
+        safe_addstr(stdscr, y, left, f"⚠ {error_msg}", width, curses.color_pair(3))
+        y += 2
+        safe_addstr(
+            stdscr, y, left,
+            "Tip: pip install psutil",
+            width,
+            curses.A_DIM,
+        )
+        return
+
+    # CPU Usage
+    cpu_percent = resources.get("cpu_percent", 0)
+    cpu_count = resources.get("cpu_count", 1)
+    cpu_attr = curses.color_pair(1) if cpu_percent < 80 else curses.color_pair(2)
+    safe_addstr(stdscr, y, left, f"CPU Usage: {cpu_percent:.1f}%", width, cpu_attr | curses.A_BOLD)
+    y += 1
+    # Simple progress bar
+    bar_width = min(PROGRESS_BAR_MAX_WIDTH, width - 4)
+    filled = int((cpu_percent / 100) * bar_width)
+    bar = "█" * filled + "░" * (bar_width - filled)
+    safe_addstr(stdscr, y, left + 2, f"[{bar}]", width - 2, cpu_attr)
+    y += 1
+    safe_addstr(stdscr, y, left + 2, f"{cpu_count} cores available", width - 2, curses.A_DIM)
+    y += 2
+
+    # Memory Usage
+    memory_percent = resources.get("memory_percent", 0)
+    memory_used = resources.get("memory_used_gb", 0)
+    memory_total = resources.get("memory_total_gb", 0)
+    mem_attr = curses.color_pair(1) if memory_percent < 80 else curses.color_pair(2)
+    safe_addstr(
+        stdscr, y, left,
+        f"Memory: {memory_used:.1f}GB / {memory_total:.1f}GB ({memory_percent:.1f}%)",
+        width,
+        mem_attr | curses.A_BOLD,
+    )
+    y += 1
+    filled = int((memory_percent / 100) * bar_width)
+    bar = "█" * filled + "░" * (bar_width - filled)
+    safe_addstr(stdscr, y, left + 2, f"[{bar}]", width - 2, mem_attr)
+    y += 2
+
+    # Disk Usage
+    disk_percent = resources.get("disk_percent", 0)
+    disk_used = resources.get("disk_used_gb", 0)
+    disk_total = resources.get("disk_total_gb", 0)
+    disk_attr = curses.color_pair(1) if disk_percent < 90 else curses.color_pair(2)
+    safe_addstr(
+        stdscr, y, left,
+        f"Disk: {disk_used:.1f}GB / {disk_total:.1f}GB ({disk_percent:.1f}%)",
+        width,
+        disk_attr | curses.A_BOLD,
+    )
+    y += 1
+    filled = int((disk_percent / 100) * bar_width)
+    bar = "█" * filled + "░" * (bar_width - filled)
+    safe_addstr(stdscr, y, left + 2, f"[{bar}]", width - 2, disk_attr)
+    y += 2
+
+    # Load Average (Unix only)
+    load_avg = resources.get("load_avg", (0, 0, 0))
+    if load_avg[0] > 0:
+        safe_addstr(
+            stdscr, y, left,
+            f"Load Average: {load_avg[0]:.2f} (1m) {load_avg[1]:.2f} (5m) {load_avg[2]:.2f} (15m)",
+            width,
+            curses.A_DIM,
+        )
+
+
+def render_help(
+    stdscr: Any,
+    state: dict[str, Any],
+    top: int,
+    left: int,
+    width: int,
+    height: int,
+    selection: int | None = None,
+    focused: bool = False,
+) -> None:
+    """Render help and keyboard shortcuts panel."""
+    y = top
+    safe_addstr(stdscr, y, left, "Keyboard Shortcuts", width, curses.color_pair(4) | curses.A_BOLD)
+    y += 2
+
+    shortcuts = [
+        ("Navigation", [
+            ("↑/↓", "Move between menu items or actions"),
+            ("→/Tab", "Focus actions panel (in Operations)"),
+            ("←/Shift-Tab", "Return to menu from actions"),
+            ("Enter", "Execute selected action"),
+        ]),
+        ("Global Keys", [
+            ("r/R", "Refresh service state and models"),
+            ("g/G", "Force gather all metrics"),
+            ("q/Q", "Quit the dashboard"),
+            ("?", "Show this help screen"),
+        ]),
+        ("Tips", [
+            ("", "• Dashboard auto-refreshes every 5 seconds"),
+            ("", "• Green = healthy, Red = critical, Yellow = warning"),
+            ("", "• Latency trends: ↓=improving, ↑=degrading, →=stable"),
+        ]),
+    ]
+
+    for section_title, items in shortcuts:
+        if y - top >= height:
+            break
+        safe_addstr(stdscr, y, left, section_title, width, curses.A_BOLD | curses.color_pair(5))
+        y += 1
+        for key, description in items:
+            if y - top >= height:
+                break
+            if key:
+                safe_addstr(stdscr, y, left + 2, f"{key:12} {description}", width - 2, curses.A_DIM)
+            else:
+                safe_addstr(stdscr, y, left + 2, description, width - 2, curses.A_DIM)
+            y += 1
+        y += 1
+
+    # Add feature availability info
+    if y - top < height - 2:
+        y += 1
+        safe_addstr(stdscr, y, left, "Feature Status", width, curses.A_BOLD | curses.color_pair(5))
+        y += 1
+        async_status = "✓ Enabled" if ASYNC_AVAILABLE else "✗ Disabled (install aiohttp)"
+        async_color = curses.color_pair(1) if ASYNC_AVAILABLE else curses.color_pair(3)
+        safe_addstr(stdscr, y, left + 2, f"Async Mode: {async_status}", width - 2, async_color)
+        y += 1
+        psutil_status = "✓ Enabled" if PSUTIL_AVAILABLE else "✗ Disabled (install psutil)"
+        psutil_color = curses.color_pair(1) if PSUTIL_AVAILABLE else curses.color_pair(3)
+        metrics_text = f"System Metrics: {psutil_status}"
+        safe_addstr(stdscr, y, left + 2, metrics_text, width - 2, psutil_color)
 
 
 def draw_footer(
@@ -661,10 +944,20 @@ def interactive_dashboard(stdscr: Any) -> None:
             render_models,
         ),
         MenuItem(
+            "System Resources",
+            "CPU, memory, and disk usage metrics.",
+            render_resources,
+        ),
+        MenuItem(
             "Operations",
             "Run common PTUI automation and validation tasks.",
             render_operations,
             supports_actions=True,
+        ),
+        MenuItem(
+            "Help",
+            "Keyboard shortcuts and usage tips.",
+            render_help,
         ),
     ]
 
@@ -793,6 +1086,17 @@ def interactive_dashboard(stdscr: Any) -> None:
             apply_state(gather_state_smart(DEFAULT_HTTP_TIMEOUT))
             mode = "async" if ASYNC_AVAILABLE else "sync"
             message = f"State gathered ({mode})."
+            continue
+
+        # '?' key to jump to help section
+        if key == ord("?"):
+            # Find the help menu item index
+            for idx, item in enumerate(menu_items):
+                if item.title == "Help":
+                    menu_index = idx
+                    focus = "menu"
+                    message = "Showing help."
+                    break
             continue
 
         if focus == "menu":

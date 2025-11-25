@@ -740,3 +740,155 @@ class TestIntegrationReadiness:
     def test_services_not_empty(self, ptui_module):
         """Test services list is populated."""
         assert len(ptui_module.SERVICES) > 0
+
+
+class TestLatencyTracking:
+    """Test latency history and trend tracking."""
+
+    def test_record_latency_creates_history(self, ptui_module):
+        """Test that recording latency creates history entry."""
+        # Clear any existing history
+        ptui_module.latency_history.clear()
+
+        ptui_module.record_latency("TestService", 0.1)
+        assert "TestService" in ptui_module.latency_history
+        assert len(ptui_module.latency_history["TestService"]) == 1
+        assert ptui_module.latency_history["TestService"][0] == 0.1
+
+    def test_record_latency_none_ignored(self, ptui_module):
+        """Test that None latency is ignored."""
+        ptui_module.latency_history.clear()
+        ptui_module.record_latency("TestService", None)
+        assert "TestService" not in ptui_module.latency_history
+
+    def test_record_latency_max_size(self, ptui_module):
+        """Test that history respects max size."""
+        ptui_module.latency_history.clear()
+        max_size = ptui_module.LATENCY_HISTORY_SIZE
+
+        for i in range(max_size + 5):
+            ptui_module.record_latency("TestService", float(i))
+
+        assert len(ptui_module.latency_history["TestService"]) == max_size
+
+    def test_get_latency_trend_empty(self, ptui_module):
+        """Test trend returns empty for no history."""
+        ptui_module.latency_history.clear()
+        assert ptui_module.get_latency_trend("NonExistent") == ""
+
+    def test_get_latency_trend_insufficient_data(self, ptui_module):
+        """Test trend returns empty for insufficient data."""
+        ptui_module.latency_history.clear()
+        ptui_module.record_latency("TestService", 0.1)
+        assert ptui_module.get_latency_trend("TestService") == ""
+
+    def test_get_latency_trend_improving(self, ptui_module):
+        """Test trend shows improving when latency decreases."""
+        ptui_module.latency_history.clear()
+        # Record older higher latencies, then recent lower ones
+        for latency in [0.5, 0.5, 0.5, 0.3, 0.2, 0.1]:
+            ptui_module.record_latency("TestService", latency)
+
+        trend = ptui_module.get_latency_trend("TestService")
+        assert trend == "↓"  # Improving
+
+    def test_get_latency_trend_degrading(self, ptui_module):
+        """Test trend shows degrading when latency increases."""
+        ptui_module.latency_history.clear()
+        # Record older lower latencies, then recent higher ones
+        for latency in [0.1, 0.1, 0.1, 0.3, 0.5, 0.5]:
+            ptui_module.record_latency("TestService", latency)
+
+        trend = ptui_module.get_latency_trend("TestService")
+        assert trend == "↑"  # Degrading
+
+    def test_get_latency_trend_stable(self, ptui_module):
+        """Test trend shows stable when latency is consistent."""
+        ptui_module.latency_history.clear()
+        # Record consistent latencies
+        for latency in [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]:
+            ptui_module.record_latency("TestService", latency)
+
+        trend = ptui_module.get_latency_trend("TestService")
+        assert trend == "→"  # Stable
+
+
+class TestSystemResources:
+    """Test system resource metrics functionality."""
+
+    def test_get_system_resources_available(self, ptui_module):
+        """Test system resources when psutil is available."""
+        if not ptui_module.PSUTIL_AVAILABLE:
+            pytest.skip("psutil not available")
+
+        resources = ptui_module.get_system_resources()
+        assert resources["available"] is True
+        assert "cpu_percent" in resources
+        assert "memory_percent" in resources
+        assert "disk_percent" in resources
+        assert isinstance(resources["cpu_percent"], (int, float))
+        assert isinstance(resources["memory_percent"], (int, float))
+
+    def test_get_system_resources_unavailable(self, ptui_module):
+        """Test system resources when psutil is not available."""
+        original = ptui_module.PSUTIL_AVAILABLE
+        try:
+            ptui_module.PSUTIL_AVAILABLE = False
+            resources = ptui_module.get_system_resources()
+            assert resources["available"] is False
+            assert "error" in resources
+        finally:
+            ptui_module.PSUTIL_AVAILABLE = original
+
+    def test_system_resources_values_in_range(self, ptui_module):
+        """Test that system resource values are in valid ranges."""
+        if not ptui_module.PSUTIL_AVAILABLE:
+            pytest.skip("psutil not available")
+
+        resources = ptui_module.get_system_resources()
+        assert 0 <= resources["cpu_percent"] <= 100
+        assert 0 <= resources["memory_percent"] <= 100
+        assert 0 <= resources["disk_percent"] <= 100
+        assert resources["cpu_count"] >= 1
+        assert resources["memory_total_gb"] > 0
+
+
+class TestNewConstants:
+    """Test new constants are properly defined."""
+
+    def test_latency_history_size_defined(self, ptui_module):
+        """Test LATENCY_HISTORY_SIZE constant is defined."""
+        assert hasattr(ptui_module, "LATENCY_HISTORY_SIZE")
+        assert isinstance(ptui_module.LATENCY_HISTORY_SIZE, int)
+        assert ptui_module.LATENCY_HISTORY_SIZE > 0
+
+    def test_psutil_available_defined(self, ptui_module):
+        """Test PSUTIL_AVAILABLE constant is defined."""
+        assert hasattr(ptui_module, "PSUTIL_AVAILABLE")
+        assert isinstance(ptui_module.PSUTIL_AVAILABLE, bool)
+
+    def test_latency_history_dict_defined(self, ptui_module):
+        """Test latency_history dict is defined."""
+        assert hasattr(ptui_module, "latency_history")
+        assert isinstance(ptui_module.latency_history, dict)
+
+    def test_trend_constants_defined(self, ptui_module):
+        """Test trend calculation constants are defined."""
+        assert hasattr(ptui_module, "TREND_RECENT_SAMPLES")
+        assert hasattr(ptui_module, "TREND_MIN_SAMPLES")
+        assert hasattr(ptui_module, "TREND_IMPROVEMENT_THRESHOLD")
+        assert hasattr(ptui_module, "TREND_DEGRADATION_THRESHOLD")
+        assert isinstance(ptui_module.TREND_RECENT_SAMPLES, int)
+        assert isinstance(ptui_module.TREND_MIN_SAMPLES, int)
+        assert isinstance(ptui_module.TREND_IMPROVEMENT_THRESHOLD, (int, float))
+        assert isinstance(ptui_module.TREND_DEGRADATION_THRESHOLD, (int, float))
+        assert ptui_module.TREND_RECENT_SAMPLES >= ptui_module.TREND_MIN_SAMPLES
+
+    def test_progress_bar_constant_defined(self, ptui_module):
+        """Test PROGRESS_BAR_MAX_WIDTH constant is defined."""
+        assert hasattr(ptui_module, "PROGRESS_BAR_MAX_WIDTH")
+        assert isinstance(ptui_module.PROGRESS_BAR_MAX_WIDTH, int)
+        assert ptui_module.PROGRESS_BAR_MAX_WIDTH > 0
+        """Test latency_history dict is defined."""
+        assert hasattr(ptui_module, "latency_history")
+        assert isinstance(ptui_module.latency_history, dict)

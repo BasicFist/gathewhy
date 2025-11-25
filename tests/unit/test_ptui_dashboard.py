@@ -871,3 +871,24 @@ class TestNewConstants:
         """Test latency_history dict is defined."""
         assert hasattr(ptui_module, "latency_history")
         assert isinstance(ptui_module.latency_history, dict)
+
+    def test_trend_constants_defined(self, ptui_module):
+        """Test trend calculation constants are defined."""
+        assert hasattr(ptui_module, "TREND_RECENT_SAMPLES")
+        assert hasattr(ptui_module, "TREND_MIN_SAMPLES")
+        assert hasattr(ptui_module, "TREND_IMPROVEMENT_THRESHOLD")
+        assert hasattr(ptui_module, "TREND_DEGRADATION_THRESHOLD")
+        assert isinstance(ptui_module.TREND_RECENT_SAMPLES, int)
+        assert isinstance(ptui_module.TREND_MIN_SAMPLES, int)
+        assert isinstance(ptui_module.TREND_IMPROVEMENT_THRESHOLD, (int, float))
+        assert isinstance(ptui_module.TREND_DEGRADATION_THRESHOLD, (int, float))
+        assert ptui_module.TREND_RECENT_SAMPLES >= ptui_module.TREND_MIN_SAMPLES
+
+    def test_progress_bar_constant_defined(self, ptui_module):
+        """Test PROGRESS_BAR_MAX_WIDTH constant is defined."""
+        assert hasattr(ptui_module, "PROGRESS_BAR_MAX_WIDTH")
+        assert isinstance(ptui_module.PROGRESS_BAR_MAX_WIDTH, int)
+        assert ptui_module.PROGRESS_BAR_MAX_WIDTH > 0
+        """Test latency_history dict is defined."""
+        assert hasattr(ptui_module, "latency_history")
+        assert isinstance(ptui_module.latency_history, dict)

@@ -44,6 +44,15 @@ except ImportError:
 LATENCY_HISTORY_SIZE = 10
 latency_history: dict[str, deque[float]] = {}
 
+# Latency trend calculation constants
+TREND_RECENT_SAMPLES = 3  # Number of recent samples for trend calculation
+TREND_MIN_SAMPLES = 2  # Minimum samples needed for trend calculation
+TREND_IMPROVEMENT_THRESHOLD = 0.9  # Ratio threshold for "improving" trend
+TREND_DEGRADATION_THRESHOLD = 1.1  # Ratio threshold for "degrading" trend
+
+# UI constants
+PROGRESS_BAR_MAX_WIDTH = 30  # Maximum width for progress bars
+
 
 def validate_env_float(name: str, default: str, min_val: float, max_val: float) -> float:
     """Validate environment variable as float within bounds."""
@@ -227,11 +236,14 @@ def get_latency_trend(service_name: str) -> str:
     if service_name not in latency_history:
         return ""
     history = latency_history[service_name]
-    if len(history) < 2:
+    if len(history) < TREND_MIN_SAMPLES:
         return ""
 
     # Compare recent average to older average
-    recent = list(history)[-3:] if len(history) >= 3 else list(history)[-2:]
+    if len(history) >= TREND_RECENT_SAMPLES:
+        recent = list(history)[-TREND_RECENT_SAMPLES:]
+    else:
+        recent = list(history)[-TREND_MIN_SAMPLES:]
     older = list(history)[:-len(recent)] if len(history) > len(recent) else None
 
     if not older:
@@ -240,9 +252,9 @@ def get_latency_trend(service_name: str) -> str:
     recent_avg = sum(recent) / len(recent)
     older_avg = sum(older) / len(older)
 
-    if recent_avg < older_avg * 0.9:
+    if recent_avg < older_avg * TREND_IMPROVEMENT_THRESHOLD:
         return "↓"  # Improving (faster)
-    if recent_avg > older_avg * 1.1:
+    if recent_avg > older_avg * TREND_DEGRADATION_THRESHOLD:
         return "↑"  # Degrading (slower)
     return "→"  # Stable
 
@@ -448,7 +460,10 @@ ACTION_ITEMS: list[ActionItem] = [
 
 
 def get_system_resources() -> dict[str, Any]:
-    """Get current system resource usage using psutil."""
+    """Get current system resource usage using psutil.
+
+    Uses non-blocking cpu_percent() to avoid UI delays.
+    """
     if not PSUTIL_AVAILABLE:
         return {
             "available": False,
@@ -456,8 +471,9 @@ def get_system_resources() -> dict[str, Any]:
         }
 
     try:
-        # CPU usage
-        cpu_percent = psutil.cpu_percent(interval=0.1)
+        # CPU usage - use interval=None for non-blocking (returns cached value)
+        # The first call may return 0.0, but subsequent calls return valid data
+        cpu_percent = psutil.cpu_percent(interval=None)
         cpu_count = psutil.cpu_count()
 
         # Memory usage
@@ -713,7 +729,7 @@ def render_resources(
     safe_addstr(stdscr, y, left, f"CPU Usage: {cpu_percent:.1f}%", width, cpu_attr | curses.A_BOLD)
     y += 1
     # Simple progress bar
-    bar_width = min(30, width - 4)
+    bar_width = min(PROGRESS_BAR_MAX_WIDTH, width - 4)
     filled = int((cpu_percent / 100) * bar_width)
     bar = "█" * filled + "░" * (bar_width - filled)
     safe_addstr(stdscr, y, left + 2, f"[{bar}]", width - 2, cpu_attr)
